@@ -1,40 +1,50 @@
-// =========================================================================
-// amsi_provider.cpp ¡ª IAntimalwareProvider implementation
-// Õû¸öÄ£¿éµÄ¡°ÉÚ±ø¡±£¬¸ºÔğ´Ó Windows AMSI ½Ó¿Ú¶ÁÈ¡¶ñÒâ½Å±¾ÄÚÈİ
+ï»¿// =========================================================================
+// amsi_provider.cpp - IAntimalwareProvider implementation
 // =========================================================================
 
+#include <mutex>
 #include <new>
 
 #include "../include/rasp_mod_amsi.h"
 #include "../include/amsi_rule_engine.h"
 
-// ©¤©¤ Host process name helper ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-// Returns just the EXE filename of the current process (no path, no extension
-// stripping) ¡ª used in load/unload log lines for quick triage in DebugView.
+static std::once_flag g_engineInitOnce;
+
+static void EnsureEngineInitialized() {
+    if (g_unloadInProgress.load())
+        return;
+
+    std::call_once(g_engineInitOnce, []() {
+        AmsiRuleEngine *engine = new(std::nothrow) AmsiRuleEngine();
+        if (!engine)
+            return;
+
+        engine->Initialize();
+        g_engine = engine;
+    });
+}
 
 static void LogHostProcess(const char *event) {
     char path[MAX_PATH] = {};
     GetModuleFileNameA(nullptr, path, MAX_PATH);
 
-    // Walk to last backslash to get bare filename
     const char *name = path;
     for (const char *p = path; *p; ++p)
-        if (*p == '\\' || *p == '/') name = p + 1;
+        if (*p == '\\' || *p == '/')
+            name = p + 1;
 
     char pid[16];
     sprintf_s(pid, "%lu", GetCurrentProcessId());
 
     char msg[512];
-    sprintf_s(msg, "[AMSI] %s ¡ª process: %s  pid: %s\n", event, name, pid);
+    sprintf_s(msg, "[AMSI] %s - process: %s pid: %s\n", event, name, pid);
     OutputDebugStringA(msg);
 
-    if (g_engine) g_engine->Log("[RaspAmsi] %s ¡ª process=%s pid=%s", event, name, pid);
+    if (g_engine)
+        g_engine->Log("[RaspAmsi] %s - process=%s pid=%s", event, name, pid);
 }
 
-// ©¤©¤ CRaspAmsiProvider ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-
-long g_serverLocks(0);  // COM·şÎñÆ÷Ëø¼ÆÊı
-// ³õÊ¼»¯Îª1£¬- ·şÎñÆ÷Ëø£º¸ú×Ù»î¶¯ÊµÀıÊıÁ¿- Ïß³Ì°²È«£ºÊ¹ÓÃInterlocked²Ù×÷
+long g_serverLocks(0);
 
 CRaspAmsiProvider::CRaspAmsiProvider() : _refCount(1) {
     InterlockedIncrement(&g_serverLocks);
@@ -46,14 +56,8 @@ CRaspAmsiProvider::~CRaspAmsiProvider() {
     LogHostProcess("provider unloading from");
 }
 
-/*
-- ¹¦ÄÜ£ºCOM½Ó¿Ú²éÑ¯
-- Ö§³ÖµÄ½Ó¿Ú£ºIUnknown¡¢IAntimalwareProvider
-- ·µ»Ø£ºS_OK»òE_NOINTERFACE
-*/
 IFACEMETHODIMP CRaspAmsiProvider::QueryInterface(REFIID riid, void **ppv) {
     if (riid == IID_IUnknown || riid == __uuidof(IAntimalwareProvider)) {
-        OutputDebugStringA("[AMSI:QueryInterface] - Interface Created.");
         *ppv = static_cast<IAntimalwareProvider *>(this);
         AddRef();
         return S_OK;
@@ -62,140 +66,109 @@ IFACEMETHODIMP CRaspAmsiProvider::QueryInterface(REFIID riid, void **ppv) {
     return E_NOINTERFACE;
 }
 
-/*
-- ¹¦ÄÜ£ºÒıÓÃ¼ÆÊı¹ÜÀí
-- Ïß³Ì°²È«£ºÔ­×Ó²Ù×÷
-- ÄÚ´æ¹ÜÀí£ºÒıÓÃ¼ÆÊıÎª0Ê±×ÔÉ¾³ı
-*/
-IFACEMETHODIMP_(ULONG)
+IFACEMETHODIMP_(ULONG) CRaspAmsiProvider::AddRef() { return InterlockedIncrement(&_refCount); }
 
-CRaspAmsiProvider::AddRef() { return InterlockedIncrement(&_refCount); }
-
-IFACEMETHODIMP_(ULONG)
-
-CRaspAmsiProvider::Release() {
+IFACEMETHODIMP_(ULONG) CRaspAmsiProvider::Release() {
     LONG r = InterlockedDecrement(&_refCount);
     if (r == 0)
         delete this;
     return r;
 }
 
-// ©¤©¤ IAntimalwareProvider ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-/*
-ºËĞÄÉ¨Ãèº¯Êı
-Ä¿µÄ£º½ÓÊÕÖ´ĞĞÒıÇæ£¨Èç PowerShell ½âÊÍÆ÷£©´«µİ¹ıÀ´µÄ½Å±¾»º³åÇø£¬¾ö¶¨ÊÇ·ñÀ¹½Ø
-*/
 IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result) {
     OutputDebugStringA("[AMSI:Scan] Scanning Script\n");
 
-    *result = AMSI_RESULT_NOT_DETECTED; // fail-open default
+    if (!result)
+        return E_POINTER;
+
+    *result = AMSI_RESULT_NOT_DETECTED;
 
     if (g_unloadInProgress.load()) {
-        OutputDebugStringA("[AMSI:Scan] unload in progress ¡ª pass-through\n");
+        OutputDebugStringA("[AMSI:Scan] inert mode active - pass-through\n");
         return S_OK;
     }
 
-    if (!g_engine || !stream) {
-        OutputDebugStringA("[AMSI:Scan] Engine / Stream not ready\n");
+    if (!stream) {
+        OutputDebugStringA("[AMSI:Scan] Stream not ready\n");
         return S_OK;
     }
 
-    // ©¤©¤ É¨ÃèÄÚÈİÃû³Æ£¨ÎÄ¼şÂ·¾¶»ò½Å±¾±êÊ¶£© ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+    EnsureEngineInitialized();
+    if (g_unloadInProgress.load() || !g_engine) {
+        OutputDebugStringA("[AMSI:Scan] Engine not available\n");
+        return S_OK;
+    }
+
     wchar_t contentName[512] = {};
     ULONG cbOut = 0;
     stream->GetAttribute(AMSI_ATTRIBUTE_CONTENT_NAME,
-                         (ULONG)
-    sizeof(contentName), (PBYTE) contentName, &cbOut);
+                         static_cast<ULONG>(sizeof(contentName)),
+                         reinterpret_cast<PBYTE>(contentName), &cbOut);
 
-    // ©¤©¤ »ñÈ¡Ó¦ÓÃÃû³Æ ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
     wchar_t appName[256] = {};
     stream->GetAttribute(AMSI_ATTRIBUTE_APP_NAME,
-                         (ULONG)
-    sizeof(appName), (PBYTE) appName, &cbOut);
+                         static_cast<ULONG>(sizeof(appName)),
+                         reinterpret_cast<PBYTE>(appName), &cbOut);
 
-    // ©¤©¤ Extract content size ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
     ULONGLONG contentSize = 0;
     cbOut = sizeof(contentSize);
     stream->GetAttribute(AMSI_ATTRIBUTE_CONTENT_SIZE,
-                         (ULONG)
-    sizeof(contentSize), (PBYTE) & contentSize, &cbOut);
+                         static_cast<ULONG>(sizeof(contentSize)),
+                         reinterpret_cast<PBYTE>(&contentSize), &cbOut);
 
-    // ©¤©¤ Read content sample ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-    // Primary: AMSI_ATTRIBUTE_CONTENT_ADDRESS ¡ª Ö¸ÏòÄÚ´æ»º³åÇøµÄÖ±½ÓÖ¸Õë. PowerShell passes inline script content this way;
-    // IAmsiStream::Read() returns 0 for these streams because the data is not presented as a seekable byte stream.
-    // Fallback: stream->Read() for streaming / file-backed AMSI content.
     char sample[1024] = {};
     ULONG sampleRead = 0;
 
     PVOID contentAddr = nullptr;
     ULONG addrOut = 0;
-    // ÓÅÏÈÊ¹ÓÃ AMSI_ATTRIBUTE_CONTENT_ADDRESS£¨PowershellÄÚÁª½Å±¾£© Ö±½Ó¶ÁÈ¡ÄÚ´æÖ¸Õë£¨Õë¶Ô inline ½Å±¾£©
     if (SUCCEEDED(stream->GetAttribute(AMSI_ATTRIBUTE_CONTENT_ADDRESS,
-                                       (ULONG)
-        sizeof(contentAddr),
-                (PBYTE) & contentAddr, &addrOut))
-    && contentAddr != nullptr && contentSize > 0)
-    {
-        ULONG
-                toCopy = (ULONG)
-        min(contentSize, (ULONGLONG)(sizeof(sample) - 1));
+                                       static_cast<ULONG>(sizeof(contentAddr)),
+                                       reinterpret_cast<PBYTE>(&contentAddr), &addrOut)) &&
+        contentAddr != nullptr && contentSize > 0) {
+        ULONG toCopy = static_cast<ULONG>(min(contentSize, static_cast<ULONGLONG>(sizeof(sample) - 1)));
         memcpy(sample, contentAddr, toCopy);
         sampleRead = toCopy;
         OutputDebugStringA("[AMSI:Scan] content via CONTENT_ADDRESS\n");
-    }
-    else
-    {
-        // Èç¹ûÊ§°Ü£¬Ê¹ÓÃ stream->Read() ¶ÁÈ¡Á÷
-        HRESULT
-                hrRead = stream->Read(0, (ULONG)
-        sizeof(sample) - 1,
-                (unsigned char *) sample, &sampleRead);
+    } else {
+        HRESULT hrRead = stream->Read(0, static_cast<ULONG>(sizeof(sample) - 1),
+                                      reinterpret_cast<unsigned char *>(sample), &sampleRead);
         char dbgRead[128];
         sprintf_s(dbgRead, "[AMSI:Scan] content via Read hr=0x%08X read=%lu\n",
-                  (unsigned) hrRead, sampleRead);
+                  static_cast<unsigned>(hrRead), sampleRead);
         OutputDebugStringA(dbgRead);
     }
-    if (sampleRead < (ULONG)sizeof(sample))
-    sample[sampleRead] = '\0';
 
-    /*
-        PowerShell ´«¸ø AMSI µÄÍ¨³£ÊÇ¿í×Ö·û (UTF-16LE)¡£
-        ´úÂëÍ¨¹ı¼ì²é BOM (0xFF 0xFE) »ò¼ì²éÇ° 16 ¸ö×Ö½ÚµÄÆæÊıÎ»ÊÇ·ñÎª 0 (nullsAtOdd >= 3) À´ÅĞ¶¨¿í×Ö·û£¬
-        ²¢Ç¿ÖÆÊ¹ÓÃ WideCharToMultiByte ½µÎ¬µ½ UTF-8£¬ÒÔ±ãºóĞø Lua µÄ×Ö·û´®ÕıÔò (string.find) ÄÜÕı³£¹¤×÷
-        Mark: ¿í×Ö·û¼ì²âÒÀÀµÓÚ nullsAtOdd >= 3,¹¥»÷Õß¿ÉÒÔÔÚ¿ªÍ· 16 ¸ö×Ö½ÚÄÚ¹ÊÒâÊ¹ÓÃ´óÁ¿ÌØÊâµÄ ASCII ¿ØÖÆ×Ö·û»òÌØ¶¨ Unicode ×Ö·û£¬µ¼ÖÂÆæÊıÎ»²»Îª 0
-    */
+    if (sampleRead < static_cast<ULONG>(sizeof(sample)))
+        sample[sampleRead] = '\0';
+
     const char *evalSample = sample;
     ULONG evalLen = sampleRead;
     char narrowBuf[1024] = {};
 
     if (sampleRead >= 4) {
-        bool hasBom = ((unsigned char) sample[0] == 0xFF &&
-                       (unsigned char) sample[1] == 0xFE);
+        bool hasBom = (static_cast<unsigned char>(sample[0]) == 0xFF &&
+                       static_cast<unsigned char>(sample[1]) == 0xFE);
         bool likelyWide = hasBom;
         if (!likelyWide) {
             int nullsAtOdd = 0;
-            ULONG
-                    check = min(sampleRead, (ULONG)
-            16);
-            // ÅĞ¶ÏÇ° 16 ¸ö×Ö½ÚµÄÆæÊıÎ»ÊÇ·ñÎª 0
+            ULONG check = min(sampleRead, static_cast<ULONG>(16));
             for (ULONG k = 1; k < check; k += 2)
-                if ((unsigned char) sample[k] == 0) nullsAtOdd++;
+                if (static_cast<unsigned char>(sample[k]) == 0)
+                    nullsAtOdd++;
             likelyWide = (nullsAtOdd >= 3);
         }
-        // ×ª»»Îªutf-8,Mark: Ìí¼ÓÒ»¸ö×ª»»Ê§°ÜµÄ´íÎó´¦Àí
+
         if (likelyWide) {
-            const wchar_t *wptr = reinterpret_cast<const wchar_t *>(
-                    hasBom ? sample + 2 : sample);
-            int wlen = (int) ((sampleRead - (hasBom ? 2u : 0u)) / sizeof(wchar_t));
+            const wchar_t *wptr = reinterpret_cast<const wchar_t *>(hasBom ? sample + 2 : sample);
+            int wlen = static_cast<int>((sampleRead - (hasBom ? 2u : 0u)) / sizeof(wchar_t));
             int nb = WideCharToMultiByte(CP_UTF8, 0, wptr, wlen,
-                                         narrowBuf, (int) sizeof(narrowBuf) - 1,
+                                         narrowBuf, static_cast<int>(sizeof(narrowBuf) - 1),
                                          nullptr, nullptr);
             if (nb > 0) {
                 narrowBuf[nb] = '\0';
                 evalSample = narrowBuf;
-                evalLen = (ULONG)
-                nb;
-                OutputDebugStringA("[AMSI:Scan] UTF-16LE detected ¡ª narrowed for Lua patterns\n");
+                evalLen = static_cast<ULONG>(nb);
+                OutputDebugStringA("[AMSI:Scan] UTF-16LE detected - narrowed for Lua patterns\n");
             }
         }
     }
@@ -207,49 +180,29 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
         OutputDebugStringA(dbgSize);
     }
 
-    // ©¤©¤ Evaluate rules in-process ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-    AmsiEvalResult eval = g_engine->Evaluate(
-            contentName, appName, evalSample, evalLen);
-
-    // ©¤©¤ Return blocking decision ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-    // Detection event is sent inside g_engine->Evaluate() via SendDetectionEvent().
+    AmsiEvalResult eval = g_engine->Evaluate(contentName, appName, evalSample, evalLen);
     if (eval.ruleMatched)
-        OutputDebugStringA("[AMSI:Scan] rule matched ¡ª event already sent by engine\n");
-    if (eval.block) {
-        OutputDebugStringA("AMSI - script blocked");
+        OutputDebugStringA("[AMSI:Scan] rule matched - event already sent by engine\n");
+    if (eval.block)
         *result = AMSI_RESULT_DETECTED;
-    }
 
     return S_OK;
 }
 
-void STDMETHODCALLTYPE
-CRaspAmsiProvider::CloseSession(ULONGLONG /*session*/)
-        {
-                // ¹Ø±Õ»á»°(¿ÕÊµÏÖ¡¢amsiÎŞ»á»°×´Ì¬)
-        }
+void STDMETHODCALLTYPE CRaspAmsiProvider::CloseSession(ULONGLONG /*session*/) {
+}
 
-/*
-- ¹¦ÄÜ£º·µ»ØÌá¹©ÕßÏÔÊ¾Ãû³Æ
-- ·µ»ØÖµ£ºL"RaspAmsiProvider"
-- ÄÚ´æ¹ÜÀí£ºÊ¹ÓÃCoTaskMemAlloc
-*/
 IFACEMETHODIMP CRaspAmsiProvider::DisplayName(LPWSTR *displayName) {
     if (!displayName)
         return E_POINTER;
     static const wchar_t kName[] = L"RaspAmsiProvider";
-    *displayName = (LPWSTR) CoTaskMemAlloc((wcslen(kName) + 1) * sizeof(wchar_t));
+    *displayName = static_cast<LPWSTR>(CoTaskMemAlloc((wcslen(kName) + 1) * sizeof(wchar_t)));
     if (!*displayName)
         return E_OUTOFMEMORY;
     wcscpy_s(*displayName, ARRAYSIZE(kName), kName);
     return S_OK;
 }
 
-// ©¤©¤ CRaspAmsiProviderFactory ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-/*
- * Windows ÏµÍ³±¾Éí²»»áÖ±½ÓÈ¥ new ÄãµÄ CRaspAmsiProvider£¬¶øÊÇÏÈÕÒÕâ¸ö¹¤³§ÒªÒ»¸ö IClassFactory ½Ó¿Ú£¬
- * È»ºóÃüÁî¹¤³§£º¡°¸øÎÒÉú²úÒ»¸ö AMSI À¹½ØÆ÷ÊµÀı¡±¡£
- * */
 class CRaspAmsiProviderFactory : public IClassFactory {
 public:
     STDMETHODIMP QueryInterface(REFIID riid, void **ppv) override {
@@ -262,19 +215,14 @@ public:
         return E_NOINTERFACE;
     }
 
-    // ÏÂÃæµÄÁ½¸ö²Ù×÷£¬Ê¹µÃÒıÓÃ¼ÆÊıÓÀÔ¶²»»áÎª0£¬·ÀÖ¹delete thisµÄ±ÀÀ£
-    STDMETHODIMP_(ULONG)
-
-    AddRef() override { return 2; } // static lifetime
-    STDMETHODIMP_(ULONG)
-
-    Release() override { return 1; }
+    STDMETHODIMP_(ULONG) AddRef() override { return 2; }
+    STDMETHODIMP_(ULONG) Release() override { return 1; }
 
     STDMETHODIMP CreateInstance(IUnknown *pOuter, REFIID riid, void **ppv) override {
-        // ½¨Òé°Ñ RASP ÒıÇæµÄ³õÊ¼»¯£¨g_engine->Initialize()£©·ÅÔÚ CRaspAmsiProvider::Scan ·½·¨Àï£¬ÓÃ std::call_once ±£»¤
+        EnsureEngineInitialized();
         if (pOuter)
-            return CLASS_E_NOAGGREGATION;  // ·À¾ÛºÏ¹¥»÷
-        CRaspAmsiProvider *p = new(std::nothrow) CRaspAmsiProvider();  // nothrow ±£Ö¤ÁËÄÚ´æ²»×ãÊ±Ö»»áÓÅÑÅµØ·µ»Ø E_OUTOFMEMORY
+            return CLASS_E_NOAGGREGATION;
+        CRaspAmsiProvider *p = new(std::nothrow) CRaspAmsiProvider();
         if (!p)
             return E_OUTOFMEMORY;
         HRESULT hr = p->QueryInterface(riid, ppv);
@@ -291,26 +239,11 @@ public:
     }
 };
 
-// ©¤©¤ COM exports ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-/*
- * ¹¦ÄÜ: COM ÔØÈë¶¯Ì¬Á´½Ó¿â£¨DLL£©ºóµÄµÚÒ»¸öÕıÊ½¡°ÎÕÊÖ¡±µã,Windows µÄ AMSI ¹ÜÀíÆ÷£¨¿Í»§¶Ë£©ÔÚÍ¨¹ı×¢²á±íÕÒµ½ÄãµÄ DLL ºó£¬
- * »áµ÷ÓÃ´Ëº¯ÊıÀ´»ñÈ¡¡°Àà¹¤³§¡±£¨Class Factory£©£¬½ø¶øÍ¨¹ı¹¤³§´´½¨ÕæÕıµÄÀ¹½ØÊµÀı CRaspAmsiProvider
- * */
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv) {
     if (rclsid != CLSID_RaspAmsiProvider)
-        return CLASS_E_CLASSNOTAVAILABLE;  // Éí·İÑéÖ¤
+        return CLASS_E_CLASSNOTAVAILABLE;
     static CRaspAmsiProviderFactory g_factory;
     return g_factory.QueryInterface(riid, ppv);
 }
 
-/*
- * ±ÀÀ£Á´ÌõÄ£Äâ£º
-    PowerShell Ö´ĞĞÍêÁËÒ»¸ö½Å±¾¡£
-    ×îºóÒ»¸ö CRaspAmsiProvider ¶ÔÏó±»ÊÍ·Å£¬g_serverLocks ¹éÁã¡£
-    PowerShell ¾ö¶¨ÇåÀíÄÚ´æ£¬µ÷ÓÃ DllCanUnloadNow()£¬ÄãµÄ´úÂë·µ»ØÁË S_OK¡£
-    ÖÂÃüË²¼ä£º²Ù×÷ÏµÍ³Á¢¿ÌÖ´ĞĞ FreeLibrary Ğ¶ÔØÄãµÄ DLL ÄÚ´æ¡£µ«ÊÇ£¬ÄãµÄ g_engine ÀïÃæµÄºóÌ¨Ïß³Ì»¹ÔÚÔËĞĞ£¨ÀıÈçÕı×èÈûÔÚ¶ÁÈ¡ IPC ¹ÜµÀÉÏ£©£¡
-    µ±ºóÌ¨Ïß³ÌĞÑÀ´£¬×¼±¸Ö´ĞĞÏÂÒ»Ìõ»ã±àÖ¸ÁîÊ±£¬ËüËùÔÚµÄÄÚ´æÒ³ÒÑ¾­±» OS ±êÎª¿Õ°×£¨Unmapped£©¡£
-    ½á¹û£º0xC0000005 Access Violation£¨ÄÚ´æ·ÃÎÊÔ½½ç£©£¬Õû¸ö PowerShell.exe Ë²¼äÉÁÍË±ÀÀ££¡
-·½°¸1£ºÎŞÂÛÏµÍ³ÔõÃ´ÎÊ£¬ÓÀÔ¶¾Ü¾øĞ¶ÔØ£¬Ö±µ½Õû¸öËŞÖ÷½ø³Ì×ÔÈ»ÍË³ö£¬ÓÉ²Ù×÷ÏµÍ³Í³Ò»»ØÊÕËùÓĞÄÚ´æºÍÏß³Ì(È±µã£ºÔÚËŞÖ÷½ø³ÌµÄÉúÃüÖÜÆÚÄÚ»áÒ»Ö±Õ¼ÓÃ¼¸ MB µÄÄÚ´æ)
- * */
-STDAPI DllCanUnloadNow() { return g_serverLocks == 0 ? S_OK : S_FALSE; }
+STDAPI DllCanUnloadNow() { return S_FALSE; }

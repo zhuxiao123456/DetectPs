@@ -2,8 +2,8 @@
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
  */
 // =========================================================================
-// C++À¹½Ø²ãÓë¶¯Ì¬°²È«²ßÂÔÖ®¼äµÄÇÅÁº
-// amsi_rule_engine.cpp ¡ª ¹æÔò¼ÓÔØ¡¢lua¼ì²â¡¢ÈÈ¼ÓÔØ
+// C++æ‹¦æˆªå±‚ä¸åŠ¨æ€å®‰å…¨ç­–ç•¥ä¹‹é—´çš„æ¡¥æ¢
+// amsi_rule_engine.cpp â€” è§„åˆ™åŠ è½½ã€luaæ£€æµ‹ã€çƒ­åŠ è½½
 //
 // Derives from RaspSentryBase which owns:
 //   ring-buffer log, ConnectSentry IPC, ParseRulesJson, LogForwardThread,
@@ -11,13 +11,13 @@
 //   SendDetectionEvent.
 //
 // This file provides:
-//   WideToUtf8()          ¡ª local UTF-8 conversion helper
-//   ParseAndSwap()        ¡ª builds AmsiRaspRuleConfig snapshot, precompiles Lua
-//   OnReloadSignal()      ¡ª retries sentry on config reload signal
-//   Evaluate(sensor, ctx) ¡ª iterates rules, runs Lua, fires detection events
-//   Evaluate(wchar_t*,..) ¡ª AMSI public surface; converts+dispatches above
-//   PrecompileAll()       ¡ª Lua precompile pass after every load
-//   SwapRules()           ¡ª atomic snapshot replacement
+//   WideToUtf8()          â€” local UTF-8 conversion helper
+//   ParseAndSwap()        â€” builds AmsiRaspRuleConfig snapshot, precompiles Lua
+//   OnReloadSignal()      â€” retries sentry on config reload signal
+//   Evaluate(sensor, ctx) â€” iterates rules, runs Lua, fires detection events
+//   Evaluate(wchar_t*,..) â€” AMSI public surface; converts+dispatches above
+//   PrecompileAll()       â€” Lua precompile pass after every load
+//   SwapRules()           â€” atomic snapshot replacement
 // =========================================================================
 
 #include "../include/amsi_rule_engine.h"
@@ -25,7 +25,7 @@
 #include <algorithm>
 #include <cstdarg>
 #define DEFAULT_CONFIDENCE 70
-// ©¤©¤ WideToUtf8 ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ WideToUtf8 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 static std::string WideToUtf8(const wchar_t *w) {
     if (!w || w[0] == L'\0')
         return {};
@@ -37,10 +37,10 @@ static std::string WideToUtf8(const wchar_t *w) {
     return s;
 }
 
-// ©¤©¤ ParseRuleExtension ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ ParseRuleExtension â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 /*
- * ´¦Àí¡°config¡±JSON×Ó¶ÔÏóÒÔÌáÈ¡»ùÀàÕıÔò±í´ïÊ½×Ö¶Î£¨regexField¡¢regexPatterns£©¡£
- * Ìø¹ıÈÎºÎÆäËûÅäÖÃ¼ü¡ª¡ª³ıÁËRaspRuleBaseÖĞµÄÅäÖÃÍâ£¬AMSI¹æÔòÃ»ÓĞÌØ¶¨ÓÚÄ£¿éµÄÅäÖÃ
+ * å¤„ç†â€œconfigâ€JSONå­å¯¹è±¡ä»¥æå–åŸºç±»æ­£åˆ™è¡¨è¾¾å¼å­—æ®µï¼ˆregexFieldã€regexPatternsï¼‰ã€‚
+ * è·³è¿‡ä»»ä½•å…¶ä»–é…ç½®é”®â€”â€”é™¤äº†RaspRuleBaseä¸­çš„é…ç½®å¤–ï¼ŒAMSIè§„åˆ™æ²¡æœ‰ç‰¹å®šäºæ¨¡å—çš„é…ç½®
  * */
 void AmsiRuleEngine::ParseRuleExtension(const std::string &key,
                                         void *parserPtr,
@@ -74,12 +74,12 @@ void AmsiRuleEngine::ParseRuleExtension(const std::string &key,
         }
         p->consume('}');
     } else {
-        // urlPatterns, methods, script, etc. ¡ª not used by AMSI sensor; skip.
+        // urlPatterns, methods, script, etc. â€” not used by AMSI sensor; skip.
         p->skip_value();
     }
 }
 
-// ©¤©¤ Module-scope RaspLog wrapper ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ Module-scope RaspLog wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // amsi_provider.cpp calls RaspLog as a free function.
 // This thin wrapper forwards to the singleton's Log().
 static void RaspLog(const char *fmt, ...) {
@@ -93,26 +93,26 @@ static void RaspLog(const char *fmt, ...) {
 }
 
 // =========================================================================
-// ParseAndSwap ¡ª ½ÓÊÕ´Ó rasp_sentry£¨ÊØ»¤½ø³Ì£©´«À´µÄ JSON ÅäÖÃ£¬½âÎö²¢ÈÈÌæ»»µ±Ç°ÄÚ´æÖĞµÄ°²È«²ßÂÔ
+// ParseAndSwap â€” æ¥æ”¶ä» rasp_sentryï¼ˆå®ˆæŠ¤è¿›ç¨‹ï¼‰ä¼ æ¥çš„ JSON é…ç½®ï¼Œè§£æå¹¶çƒ­æ›¿æ¢å½“å‰å†…å­˜ä¸­çš„å®‰å…¨ç­–ç•¥
 //
 // Calls base ParseRulesJson() which allocates AmsiRaspRuleConfig objects via
 // AllocRule() and populates all RaspRuleBase fields (id, sensor, enabled,
 // mode, description, severity, scriptBodyBase64, scriptEval,
-// scriptTimeoutInstructions). ParseRuleExtension() is not overridden ¡ª
+// scriptTimeoutInstructions). ParseRuleExtension() is not overridden â€”
 // AMSI has no additional JSON fields beyond the base struct.
 // =========================================================================
 
 bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &libSource) {
     std::vector <std::unique_ptr<RaspRuleBase>> rawRules;
     std::string lib;
-    // µ÷ÓÃ»ùÀà½âÎöjson
+    // è°ƒç”¨åŸºç±»è§£æjson
     if (!ParseRulesJson(json, lib, rawRules) || rawRules.empty()) {
         Log("[RaspAmsi] ParseAndSwap: no rules parsed");
         return false;
     }
 
     const std::string &effectiveLib = lib.empty() ? libSource : lib;
-    // ±éÀú½âÎö³öµÄ¹æÔò£¬¾«×¼°şÀë³öÖ»ÊôÓÚ AMSI µÄ¹æÔò£¬ºöÂÔÆäËû¹æÔò
+    // éå†è§£æå‡ºçš„è§„åˆ™ï¼Œç²¾å‡†å‰¥ç¦»å‡ºåªå±äº AMSI çš„è§„åˆ™ï¼Œå¿½ç•¥å…¶ä»–è§„åˆ™
     std::vector <AmsiRaspRuleConfig> configs;
     configs.reserve(rawRules.size());
     for (auto &ptr: rawRules) {
@@ -125,7 +125,7 @@ bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &li
     }
 
     PrecompileAll(configs, effectiveLib);
-    SwapRules(std::move(configs));  // Ô­×ÓÖ¸ÕëÌæ»»
+    SwapRules(std::move(configs));  // åŸå­æŒ‡é’ˆæ›¿æ¢
     m_libSource = effectiveLib;
 
     Log("[RaspAmsi] ParseAndSwap: %zu AmsiProvider rule(s) loaded",
@@ -134,10 +134,10 @@ bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &li
 }
 
 /*
-- **¹¦ÄÜ**£ºÊØ»¤½ø³Ì£¬´¦ÀíÅäÖÃÖØÔØĞÅºÅ£¨0x01£©
-- **ÖØÊÔ²ßÂÔ**£º×î¶à3´Î£¬Ã¿´Î¼ä¸ô1Ãë
-- **³É¹¦Ìõ¼ş**£ºConnectSentry() && ParseAndSwap()
-- **Ê§°Ü´¦Àí**£º±£Áôµ±Ç°¿ìÕÕ
+- **åŠŸèƒ½**ï¼šå®ˆæŠ¤è¿›ç¨‹ï¼Œå¤„ç†é…ç½®é‡è½½ä¿¡å·ï¼ˆ0x01ï¼‰
+- **é‡è¯•ç­–ç•¥**ï¼šæœ€å¤š3æ¬¡ï¼Œæ¯æ¬¡é—´éš”1ç§’
+- **æˆåŠŸæ¡ä»¶**ï¼šConnectSentry() && ParseAndSwap()
+- **å¤±è´¥å¤„ç†**ï¼šä¿ç•™å½“å‰å¿«ç…§
 */
 void AmsiRuleEngine::OnReloadSignal() {
     bool ok = false;
@@ -149,12 +149,12 @@ void AmsiRuleEngine::OnReloadSignal() {
     }
 
     if (!ok)
-        Log("[RaspAmsi] OnReloadSignal: sentry unavailable after 3 attempts ¡ª keeping snapshot");
+        Log("[RaspAmsi] OnReloadSignal: sentry unavailable after 3 attempts â€” keeping snapshot");
 }
 
 /*
 PrecompileAll / SwapRules
-½« Base64 ±àÂëµÄ Lua ½Å±¾Ô´ÂëÓë¹«¹²¿â (libSource) Æ´½Óºó£¬½»¸ø MoonSharp / Lua ĞéÄâ»ú½øĞĞ JIT »ò×Ö½ÚÂë±àÒë
+å°† Base64 ç¼–ç çš„ Lua è„šæœ¬æºç ä¸å…¬å…±åº“ (libSource) æ‹¼æ¥åï¼Œäº¤ç»™ MoonSharp / Lua è™šæ‹Ÿæœºè¿›è¡Œ JIT æˆ–å­—èŠ‚ç ç¼–è¯‘
 */
 void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules,
                                    const std::string &libSource) {
@@ -176,7 +176,7 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
     }
 }
 
-// Ô­×Ó½»»»¹æÔò¿ìÕÕ
+// åŸå­äº¤æ¢è§„åˆ™å¿«ç…§
 void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
     auto *next = new RuleSnapshot{std::move(rules)};
     auto *old = m_snapshot.exchange(next);
@@ -184,7 +184,7 @@ void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
 }
 
 // =========================================================================
-// Self-unload support ¡ª triggered by IPC signal byte 0x02
+// Self-unload support â€” triggered by IPC signal byte 0x02
 //
 // OnUnloadSignal() is called by ConfigPipeThread.  It sets g_unloadInProgress
 // (so Scan() drains immediately) and spawns UnloadThreadProc, which calls
@@ -192,74 +192,58 @@ void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
 // If AMSI still holds a COM reference the DLL stays mapped but is inert.
 // =========================================================================
 
-DWORD WINAPI
-AmsiRuleEngine::UnloadThreadProc(LPVOID)
-        {
-                // Brief pause: let any Scan() calls that passed the g_unloadInProgress
-                // check before it was set drain naturally before tearing down the engine.
-                Sleep(200);
+DWORD WINAPI AmsiRuleEngine::UnloadThreadProc(LPVOID)
+{
+    Sleep(200);
 
-        if (g_engine)
-        {
-            g_engine->Log("[RaspAmsi] UnloadThreadProc: calling Shutdown()");
-            g_engine->Shutdown();
-            delete g_engine;
-            g_engine = nullptr;
-        }
+    AmsiRuleEngine *engine = g_engine;
+    if (engine)
+    {
+        engine->Log("[RaspAmsi] UnloadThreadProc: entering inert mode and stopping background threads");
+        engine->Shutdown();
+        engine->Log("[RaspAmsi] UnloadThreadProc: background threads stopped");
+    }
 
-        // Send drain-ack to rasp_sentry_events before releasing OS loader refcount.
-        // AmsiStagingWatcher reads this to confirm the engine is fully torn down and
-        // no new scans will run, so it can proceed with DLL file replacement.
-        // Uses the same fire-and-forget pattern as SendDetectionEvent.
-        {
-            char pid[12];
-            char ackLine[192];
-            sprintf_s(pid, sizeof(pid), "%lu", GetCurrentProcessId());
-            snprintf(ackLine, sizeof(ackLine),
-                     "{\"cat\":\"drain-ack\",\"mod\":\"rasp_mod_amsi\",\"pid\":%s}", pid);
+    char pid[12];
+    char ackLine[192];
+    sprintf_s(pid, sizeof(pid), "%lu", GetCurrentProcessId());
+    snprintf(ackLine, sizeof(ackLine),
+             "{\"cat\":\"drain-ack\",\"mod\":\"rasp_mod_amsi\",\"pid\":%s}", pid);
 
-            HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_events",
-                                       GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-            if (hPipe != INVALID_HANDLE_VALUE) {
-                DWORD written = 0;
-                WriteFile(hPipe, ackLine, static_cast<DWORD>(strlen(ackLine)), &written, nullptr);
-                CloseHandle(hPipe);
-            }
-            // Non-fatal: if pipe is unavailable, AmsiStagingWatcher falls back to DrainWaitMs.
-        }
+    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_events",
+                               GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hPipe != INVALID_HANDLE_VALUE) {
+        DWORD written = 0;
+        WriteFile(hPipe, ackLine, static_cast<DWORD>(strlen(ackLine)), &written, nullptr);
+        CloseHandle(hPipe);
+    }
 
-        // Decrement the OS loader refcount and exit this thread atomically.
-        // If AMSI still holds a COM reference the DLL stays mapped but is inert
-        // until that reference is released.
-        FreeLibraryAndExitThread(g_hModule, 0);
-        return 0; // unreachable
-        }
+    return 0;
+}
 
 void AmsiRuleEngine::OnUnloadSignal() {
-    // exchange(true) returns the previous value ¡ª if already true, another
-    // unload is in progress; do nothing.
     if (g_unloadInProgress.exchange(true))
         return;
 
-    Log("[RaspAmsi] OnUnloadSignal: unload requested ¡ª spawning unload thread");
+    Log("[RaspAmsi] OnUnloadSignal: unload requested - entering inert mode");
 
     HANDLE hThread = CreateThread(nullptr, 0, UnloadThreadProc, nullptr, 0, nullptr);
     if (hThread)
-        CloseHandle(hThread); // detach ¡ª thread manages its own lifetime
+        CloseHandle(hThread);
     else
-        g_unloadInProgress.store(false); // CreateThread failed; allow a retry
+        Log("[RaspAmsi] OnUnloadSignal: failed to create unload thread - inert mode remains active");
 }
 
 // =========================================================================
 // Evaluate (protected, implements RaspSentryBase pure virtual)
-// ÃæÏòÄÚ²¿µÄ Evaluate (Protected ºËĞÄ²ã)
-// ¹æÔòµ÷¶ÈÓëÖ´ĞĞÒıÇæ (Core Engine)¡£Ëü²»¹ØĞÄÊı¾İÊÇ´ÓÄÄÀïÀ´µÄ£¨²»¹ÜÊÇ AMSI »¹ÊÇÆäËûµÄÌ½Õë£©£¬ËüÖ»¸ºÔğÄÃ×ÅÒÑ¾­±ê×¼»¯ºÃµÄÉÏÏÂÎÄÈ¥Æ¥Åä¹æÔò
+// é¢å‘å†…éƒ¨çš„ Evaluate (Protected æ ¸å¿ƒå±‚)
+// è§„åˆ™è°ƒåº¦ä¸æ‰§è¡Œå¼•æ“ (Core Engine)ã€‚å®ƒä¸å…³å¿ƒæ•°æ®æ˜¯ä»å“ªé‡Œæ¥çš„ï¼ˆä¸ç®¡æ˜¯ AMSI è¿˜æ˜¯å…¶ä»–çš„æ¢é’ˆï¼‰ï¼Œå®ƒåªè´Ÿè´£æ‹¿ç€å·²ç»æ ‡å‡†åŒ–å¥½çš„ä¸Šä¸‹æ–‡å»åŒ¹é…è§„åˆ™
 // Iterates AmsiProvider rules; runs Lua for each; calls SendDetectionEvent()
 // per match; returns all matched RaspEvalResults.
 // ctx fields expected:
-//   "contentName" ¡ª scanned item name (UTF-8)
-//   "appName"     ¡ª calling host process (UTF-8)
-//   "body"        ¡ª scanned bytes (binary-safe, isBinary=true)
+//   "contentName" â€” scanned item name (UTF-8)
+//   "appName"     â€” calling host process (UTF-8)
+//   "body"        â€” scanned bytes (binary-safe, isBinary=true)
 // =========================================================================
 std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor, const RaspLuaContext &ctx)
 {
@@ -278,7 +262,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         else if (f.name == "appName")
             appName = f.value;
     }
-    // ±éÀúÃ¿¸ö¹æÔò
+    // éå†æ¯ä¸ªè§„åˆ™
     for (const auto &rule: snap->rules) {
         if (!rule.enabled || rule.IsOff())
             continue;
@@ -288,9 +272,9 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         std::string payload;
 
 #ifdef RASP_PCRE2_AVAILABLE
-        // ÓÅÏÈÆ¥ÅäÕıÔò±í´ïÊ½
+        // ä¼˜å…ˆåŒ¹é…æ­£åˆ™è¡¨è¾¾å¼
         if (!rule.regexChecks.empty()) {
-            // ©¤©¤ Multi-check gate (regexChecks) ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+            // â”€â”€ Multi-check gate (regexChecks) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Evaluate each named check; collect IDs of checks that matched.
             std::vector<std::string> matchedIds;
             for (const auto &chk : rule.regexChecks) {
@@ -310,11 +294,11 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
                 ? matchedIds.size() == rule.regexChecks.size()
                 : !matchedIds.empty();
             if (!gatePassed)
-                continue; // gate not satisfied ¡ª skip rule
+                continue; // gate not satisfied â€” skip rule
 
             if (m_luaEngine.IsLoaded(rule.id))
             {
-                // Gate passed ¡ú run Lua with matched IDs injected into context
+                // Gate passed â†’ run Lua with matched IDs injected into context
                 RaspLuaResult lr = m_luaEngine.Run(rule.id, sensor, ctx, rule.scriptTimeoutInstructions, matchedIds);
                 if (lr.matched) {
                     matched = true;
@@ -324,7 +308,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
             }
             else
             {
-                // Gate passed, no script ¡ª fire directly; join matched IDs as payload
+                // Gate passed, no script â€” fire directly; join matched IDs as payload
                 matched = true;
                 desc    = rule.description;
                 for (size_t i = 0; i < matchedIds.size(); i++)
@@ -336,7 +320,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         }
         else if (!rule.regexPatterns.empty())
         {
-            // ©¤©¤ Legacy single-field regex check (no Lua required) ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+            // â”€â”€ Legacy single-field regex check (no Lua required) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const std::string *fieldPtr = nullptr;
             const std::string &wantField = rule.regexField.empty()
                                                ? std::string("body")
@@ -356,7 +340,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         }
 #endif // RASP_PCRE2_AVAILABLE
 
-        // ©¤©¤ lua½Å±¾check, PrecompileAllÔÚÕâÀïÔ¤±àÒë, ¿ÉÒÔ²»×ß´Ë²¿·Ö ©¤
+        // â”€â”€ luaè„šæœ¬check, PrecompileAllåœ¨è¿™é‡Œé¢„ç¼–è¯‘, å¯ä»¥ä¸èµ°æ­¤éƒ¨åˆ† â”€
         if (!matched && rule.regexChecks.empty() && m_luaEngine.IsLoaded(rule.id)) {
             RaspLuaResult lr = m_luaEngine.Run(rule.id, sensor, ctx,
                                                rule.scriptTimeoutInstructions);
@@ -367,11 +351,11 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
             }
         } else if (!matched && rule.regexChecks.empty() &&
                    !m_luaEngine.IsLoaded(rule.id) && rule.regexPatterns.empty()) {
-            Log("[RaspAmsi] Evaluate: rule=%s has no regexChecks, no Lua, and no regexPatterns ¡ª skipping",
+            Log("[RaspAmsi] Evaluate: rule=%s has no regexChecks, no Lua, and no regexPatterns â€” skipping",
                 rule.id.c_str());
             continue;
         }
-        // ÕıÔòºÍlua¾ùÆ¥Åä²»µ½¡¢·ÅĞĞ
+        // æ­£åˆ™å’Œluaå‡åŒ¹é…ä¸åˆ°ã€æ”¾è¡Œ
         if (!matched)
             continue;
 
@@ -394,7 +378,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         SendDetectionEvent(r);
         results.push_back(std::move(r));
         if (r.block) {
-            break;  // Æ¥Åäµ½µÚÒ»¸ö×è¶ÏµÄ²ÅĞĞ
+            break;  // åŒ¹é…åˆ°ç¬¬ä¸€ä¸ªé˜»æ–­çš„æ‰è¡Œ
         }
     }
 
@@ -402,11 +386,11 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
 }
 
 /*
-ÃæÏòÍâ²¿µÄ Evaluate (Public ½Ó¿Ú²ã)
-½âÎö£ºÃæÏò Windows ÏµÍ³µÄ¡°·­Òë¹ÙÓë½Ó´ıÔ±¡±
-½ÇÉ«¶¨Î»£º±ß½çÊÊÅäÆ÷ (Adapter)¡£ÕâÊÇÖ±½Ó±©Â¶¸ø IAntimalwareProvider::Scan£¨¼´ Windows AMSI COM ½Ó¿Ú£©µÄÈë¿Ú¡£
-        Windows ÏµÍ³²»¶®ÄãµÄ C++ ÄÚ²¿¶ÔÏó£¬ËüÖ»¸øÄã¶ª¹ıÀ´Ò»¶ÑÔ­Ê¼µÄÄÚ´æÖ¸ÕëºÍ×Ö½Ú³¤¶È
-ÊäÈë£º½ÓÊÕ wchar_t*, char* µÈÔ­ÉúÖ¸Õë²ÎÊı
+é¢å‘å¤–éƒ¨çš„ Evaluate (Public æ¥å£å±‚)
+è§£æï¼šé¢å‘ Windows ç³»ç»Ÿçš„â€œç¿»è¯‘å®˜ä¸æ¥å¾…å‘˜â€
+è§’è‰²å®šä½ï¼šè¾¹ç•Œé€‚é…å™¨ (Adapter)ã€‚è¿™æ˜¯ç›´æ¥æš´éœ²ç»™ IAntimalwareProvider::Scanï¼ˆå³ Windows AMSI COM æ¥å£ï¼‰çš„å…¥å£ã€‚
+        Windows ç³»ç»Ÿä¸æ‡‚ä½ çš„ C++ å†…éƒ¨å¯¹è±¡ï¼Œå®ƒåªç»™ä½ ä¸¢è¿‡æ¥ä¸€å †åŸå§‹çš„å†…å­˜æŒ‡é’ˆå’Œå­—èŠ‚é•¿åº¦
+è¾“å…¥ï¼šæ¥æ”¶ wchar_t*, char* ç­‰åŸç”ŸæŒ‡é’ˆå‚æ•°
 */
 AmsiEvalResult AmsiRuleEngine::Evaluate(
         const wchar_t *contentName,
@@ -414,7 +398,7 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
         const char *sample,
         ULONG sampleLen) {
     AmsiEvalResult result;
-    // windows¿í×Ö·û×ª»»ÎªÄÚ²¿Í³Ò»Ê¹ÓÃµÄutf-8×Ö·û´®
+    // windowså®½å­—ç¬¦è½¬æ¢ä¸ºå†…éƒ¨ç»Ÿä¸€ä½¿ç”¨çš„utf-8å­—ç¬¦ä¸²
     std::string contentNameUtf8 = WideToUtf8(contentName);
     std::string appNameUtf8 = WideToUtf8(appName);
 
@@ -423,11 +407,11 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
             {"contentName", contentNameUtf8},
             {"appName",     appNameUtf8},
     };
-    // true´ú±í isBinary
+    // trueä»£è¡¨ isBinary
     if (sample && sampleLen > 0)
         ctx.fields.push_back({"body", std::string(sample, sampleLen), true});
 
-    auto results = Evaluate("AmsiProvider", ctx);  // µ÷ÓÃÕæÕıµÄ Evaluate º¯Êı
+    auto results = Evaluate("AmsiProvider", ctx);  // è°ƒç”¨çœŸæ­£çš„ Evaluate å‡½æ•°
     if (!results.empty() && results[0].matched) {
         const auto &r = results[0];
         result.ruleMatched = true;

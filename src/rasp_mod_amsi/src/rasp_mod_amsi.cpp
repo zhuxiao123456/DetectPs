@@ -1,6 +1,6 @@
 // =========================================================================
-// rasp_mod_amsi.cpp ¡ª DLL entry, COM factory, DllRegisterServer/UnregisterServer
-// ½«µ±Ç°µÄ DLL ÉèÖÃ³ÉÒ»¸öºÏ·¨µÄ·´¶ñÒâÈí¼şÌá¹©Õß£¬²¢×¢Èëµ½ Windows ÌåÏµÖĞ
+// rasp_mod_amsi.cpp â€” DLL entry, COM factory, DllRegisterServer/UnregisterServer
+// å°†å½“å‰çš„ DLL è®¾ç½®æˆä¸€ä¸ªåˆæ³•çš„åæ¶æ„è½¯ä»¶æä¾›è€…ï¼Œå¹¶æ³¨å…¥åˆ° Windows ä½“ç³»ä¸­
 // =========================================================================
 
 #define INITGUID
@@ -11,32 +11,32 @@
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 
-// ©¤©¤ Globals ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ Globals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 HINSTANCE g_hModule = nullptr;           // extern'd by amsi_rule_engine.cpp for FreeLibraryAndExitThread
 AmsiRuleEngine *g_engine = nullptr;
 std::atomic<bool> g_unloadInProgress{false};
 
 /*
- * ÔÚ Windows ×¢²á±íÖĞ´´½¨£¨»ò´ò¿ª£©Ò»¸öÖ¸¶¨µÄ×Ó¼ü£¬²¢ÏòÆäÖĞĞ´ÈëÒ»¸ö¿í×Ö·û´®£¨REG_SZ£©ÀàĞÍµÄÖµ
- * ÔÚÖ´ĞĞ DllRegisterServer() Ê±£¬½«amsiÌ½ÕëµÄ COM CLSID ×¢²áµ½²Ù×÷ÏµÍ³µÄ HKEY_LOCAL_MACHINE ÖĞ£¬
- * ´Ó¶øÈÃ Windows Defender ºÍ PowerShell ÄÜ¹»·¢ÏÖ²¢¼ÓÔØÕâ¸öÌ½Õë
- * hRoot: ×¢²á±í¸ù¼ü¾ä±ú£¨Èç HKEY_LOCAL_MACHINE »ò HKEY_CURRENT_USER£©¡£
- * subkey: ×Ó¼üµÄÏà¶ÔÂ·¾¶£¨ÀıÈç Software\Microsoft\AMSI\Providers\...£©¡£
- * valueName: ÒªÉèÖÃµÄ¾ßÌå¼üÖµµÄÃû³Æ¡£Èç¹û´«Èë NULL »ò¿Õ×Ö·û´® ""£¬ÔòĞŞ¸Ä¸Ã×Ó¼üµÄ**¡°(Ä¬ÈÏ)¡±**Öµ¡£
- * data: ÒªĞ´ÈëµÄÊµ¼Ê×Ö·û´®Êı¾İ£¨UTF-16 ¿í×Ö·ûÖ¸Õë wchar_t*£©¡£
+ * åœ¨ Windows æ³¨å†Œè¡¨ä¸­åˆ›å»ºï¼ˆæˆ–æ‰“å¼€ï¼‰ä¸€ä¸ªæŒ‡å®šçš„å­é”®ï¼Œå¹¶å‘å…¶ä¸­å†™å…¥ä¸€ä¸ªå®½å­—ç¬¦ä¸²ï¼ˆREG_SZï¼‰ç±»å‹çš„å€¼
+ * åœ¨æ‰§è¡Œ DllRegisterServer() æ—¶ï¼Œå°†amsiæ¢é’ˆçš„ COM CLSID æ³¨å†Œåˆ°æ“ä½œç³»ç»Ÿçš„ HKEY_LOCAL_MACHINE ä¸­ï¼Œ
+ * ä»è€Œè®© Windows Defender å’Œ PowerShell èƒ½å¤Ÿå‘ç°å¹¶åŠ è½½è¿™ä¸ªæ¢é’ˆ
+ * hRoot: æ³¨å†Œè¡¨æ ¹é”®å¥æŸ„ï¼ˆå¦‚ HKEY_LOCAL_MACHINE æˆ– HKEY_CURRENT_USERï¼‰ã€‚
+ * subkey: å­é”®çš„ç›¸å¯¹è·¯å¾„ï¼ˆä¾‹å¦‚ Software\Microsoft\AMSI\Providers\...ï¼‰ã€‚
+ * valueName: è¦è®¾ç½®çš„å…·ä½“é”®å€¼çš„åç§°ã€‚å¦‚æœä¼ å…¥ NULL æˆ–ç©ºå­—ç¬¦ä¸² ""ï¼Œåˆ™ä¿®æ”¹è¯¥å­é”®çš„**â€œ(é»˜è®¤)â€**å€¼ã€‚
+ * data: è¦å†™å…¥çš„å®é™…å­—ç¬¦ä¸²æ•°æ®ï¼ˆUTF-16 å®½å­—ç¬¦æŒ‡é’ˆ wchar_t*ï¼‰ã€‚
 */
 static HRESULT WriteRegistryString(HKEY hRoot, const wchar_t *subkey,
                                    const wchar_t *valueName, const wchar_t *data)
 {
-    // 1: ´ò¿ª»ò´´½¨×¢²á±í
+    // 1: æ‰“å¼€æˆ–åˆ›å»ºæ³¨å†Œè¡¨
     HKEY hKey = nullptr;
     DWORD disp = 0;
     LONG rc = RegCreateKeyExW(hRoot, subkey, 0, nullptr,
                               REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, &disp);
     if (rc != ERROR_SUCCESS)
         return HRESULT_FROM_WIN32(rc);
-    // 2: Ğ´Èë×Ö·û´®Êı¾İ
+    // 2: å†™å…¥å­—ç¬¦ä¸²æ•°æ®
     rc = RegSetValueExW(hKey, valueName, 0, REG_SZ,
                         (const BYTE *)data, (DWORD)((wcslen(data) + 1) * sizeof(wchar_t)));
     RegCloseKey(hKey);
@@ -44,8 +44,8 @@ static HRESULT WriteRegistryString(HKEY hRoot, const wchar_t *subkey,
 }
 
 /*
-    ½« DLL µÄ COM CLSID ×¢²áµ½ Software\Classes\CLSID£¬²¢½«Æä¼ÓÈëµ½ Windows AMSI µÄÌá¹©ÕßÁĞ±í Software\Microsoft\AMSI\Providers ÖĞ
-    ÎÊÌâ1£º¹¥»÷ÕßÍ¨¹ıÌáÈ¨»òÊ¹ÓÃÎ´±»¼à¿ØµÄÌØÈ¨½ø³Ì£¬Ö±½ÓÉ¾³ı HKLM\Software\Microsoft\AMSI\Providers\[ÄãµÄCLSID]£¬RASP µÄ AMSI ·À»¤½«ÔÚ´ËºóËùÓĞĞÂÆô¶¯µÄ PowerShell ½ø³ÌÖĞ³¹µ×Ê§Ğ§
+    å°† DLL çš„ COM CLSID æ³¨å†Œåˆ° Software\Classes\CLSIDï¼Œå¹¶å°†å…¶åŠ å…¥åˆ° Windows AMSI çš„æä¾›è€…åˆ—è¡¨ Software\Microsoft\AMSI\Providers ä¸­
+    é—®é¢˜1ï¼šæ”»å‡»è€…é€šè¿‡ææƒæˆ–ä½¿ç”¨æœªè¢«ç›‘æ§çš„ç‰¹æƒè¿›ç¨‹ï¼Œç›´æ¥åˆ é™¤ HKLM\Software\Microsoft\AMSI\Providers\[ä½ çš„CLSID]ï¼ŒRASP çš„ AMSI é˜²æŠ¤å°†åœ¨æ­¤åæ‰€æœ‰æ–°å¯åŠ¨çš„ PowerShell è¿›ç¨‹ä¸­å½»åº•å¤±æ•ˆ
 */
 STDAPI DllRegisterServer()
 {
@@ -101,12 +101,12 @@ STDAPI DllUnregisterServer()
     return S_OK;
 }
 
-// ©¤©¤ DllMain ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+// â”€â”€ DllMain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 /*
-¹¦ÄÜ£ºDLL ±»¼ÓÔØ£¨Èç PowerShell.exe Æô¶¯²¢¼ÓÔØ AMSI Provider£©»òĞ¶ÔØÊ±µÄ³õÊ¼»¯/ÇåÀí¹¤×÷¡£
-Á÷³ÌÓë¹¦ÄÜ£ºÔÚ DLL_PROCESS_ATTACH Ê±£¬ÊµÀı»¯ g_engine = new AmsiRuleEngine(); ²¢µ÷ÓÃ g_engine->Initialize();
-ÎÊÌâ: ²»ÒªÔÚ DllMain ÖĞÖ´ĞĞ¸´ÔÓµÄ³õÊ¼»¯,g_engine->Initialize() ÄÚ²¿»áÆô¶¯¶à¸öºóÌ¨Ïß³Ì£¨Èç ConfigPipeThread, LogForwardThread£©¡£
-    Õâ¼«Ò×Òı·¢ OS Loader Lock ËÀËø¡£µ± PowerShell ³¢ÊÔ¼ÓÔØÕâ¸ö DLL Ê±£¬Èç¹ûµ×²ã IPC ¹ÜµÀ·¢Éú×èÈû£¬Õû¸ö PowerShell ½ø³Ì½«»áÔÚÆô¶¯Ë²¼äÓÀ¾Ã¿¨ËÀ
+åŠŸèƒ½ï¼šDLL è¢«åŠ è½½ï¼ˆå¦‚ PowerShell.exe å¯åŠ¨å¹¶åŠ è½½ AMSI Providerï¼‰æˆ–å¸è½½æ—¶çš„åˆå§‹åŒ–/æ¸…ç†å·¥ä½œã€‚
+æµç¨‹ä¸åŠŸèƒ½ï¼šåœ¨ DLL_PROCESS_ATTACH æ—¶ï¼Œå®ä¾‹åŒ– g_engine = new AmsiRuleEngine(); å¹¶è°ƒç”¨ g_engine->Initialize();
+é—®é¢˜: ä¸è¦åœ¨ DllMain ä¸­æ‰§è¡Œå¤æ‚çš„åˆå§‹åŒ–,g_engine->Initialize() å†…éƒ¨ä¼šå¯åŠ¨å¤šä¸ªåå°çº¿ç¨‹ï¼ˆå¦‚ ConfigPipeThread, LogForwardThreadï¼‰ã€‚
+    è¿™ææ˜“å¼•å‘ OS Loader Lock æ­»é”ã€‚å½“ PowerShell å°è¯•åŠ è½½è¿™ä¸ª DLL æ—¶ï¼Œå¦‚æœåº•å±‚ IPC ç®¡é“å‘ç”Ÿé˜»å¡ï¼Œæ•´ä¸ª PowerShell è¿›ç¨‹å°†ä¼šåœ¨å¯åŠ¨ç¬é—´æ°¸ä¹…å¡æ­»
 */
 BOOL WINAPI DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
 {
@@ -114,20 +114,6 @@ BOOL WINAPI DllMain(HINSTANCE hInst, DWORD reason, LPVOID)
     {
         g_hModule = hInst;
         DisableThreadLibraryCalls(hInst);
-
-        // All configuration is pulled from rasp_sentry via IPC ¡ª no file path needed.
-        g_engine = new AmsiRuleEngine();
-        if (g_engine)
-            g_engine->Initialize();
-    }
-    else if (reason == DLL_PROCESS_DETACH)
-    {
-        if (g_engine)
-        {
-            g_engine->Shutdown();
-            delete g_engine;
-            g_engine = nullptr;
-        }
     }
     return TRUE;
 }
