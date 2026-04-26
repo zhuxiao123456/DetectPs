@@ -1,0 +1,337 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{E51BCE86-5F49-39FD-9615-AF7631DFEDF6}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>pcre2grep</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">pcre2grep.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">pcre2grep</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">pcre2grep.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">pcre2grep</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">pcre2grep.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">pcre2grep</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">pcre2grep.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">pcre2grep</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /utf-8</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;PCRE2_CODE_UNIT_WIDTH=8;HAVE_CONFIG_H;PCRE2_DEBUG;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;PCRE2_STATIC;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;PCRE2_CODE_UNIT_WIDTH=8;HAVE_CONFIG_H;PCRE2_DEBUG;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;PCRE2_STATIC;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>Debug\pcre2-posix-staticd.lib;Debug\pcre2-8-staticd.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/Debug/pcre2grep.lib</ImportLibrary>
+      <ProgramDataBaseFile>D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/Debug/pcre2grep.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /utf-8</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;PCRE2_CODE_UNIT_WIDTH=8;HAVE_CONFIG_H;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;PCRE2_STATIC;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;PCRE2_CODE_UNIT_WIDTH=8;HAVE_CONFIG_H;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;PCRE2_STATIC;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>Release\pcre2-posix-static.lib;Release\pcre2-8-static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/Release/pcre2grep.lib</ImportLibrary>
+      <ProgramDataBaseFile>D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/Release/pcre2grep.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /utf-8</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <Optimization>MinSpace</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;PCRE2_CODE_UNIT_WIDTH=8;HAVE_CONFIG_H;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;PCRE2_STATIC;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;PCRE2_CODE_UNIT_WIDTH=8;HAVE_CONFIG_H;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;PCRE2_STATIC;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>MinSizeRel\pcre2-posix-static.lib;MinSizeRel\pcre2-8-static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/MinSizeRel/pcre2grep.lib</ImportLibrary>
+      <ProgramDataBaseFile>D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/MinSizeRel/pcre2grep.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /utf-8</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>
+      </ExceptionHandling>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <UseFullPaths>false</UseFullPaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;PCRE2_CODE_UNIT_WIDTH=8;HAVE_CONFIG_H;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;PCRE2_STATIC;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;PCRE2_CODE_UNIT_WIDTH=8;HAVE_CONFIG_H;_CRT_SECURE_NO_DEPRECATE;_CRT_SECURE_NO_WARNINGS;PCRE2_STATIC;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>RelWithDebInfo\pcre2-posix-static.lib;RelWithDebInfo\pcre2-8-static.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/RelWithDebInfo/pcre2grep.lib</ImportLibrary>
+      <ProgramDataBaseFile>D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/RelWithDebInfo/pcre2grep.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi -BD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build --check-stamp-file D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\libpcre2-8.pc.generator;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\libpcre2-posix.pc.generator;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\FindEditline.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\FindReadline.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2CheckVscript.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2UseSystemExtensions.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2WarningAsError.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\pcre2-config.cmake.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\libpcre2-8.pc.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\libpcre2-posix.pc.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\pcre2-config.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\config-cmake.h.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2.h.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_chartables.c.dist;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2posix.h;D:\Program Files\CMake\share\cmake-3.28\Modules\BasicConfigVersion-SameMajorVersion.cmake.in;D:\Program Files\CMake\share\cmake-3.28\Modules\CMakePackageConfigHelpers.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CMakePushCheckState.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckCSourceCompiles.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckFunctionExists.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckIncludeFile.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckIncludeFileCXX.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckSymbolExists.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckTypeSize.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindBZip2.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindPackageHandleStandardArgs.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindPackageMessage.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindZLIB.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\GNUInstallDirs.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\Internal\CheckSourceCompiles.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\SelectLibraryConfigurations.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\WriteBasicConfigVersionFile.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi -BD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build --check-stamp-file D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\libpcre2-8.pc.generator;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\libpcre2-posix.pc.generator;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\FindEditline.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\FindReadline.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2CheckVscript.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2UseSystemExtensions.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2WarningAsError.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\pcre2-config.cmake.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\libpcre2-8.pc.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\libpcre2-posix.pc.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\pcre2-config.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\config-cmake.h.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2.h.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_chartables.c.dist;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2posix.h;D:\Program Files\CMake\share\cmake-3.28\Modules\BasicConfigVersion-SameMajorVersion.cmake.in;D:\Program Files\CMake\share\cmake-3.28\Modules\CMakePackageConfigHelpers.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CMakePushCheckState.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckCSourceCompiles.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckFunctionExists.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckIncludeFile.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckIncludeFileCXX.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckSymbolExists.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckTypeSize.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindBZip2.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindPackageHandleStandardArgs.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindPackageMessage.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindZLIB.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\GNUInstallDirs.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\Internal\CheckSourceCompiles.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\SelectLibraryConfigurations.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\WriteBasicConfigVersionFile.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi -BD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build --check-stamp-file D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\libpcre2-8.pc.generator;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\libpcre2-posix.pc.generator;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\FindEditline.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\FindReadline.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2CheckVscript.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2UseSystemExtensions.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2WarningAsError.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\pcre2-config.cmake.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\libpcre2-8.pc.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\libpcre2-posix.pc.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\pcre2-config.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\config-cmake.h.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2.h.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_chartables.c.dist;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2posix.h;D:\Program Files\CMake\share\cmake-3.28\Modules\BasicConfigVersion-SameMajorVersion.cmake.in;D:\Program Files\CMake\share\cmake-3.28\Modules\CMakePackageConfigHelpers.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CMakePushCheckState.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckCSourceCompiles.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckFunctionExists.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckIncludeFile.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckIncludeFileCXX.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckSymbolExists.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckTypeSize.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindBZip2.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindPackageHandleStandardArgs.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindPackageMessage.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindZLIB.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\GNUInstallDirs.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\Internal\CheckSourceCompiles.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\SelectLibraryConfigurations.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\WriteBasicConfigVersionFile.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi -BD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build --check-stamp-file D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\libpcre2-8.pc.generator;D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\libpcre2-posix.pc.generator;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\FindEditline.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\FindReadline.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2CheckVscript.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2UseSystemExtensions.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\PCRE2WarningAsError.cmake;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\cmake\pcre2-config.cmake.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\libpcre2-8.pc.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\libpcre2-posix.pc.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\pcre2-config.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\config-cmake.h.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2.h.in;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_chartables.c.dist;D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2posix.h;D:\Program Files\CMake\share\cmake-3.28\Modules\BasicConfigVersion-SameMajorVersion.cmake.in;D:\Program Files\CMake\share\cmake-3.28\Modules\CMakePackageConfigHelpers.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CMakePushCheckState.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckCSourceCompiles.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckFunctionExists.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckIncludeFile.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckIncludeFileCXX.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckSymbolExists.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\CheckTypeSize.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindBZip2.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindPackageHandleStandardArgs.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindPackageMessage.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\FindZLIB.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\GNUInstallDirs.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\Internal\CheckSourceCompiles.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\SelectLibraryConfigurations.cmake;D:\Program Files\CMake\share\cmake-3.28\Modules\WriteBasicConfigVersionFile.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2grep.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\ZERO_CHECK.vcxproj">
+      <Project>{C7EC9929-2CEC-387C-840F-787E79FB3A08}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\pcre2-8-static.vcxproj">
+      <Project>{F9C399AA-CFC4-39A6-9794-6FCA645324B8}</Project>
+      <Name>pcre2-8-static</Name>
+    </ProjectReference>
+    <ProjectReference Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\pcre2-posix-static.vcxproj">
+      <Project>{89113F8B-B4F3-393A-A774-E07CD74C952D}</Project>
+      <Name>pcre2-posix-static</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

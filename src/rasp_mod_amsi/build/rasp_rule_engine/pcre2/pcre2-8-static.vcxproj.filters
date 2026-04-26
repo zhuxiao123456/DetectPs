@@ -1,0 +1,114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_auto_possess.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\src\pcre2_chartables.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_chkdint.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_compile.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_compile_cgroup.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_compile_class.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_config.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_context.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_convert.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_dfa_match.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_error.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_extuni.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_find_bracket.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_jit_compile.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_maketables.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_match.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_match_data.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_match_next.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_newline.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_ord2utf.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_pattern_info.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_script_run.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_serialize.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_string_utils.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_study.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_substitute.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_substring.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_tables.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_ucd.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_valid_utf.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2_xclass.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface\pcre2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{2F767489-57CC-3AFE-84EA-CD1126A7220A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{FFA2D921-3C32-3501-9EB8-D5A9A19BD8E0}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

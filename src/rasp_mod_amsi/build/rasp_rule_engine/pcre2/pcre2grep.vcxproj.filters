@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2grep.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{FFA2D921-3C32-3501-9EB8-D5A9A19BD8E0}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

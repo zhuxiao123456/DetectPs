@@ -1,0 +1,10 @@
+^D:\CODE\RASP\DETECTPSBYAMSI\SRC\RASP_SENTRY_NATIVE\BUILD\CMAKEFILES\524EF86B4D5D87B49C3EC4ECCE0FE6E3\GENERATE.STAMP.RULE
+setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SD:/Code/rasp/DetectPsByAmsi/src/rasp_sentry_native -BD:/Code/rasp/DetectPsByAmsi/src/rasp_sentry_native/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Code/rasp/DetectPsByAmsi/src/rasp_sentry_native/build/rasp_sentry_native.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

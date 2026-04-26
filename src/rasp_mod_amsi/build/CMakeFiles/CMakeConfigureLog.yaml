@@ -1,0 +1,1089 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeDetermineSystem.cmake:233 (message)"
+      - "CMakeLists.txt:19 (project)"
+    message: |
+      The system is: Windows - 10.0.26200 - AMD64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:19 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+      鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:44銆?
+      
+      鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\3.28.1\\CompilerIdC\\CompilerIdC.vcxproj鈥?榛樿鐩爣)銆?
+      PrepareForBuild:
+        姝ｅ湪鍒涘缓鐩綍鈥淒ebug\\鈥濄€?
+        宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+        姝ｅ湪鍒涘缓鐩綍鈥淒ebug\\CompilerIdC.tlog\\鈥濄€?
+      InitializeBuildStatus:
+        姝ｅ湪鍒涘缓鈥淒ebug\\CompilerIdC.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+        姝ｅ湪瀵光€淒ebug\\CompilerIdC.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+      ClCompile:
+        D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TC /FC /errorReport:queue CMakeCCompilerId.c
+        CMakeCCompilerId.c
+      Link:
+        D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdC.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdC.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdC.lib" /MACHINE:X64 Debug\\CMakeCCompilerId.obj
+        CompilerIdC.vcxproj -> D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\3.28.1\\CompilerIdC\\CompilerIdC.exe
+      PostBuildEvent:
+        for %%i in (cl.exe) do @echo CMAKE_C_COMPILER=%%~$PATH:i
+        :VCEnd
+        CMAKE_C_COMPILER=D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\Hostx64\\x64\\cl.exe
+      FinalizeBuildStatus:
+        姝ｅ湪鍒犻櫎鏂囦欢鈥淒ebug\\CompilerIdC.tlog\\unsuccessfulbuild鈥濄€?
+        姝ｅ湪瀵光€淒ebug\\CompilerIdC.tlog\\CompilerIdC.lastbuildstate鈥濇墽琛?Touch 浠诲姟銆?
+      宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\3.28.1\\CompilerIdC\\CompilerIdC.vcxproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+      
+      宸叉垚鍔熺敓鎴愩€?
+          0 涓鍛?
+          0 涓敊璇?
+      
+      宸茬敤鏃堕棿 00:00:00.65
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CompilerIdC.exe"
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CompilerIdC.vcxproj"
+      
+      The C compiler identification is MSVC, found in:
+        D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/3.28.1/CompilerIdC/CompilerIdC.exe
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:19 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+      鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:45銆?
+      
+      鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\3.28.1\\CompilerIdCXX\\CompilerIdCXX.vcxproj鈥?榛樿鐩爣)銆?
+      PrepareForBuild:
+        姝ｅ湪鍒涘缓鐩綍鈥淒ebug\\鈥濄€?
+        宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+        姝ｅ湪鍒涘缓鐩綍鈥淒ebug\\CompilerIdCXX.tlog\\鈥濄€?
+      InitializeBuildStatus:
+        姝ｅ湪鍒涘缓鈥淒ebug\\CompilerIdCXX.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+        姝ｅ湪瀵光€淒ebug\\CompilerIdCXX.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+      ClCompile:
+        D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TP /FC /errorReport:queue CMakeCXXCompilerId.cpp
+        CMakeCXXCompilerId.cpp
+      Link:
+        D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdCXX.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdCXX.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdCXX.lib" /MACHINE:X64 Debug\\CMakeCXXCompilerId.obj
+        CompilerIdCXX.vcxproj -> D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\3.28.1\\CompilerIdCXX\\CompilerIdCXX.exe
+      PostBuildEvent:
+        for %%i in (cl.exe) do @echo CMAKE_CXX_COMPILER=%%~$PATH:i
+        :VCEnd
+        CMAKE_CXX_COMPILER=D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\Hostx64\\x64\\cl.exe
+      FinalizeBuildStatus:
+        姝ｅ湪鍒犻櫎鏂囦欢鈥淒ebug\\CompilerIdCXX.tlog\\unsuccessfulbuild鈥濄€?
+        姝ｅ湪瀵光€淒ebug\\CompilerIdCXX.tlog\\CompilerIdCXX.lastbuildstate鈥濇墽琛?Touch 浠诲姟銆?
+      宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\3.28.1\\CompilerIdCXX\\CompilerIdCXX.vcxproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+      
+      宸叉垚鍔熺敓鎴愩€?
+          0 涓鍛?
+          0 涓敊璇?
+      
+      宸茬敤鏃堕棿 00:00:00.65
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.exe"
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.vcxproj"
+      
+      The CXX compiler identification is MSVC, found in:
+        D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/3.28.1/CompilerIdCXX/CompilerIdCXX.exe
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:19 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-yw3y00"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-yw3y00"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-yw3y00'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_2bc87.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:46銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-yw3y00\\cmTC_2bc87.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_2bc87.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-yw3y00\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_2bc87.dir\\Debug\\cmTC_2bc87.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_2bc87.dir\\Debug\\cmTC_2bc87.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_2bc87.dir\\Debug\\cmTC_2bc87.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_2bc87.dir\\Debug\\\\" /Fd"cmTC_2bc87.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Program Files\\CMake\\share\\cmake-3.28\\Modules\\CMakeCCompilerABI.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_2bc87.dir\\Debug\\\\" /Fd"cmTC_2bc87.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Program Files\\CMake\\share\\cmake-3.28\\Modules\\CMakeCCompilerABI.c"
+          CMakeCCompilerABI.c
+        Link:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-yw3y00\\Debug\\cmTC_2bc87.exe" /INCREMENTAL /ILK:"cmTC_2bc87.dir\\Debug\\cmTC_2bc87.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-yw3y00/Debug/cmTC_2bc87.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-yw3y00/Debug/cmTC_2bc87.lib" /MACHINE:X64  /machine:x64 cmTC_2bc87.dir\\Debug\\CMakeCCompilerABI.obj
+          cmTC_2bc87.vcxproj -> D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-yw3y00\\Debug\\cmTC_2bc87.exe
+        FinalizeBuildStatus:
+          姝ｅ湪鍒犻櫎鏂囦欢鈥渃mTC_2bc87.dir\\Debug\\cmTC_2bc87.tlog\\unsuccessfulbuild鈥濄€?
+          姝ｅ湪瀵光€渃mTC_2bc87.dir\\Debug\\cmTC_2bc87.tlog\\cmTC_2bc87.lastbuildstate鈥濇墽琛?Touch 浠诲姟銆?
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-yw3y00\\cmTC_2bc87.vcxproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+        
+        宸叉垚鍔熺敓鎴愩€?
+            0 涓鍛?
+            0 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.65
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:19 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-px9lve"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-px9lve"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /EHsc"
+      CMAKE_CXX_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-px9lve'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_db760.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:46銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-px9lve\\cmTC_db760.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_db760.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-px9lve\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_db760.dir\\Debug\\cmTC_db760.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_db760.dir\\Debug\\cmTC_db760.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_db760.dir\\Debug\\cmTC_db760.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_db760.dir\\Debug\\\\" /Fd"cmTC_db760.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TP /errorReport:queue "D:\\Program Files\\CMake\\share\\cmake-3.28\\Modules\\CMakeCXXCompilerABI.cpp"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_db760.dir\\Debug\\\\" /Fd"cmTC_db760.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TP /errorReport:queue "D:\\Program Files\\CMake\\share\\cmake-3.28\\Modules\\CMakeCXXCompilerABI.cpp"
+          CMakeCXXCompilerABI.cpp
+        Link:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-px9lve\\Debug\\cmTC_db760.exe" /INCREMENTAL /ILK:"cmTC_db760.dir\\Debug\\cmTC_db760.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-px9lve/Debug/cmTC_db760.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-px9lve/Debug/cmTC_db760.lib" /MACHINE:X64  /machine:x64 cmTC_db760.dir\\Debug\\CMakeCXXCompilerABI.obj
+          cmTC_db760.vcxproj -> D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-px9lve\\Debug\\cmTC_db760.exe
+        FinalizeBuildStatus:
+          姝ｅ湪鍒犻櫎鏂囦欢鈥渃mTC_db760.dir\\Debug\\cmTC_db760.tlog\\unsuccessfulbuild鈥濄€?
+          姝ｅ湪瀵光€渃mTC_db760.dir\\Debug\\cmTC_db760.tlog\\cmTC_db760.lastbuildstate鈥濇墽琛?Touch 浠诲姟銆?
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-px9lve\\cmTC_db760.vcxproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+        
+        宸叉垚鍔熺敓鎴愩€?
+            0 涓鍛?
+            0 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.66
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckIncludeFile.cmake:90 (try_compile)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:169 (check_include_file)"
+    checks:
+      - "Looking for assert.h"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-umnsuc"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-umnsuc"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_ASSERT_H"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-umnsuc'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_1482e.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:47銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-umnsuc\\cmTC_1482e.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_1482e.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-umnsuc\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_1482e.dir\\Debug\\cmTC_1482e.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_1482e.dir\\Debug\\cmTC_1482e.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_1482e.dir\\Debug\\cmTC_1482e.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_1482e.dir\\Debug\\\\" /Fd"cmTC_1482e.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-umnsuc\\CheckIncludeFile.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_1482e.dir\\Debug\\\\" /Fd"cmTC_1482e.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-umnsuc\\CheckIncludeFile.c"
+          CheckIncludeFile.c
+        Link:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-umnsuc\\Debug\\cmTC_1482e.exe" /INCREMENTAL /ILK:"cmTC_1482e.dir\\Debug\\cmTC_1482e.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-umnsuc/Debug/cmTC_1482e.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-umnsuc/Debug/cmTC_1482e.lib" /MACHINE:X64  /machine:x64 cmTC_1482e.dir\\Debug\\CheckIncludeFile.obj
+          cmTC_1482e.vcxproj -> D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-umnsuc\\Debug\\cmTC_1482e.exe
+        FinalizeBuildStatus:
+          姝ｅ湪鍒犻櫎鏂囦欢鈥渃mTC_1482e.dir\\Debug\\cmTC_1482e.tlog\\unsuccessfulbuild鈥濄€?
+          姝ｅ湪瀵光€渃mTC_1482e.dir\\Debug\\cmTC_1482e.tlog\\cmTC_1482e.lastbuildstate鈥濇墽琛?Touch 浠诲姟銆?
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-umnsuc\\cmTC_1482e.vcxproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+        
+        宸叉垚鍔熺敓鎴愩€?
+            0 涓鍛?
+            0 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.66
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckIncludeFile.cmake:90 (try_compile)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:170 (check_include_file)"
+    checks:
+      - "Looking for dirent.h"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-dzy1ip"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-dzy1ip"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_DIRENT_H"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-dzy1ip'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_08db5.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:48銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\cmTC_08db5.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_08db5.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_08db5.dir\\Debug\\cmTC_08db5.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_08db5.dir\\Debug\\cmTC_08db5.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_08db5.dir\\Debug\\cmTC_08db5.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_08db5.dir\\Debug\\\\" /Fd"cmTC_08db5.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\CheckIncludeFile.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_08db5.dir\\Debug\\\\" /Fd"cmTC_08db5.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\CheckIncludeFile.c"
+          CheckIncludeFile.c
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\CheckIncludeFile.c(1,10): error C1083: 鏃犳硶鎵撳紑鍖呮嫭鏂囦欢: 鈥渄irent.h鈥? No such file or directory [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\cmTC_08db5.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\cmTC_08db5.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\cmTC_08db5.vcxproj鈥?榛樿鐩爣) (1) ->
+        (ClCompile 鐩爣) -> 
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\CheckIncludeFile.c(1,10): error C1083: 鏃犳硶鎵撳紑鍖呮嫭鏂囦欢: 鈥渄irent.h鈥? No such file or directory [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-dzy1ip\\cmTC_08db5.vcxproj]
+        
+            0 涓鍛?
+            1 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.37
+        
+      exitCode: 1
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckIncludeFile.cmake:90 (try_compile)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:171 (check_include_file)"
+    checks:
+      - "Looking for sys/stat.h"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-w8b5sr"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-w8b5sr"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_SYS_STAT_H"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-w8b5sr'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_14fa1.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:49銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-w8b5sr\\cmTC_14fa1.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_14fa1.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-w8b5sr\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_14fa1.dir\\Debug\\cmTC_14fa1.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_14fa1.dir\\Debug\\cmTC_14fa1.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_14fa1.dir\\Debug\\cmTC_14fa1.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_14fa1.dir\\Debug\\\\" /Fd"cmTC_14fa1.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-w8b5sr\\CheckIncludeFile.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_14fa1.dir\\Debug\\\\" /Fd"cmTC_14fa1.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-w8b5sr\\CheckIncludeFile.c"
+          CheckIncludeFile.c
+        Link:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-w8b5sr\\Debug\\cmTC_14fa1.exe" /INCREMENTAL /ILK:"cmTC_14fa1.dir\\Debug\\cmTC_14fa1.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-w8b5sr/Debug/cmTC_14fa1.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-w8b5sr/Debug/cmTC_14fa1.lib" /MACHINE:X64  /machine:x64 cmTC_14fa1.dir\\Debug\\CheckIncludeFile.obj
+          cmTC_14fa1.vcxproj -> D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-w8b5sr\\Debug\\cmTC_14fa1.exe
+        FinalizeBuildStatus:
+          姝ｅ湪鍒犻櫎鏂囦欢鈥渃mTC_14fa1.dir\\Debug\\cmTC_14fa1.tlog\\unsuccessfulbuild鈥濄€?
+          姝ｅ湪瀵光€渃mTC_14fa1.dir\\Debug\\cmTC_14fa1.tlog\\cmTC_14fa1.lastbuildstate鈥濇墽琛?Touch 浠诲姟銆?
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-w8b5sr\\cmTC_14fa1.vcxproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+        
+        宸叉垚鍔熺敓鎴愩€?
+            0 涓鍛?
+            0 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.64
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckIncludeFile.cmake:90 (try_compile)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:172 (check_include_file)"
+    checks:
+      - "Looking for sys/types.h"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-z4np2c"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-z4np2c"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_SYS_TYPES_H"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-z4np2c'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_685c5.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:50銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-z4np2c\\cmTC_685c5.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_685c5.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-z4np2c\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_685c5.dir\\Debug\\cmTC_685c5.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_685c5.dir\\Debug\\cmTC_685c5.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_685c5.dir\\Debug\\cmTC_685c5.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_685c5.dir\\Debug\\\\" /Fd"cmTC_685c5.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-z4np2c\\CheckIncludeFile.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_685c5.dir\\Debug\\\\" /Fd"cmTC_685c5.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-z4np2c\\CheckIncludeFile.c"
+          CheckIncludeFile.c
+        Link:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-z4np2c\\Debug\\cmTC_685c5.exe" /INCREMENTAL /ILK:"cmTC_685c5.dir\\Debug\\cmTC_685c5.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-z4np2c/Debug/cmTC_685c5.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-z4np2c/Debug/cmTC_685c5.lib" /MACHINE:X64  /machine:x64 cmTC_685c5.dir\\Debug\\CheckIncludeFile.obj
+          cmTC_685c5.vcxproj -> D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-z4np2c\\Debug\\cmTC_685c5.exe
+        FinalizeBuildStatus:
+          姝ｅ湪鍒犻櫎鏂囦欢鈥渃mTC_685c5.dir\\Debug\\cmTC_685c5.tlog\\unsuccessfulbuild鈥濄€?
+          姝ｅ湪瀵光€渃mTC_685c5.dir\\Debug\\cmTC_685c5.tlog\\cmTC_685c5.lastbuildstate鈥濇墽琛?Touch 浠诲姟銆?
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-z4np2c\\cmTC_685c5.vcxproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+        
+        宸叉垚鍔熺敓鎴愩€?
+            0 涓鍛?
+            0 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.67
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckIncludeFile.cmake:90 (try_compile)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:173 (check_include_file)"
+    checks:
+      - "Looking for unistd.h"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-cikfw3"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-cikfw3"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_UNISTD_H"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-cikfw3'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_aff47.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:51銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\cmTC_aff47.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_aff47.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_aff47.dir\\Debug\\cmTC_aff47.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_aff47.dir\\Debug\\cmTC_aff47.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_aff47.dir\\Debug\\cmTC_aff47.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_aff47.dir\\Debug\\\\" /Fd"cmTC_aff47.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\CheckIncludeFile.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_aff47.dir\\Debug\\\\" /Fd"cmTC_aff47.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\CheckIncludeFile.c"
+          CheckIncludeFile.c
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\CheckIncludeFile.c(1,10): error C1083: 鏃犳硶鎵撳紑鍖呮嫭鏂囦欢: 鈥渦nistd.h鈥? No such file or directory [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\cmTC_aff47.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\cmTC_aff47.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\cmTC_aff47.vcxproj鈥?榛樿鐩爣) (1) ->
+        (ClCompile 鐩爣) -> 
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\CheckIncludeFile.c(1,10): error C1083: 鏃犳硶鎵撳紑鍖呮嫭鏂囦欢: 鈥渦nistd.h鈥? No such file or directory [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-cikfw3\\cmTC_aff47.vcxproj]
+        
+            0 涓鍛?
+            1 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.38
+        
+      exitCode: 1
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckIncludeFile.cmake:90 (try_compile)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:174 (check_include_file)"
+    checks:
+      - "Looking for windows.h"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-7d3u0p"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-7d3u0p"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_WINDOWS_H"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-7d3u0p'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_44823.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:51銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-7d3u0p\\cmTC_44823.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_44823.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-7d3u0p\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_44823.dir\\Debug\\cmTC_44823.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_44823.dir\\Debug\\cmTC_44823.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_44823.dir\\Debug\\cmTC_44823.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_44823.dir\\Debug\\\\" /Fd"cmTC_44823.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-7d3u0p\\CheckIncludeFile.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_44823.dir\\Debug\\\\" /Fd"cmTC_44823.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-7d3u0p\\CheckIncludeFile.c"
+          CheckIncludeFile.c
+        Link:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-7d3u0p\\Debug\\cmTC_44823.exe" /INCREMENTAL /ILK:"cmTC_44823.dir\\Debug\\cmTC_44823.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-7d3u0p/Debug/cmTC_44823.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-7d3u0p/Debug/cmTC_44823.lib" /MACHINE:X64  /machine:x64 cmTC_44823.dir\\Debug\\CheckIncludeFile.obj
+          cmTC_44823.vcxproj -> D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-7d3u0p\\Debug\\cmTC_44823.exe
+        FinalizeBuildStatus:
+          姝ｅ湪鍒犻櫎鏂囦欢鈥渃mTC_44823.dir\\Debug\\cmTC_44823.tlog\\unsuccessfulbuild鈥濄€?
+          姝ｅ湪瀵光€渃mTC_44823.dir\\Debug\\cmTC_44823.tlog\\cmTC_44823.lastbuildstate鈥濇墽琛?Touch 浠诲姟銆?
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-7d3u0p\\cmTC_44823.vcxproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+        
+        宸叉垚鍔熺敓鎴愩€?
+            0 涓鍛?
+            0 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.86
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckSymbolExists.cmake:140 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckSymbolExists.cmake:66 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:191 (check_symbol_exists)"
+    checks:
+      - "Looking for mkostemp"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-uh3dlj"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-uh3dlj"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_MKOSTEMP"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-uh3dlj'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_04c40.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:52銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\cmTC_04c40.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_04c40.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_04c40.dir\\Debug\\cmTC_04c40.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_04c40.dir\\Debug\\cmTC_04c40.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_04c40.dir\\Debug\\cmTC_04c40.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_04c40.dir\\Debug\\\\" /Fd"cmTC_04c40.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\CheckSymbolExists.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_04c40.dir\\Debug\\\\" /Fd"cmTC_04c40.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\CheckSymbolExists.c"
+          CheckSymbolExists.c
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\CheckSymbolExists.c(8,19): error C2065: 鈥渕kostemp鈥? 鏈０鏄庣殑鏍囪瘑绗?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\cmTC_04c40.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\cmTC_04c40.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\cmTC_04c40.vcxproj鈥?榛樿鐩爣) (1) ->
+        (ClCompile 鐩爣) -> 
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\CheckSymbolExists.c(8,19): error C2065: 鈥渕kostemp鈥? 鏈０鏄庣殑鏍囪瘑绗?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-uh3dlj\\cmTC_04c40.vcxproj]
+        
+            0 涓鍛?
+            1 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.37
+        
+      exitCode: 1
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckSymbolExists.cmake:140 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckSymbolExists.cmake:66 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:192 (check_symbol_exists)"
+    checks:
+      - "Looking for memfd_create"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-l8wb1p"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-l8wb1p"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_MEMFD_CREATE"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-l8wb1p'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_a805e.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:53銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\cmTC_a805e.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_a805e.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_a805e.dir\\Debug\\cmTC_a805e.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_a805e.dir\\Debug\\cmTC_a805e.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_a805e.dir\\Debug\\cmTC_a805e.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_a805e.dir\\Debug\\\\" /Fd"cmTC_a805e.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\CheckSymbolExists.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_a805e.dir\\Debug\\\\" /Fd"cmTC_a805e.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\CheckSymbolExists.c"
+          CheckSymbolExists.c
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\CheckSymbolExists.c(2,10): error C1083: 鏃犳硶鎵撳紑鍖呮嫭鏂囦欢: 鈥渟ys/mman.h鈥? No such file or directory [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\cmTC_a805e.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\cmTC_a805e.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\cmTC_a805e.vcxproj鈥?榛樿鐩爣) (1) ->
+        (ClCompile 鐩爣) -> 
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\CheckSymbolExists.c(2,10): error C1083: 鏃犳硶鎵撳紑鍖呮嫭鏂囦欢: 鈥渟ys/mman.h鈥? No such file or directory [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-l8wb1p\\cmTC_a805e.vcxproj]
+        
+            0 涓鍛?
+            1 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.37
+        
+      exitCode: 1
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckSymbolExists.cmake:140 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckSymbolExists.cmake:66 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:193 (check_symbol_exists)"
+    checks:
+      - "Looking for secure_getenv"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-4p2rcj"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-4p2rcj"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_SECURE_GETENV"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-4p2rcj'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_c30dd.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:54銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\cmTC_c30dd.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_c30dd.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_c30dd.dir\\Debug\\cmTC_c30dd.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_c30dd.dir\\Debug\\cmTC_c30dd.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_c30dd.dir\\Debug\\cmTC_c30dd.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_c30dd.dir\\Debug\\\\" /Fd"cmTC_c30dd.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\CheckSymbolExists.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_c30dd.dir\\Debug\\\\" /Fd"cmTC_c30dd.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\CheckSymbolExists.c"
+          CheckSymbolExists.c
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\CheckSymbolExists.c(8,19): error C2065: 鈥渟ecure_getenv鈥? 鏈０鏄庣殑鏍囪瘑绗?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\cmTC_c30dd.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\cmTC_c30dd.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\cmTC_c30dd.vcxproj鈥?榛樿鐩爣) (1) ->
+        (ClCompile 鐩爣) -> 
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\CheckSymbolExists.c(8,19): error C2065: 鈥渟ecure_getenv鈥? 鏈０鏄庣殑鏍囪瘑绗?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-4p2rcj\\cmTC_c30dd.vcxproj]
+        
+            0 涓鍛?
+            1 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.37
+        
+      exitCode: 1
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckCSourceCompiles.cmake:52 (cmake_check_source_compiles)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:196 (check_c_source_compiles)"
+    checks:
+      - "Performing Test HAVE_REALPATH"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-pb8bxn"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-pb8bxn"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_REALPATH"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-pb8bxn'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_b634d.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:54銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_b634d.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_b634d.dir\\Debug\\cmTC_b634d.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_b634d.dir\\Debug\\cmTC_b634d.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_b634d.dir\\Debug\\cmTC_b634d.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_REALPATH /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_b634d.dir\\Debug\\\\" /Fd"cmTC_b634d.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_REALPATH /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_b634d.dir\\Debug\\\\" /Fd"cmTC_b634d.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c"
+          src.c
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c(3,41): error C2065: 鈥淧ATH_MAX鈥? 鏈０鏄庣殑鏍囪瘑绗?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj]
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c(3,41): error C2057: 搴旇緭鍏ュ父閲忚〃杈惧紡 [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj]
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c(3,41): error C2466: 涓嶈兘鍒嗛厤甯搁噺澶у皬涓?0 鐨勬暟缁?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj]
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c(3,37): error C2133: 鈥渂uf鈥? 鏈煡鐨勫ぇ灏?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj鈥?榛樿鐩爣) (1) ->
+        (ClCompile 鐩爣) -> 
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c(3,41): error C2065: 鈥淧ATH_MAX鈥? 鏈０鏄庣殑鏍囪瘑绗?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj]
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c(3,41): error C2057: 搴旇緭鍏ュ父閲忚〃杈惧紡 [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj]
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c(3,41): error C2466: 涓嶈兘鍒嗛厤甯搁噺澶у皬涓?0 鐨勬暟缁?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj]
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\src.c(3,37): error C2133: 鈥渂uf鈥? 鏈煡鐨勫ぇ灏?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pb8bxn\\cmTC_b634d.vcxproj]
+        
+            0 涓鍛?
+            4 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.40
+        
+      exitCode: 1
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckCSourceCompiles.cmake:52 (cmake_check_source_compiles)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:216 (check_c_source_compiles)"
+    checks:
+      - "Performing Test HAVE_ATTRIBUTE_UNINITIALIZED"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-g0tsf8"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-g0tsf8"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_ATTRIBUTE_UNINITIALIZED"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-g0tsf8'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_c6109.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:55銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\cmTC_c6109.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_c6109.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_c6109.dir\\Debug\\cmTC_c6109.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_c6109.dir\\Debug\\cmTC_c6109.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_c6109.dir\\Debug\\cmTC_c6109.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_ATTRIBUTE_UNINITIALIZED /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_c6109.dir\\Debug\\\\" /Fd"cmTC_c6109.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\src.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_ATTRIBUTE_UNINITIALIZED /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_c6109.dir\\Debug\\\\" /Fd"cmTC_c6109.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\src.c"
+          src.c
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\src.c(1,32): error C2146: 璇硶閿欒: 缂哄皯鈥?鈥?鍦ㄦ爣璇嗙鈥淿_attribute__鈥濈殑鍓嶉潰) [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\cmTC_c6109.vcxproj]
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\src.c(1,47): error C2065: 鈥渦ninitialized鈥? 鏈０鏄庣殑鏍囪瘑绗?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\cmTC_c6109.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\cmTC_c6109.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\cmTC_c6109.vcxproj鈥?榛樿鐩爣) (1) ->
+        (ClCompile 鐩爣) -> 
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\src.c(1,32): error C2146: 璇硶閿欒: 缂哄皯鈥?鈥?鍦ㄦ爣璇嗙鈥淿_attribute__鈥濈殑鍓嶉潰) [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\cmTC_c6109.vcxproj]
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\src.c(1,47): error C2065: 鈥渦ninitialized鈥? 鏈０鏄庣殑鏍囪瘑绗?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g0tsf8\\cmTC_c6109.vcxproj]
+        
+            0 涓鍛?
+            2 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.42
+        
+      exitCode: 1
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckCSourceCompiles.cmake:52 (cmake_check_source_compiles)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:255 (check_c_source_compiles)"
+    checks:
+      - "Performing Test HAVE_BUILTIN_ASSUME"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-e5xi1f"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-e5xi1f"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_BUILTIN_ASSUME"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-e5xi1f'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_8d495.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:55銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-e5xi1f\\cmTC_8d495.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_8d495.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-e5xi1f\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_8d495.dir\\Debug\\cmTC_8d495.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_8d495.dir\\Debug\\cmTC_8d495.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_8d495.dir\\Debug\\cmTC_8d495.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_BUILTIN_ASSUME /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_8d495.dir\\Debug\\\\" /Fd"cmTC_8d495.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-e5xi1f\\src.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_BUILTIN_ASSUME /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_8d495.dir\\Debug\\\\" /Fd"cmTC_8d495.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-e5xi1f\\src.c"
+          src.c
+        Link:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-e5xi1f\\Debug\\cmTC_8d495.exe" /INCREMENTAL /ILK:"cmTC_8d495.dir\\Debug\\cmTC_8d495.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-e5xi1f/Debug/cmTC_8d495.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-e5xi1f/Debug/cmTC_8d495.lib" /MACHINE:X64  /machine:x64 cmTC_8d495.dir\\Debug\\src.obj
+          cmTC_8d495.vcxproj -> D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-e5xi1f\\Debug\\cmTC_8d495.exe
+        FinalizeBuildStatus:
+          姝ｅ湪鍒犻櫎鏂囦欢鈥渃mTC_8d495.dir\\Debug\\cmTC_8d495.tlog\\unsuccessfulbuild鈥濄€?
+          姝ｅ湪瀵光€渃mTC_8d495.dir\\Debug\\cmTC_8d495.tlog\\cmTC_8d495.lastbuildstate鈥濇墽琛?Touch 浠诲姟銆?
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-e5xi1f\\cmTC_8d495.vcxproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+        
+        宸叉垚鍔熺敓鎴愩€?
+            0 涓鍛?
+            0 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.65
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckCSourceCompiles.cmake:52 (cmake_check_source_compiles)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:257 (check_c_source_compiles)"
+    checks:
+      - "Performing Test HAVE_BUILTIN_MUL_OVERFLOW"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-zg5wq8"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-zg5wq8"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_BUILTIN_MUL_OVERFLOW"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-zg5wq8'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_f23b7.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:56銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_f23b7.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_f23b7.dir\\Debug\\cmTC_f23b7.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_f23b7.dir\\Debug\\cmTC_f23b7.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_f23b7.dir\\Debug\\cmTC_f23b7.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_BUILTIN_MUL_OVERFLOW /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_f23b7.dir\\Debug\\\\" /Fd"cmTC_f23b7.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\src.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_BUILTIN_MUL_OVERFLOW /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_f23b7.dir\\Debug\\\\" /Fd"cmTC_f23b7.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\src.c"
+          src.c
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\src.c(2,1): warning C4700: 浣跨敤浜嗘湭鍒濆鍖栫殑灞€閮ㄥ彉閲忊€渂鈥?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj]
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\src.c(2,1): warning C4700: 浣跨敤浜嗘湭鍒濆鍖栫殑灞€閮ㄥ彉閲忊€渁鈥?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj]
+        Link:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\Debug\\cmTC_f23b7.exe" /INCREMENTAL /ILK:"cmTC_f23b7.dir\\Debug\\cmTC_f23b7.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-zg5wq8/Debug/cmTC_f23b7.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-zg5wq8/Debug/cmTC_f23b7.lib" /MACHINE:X64  /machine:x64 cmTC_f23b7.dir\\Debug\\src.obj
+        src.obj : error LNK2019: 鏃犳硶瑙ｆ瀽鐨勫閮ㄧ鍙?__builtin_mul_overflow锛屽嚱鏁?main 涓紩鐢ㄤ簡璇ョ鍙?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj]
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\Debug\\cmTC_f23b7.exe : fatal error LNK1120: 1 涓棤娉曡В鏋愮殑澶栭儴鍛戒护 [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj鈥?榛樿鐩爣) (1) ->
+        (ClCompile 鐩爣) -> 
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\src.c(2,1): warning C4700: 浣跨敤浜嗘湭鍒濆鍖栫殑灞€閮ㄥ彉閲忊€渂鈥?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj]
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\src.c(2,1): warning C4700: 浣跨敤浜嗘湭鍒濆鍖栫殑灞€閮ㄥ彉閲忊€渁鈥?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj]
+        
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj鈥?榛樿鐩爣) (1) ->
+        (Link 鐩爣) -> 
+          src.obj : error LNK2019: 鏃犳硶瑙ｆ瀽鐨勫閮ㄧ鍙?__builtin_mul_overflow锛屽嚱鏁?main 涓紩鐢ㄤ簡璇ョ鍙?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj]
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\Debug\\cmTC_f23b7.exe : fatal error LNK1120: 1 涓棤娉曡В鏋愮殑澶栭儴鍛戒护 [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-zg5wq8\\cmTC_f23b7.vcxproj]
+        
+            2 涓鍛?
+            2 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.63
+        
+      exitCode: 1
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckCSourceCompiles.cmake:52 (cmake_check_source_compiles)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:265 (check_c_source_compiles)"
+    checks:
+      - "Performing Test HAVE_BUILTIN_UNREACHABLE"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-vzot32"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-vzot32"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "HAVE_BUILTIN_UNREACHABLE"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-vzot32'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_0cc96.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:57銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\cmTC_0cc96.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_0cc96.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_0cc96.dir\\Debug\\cmTC_0cc96.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_0cc96.dir\\Debug\\cmTC_0cc96.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_0cc96.dir\\Debug\\cmTC_0cc96.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_BUILTIN_UNREACHABLE /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_0cc96.dir\\Debug\\\\" /Fd"cmTC_0cc96.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\src.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D HAVE_BUILTIN_UNREACHABLE /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_0cc96.dir\\Debug\\\\" /Fd"cmTC_0cc96.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\src.c"
+          src.c
+        Link:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\Debug\\cmTC_0cc96.exe" /INCREMENTAL /ILK:"cmTC_0cc96.dir\\Debug\\cmTC_0cc96.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-vzot32/Debug/cmTC_0cc96.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-vzot32/Debug/cmTC_0cc96.lib" /MACHINE:X64  /machine:x64 cmTC_0cc96.dir\\Debug\\src.obj
+        src.obj : error LNK2019: 鏃犳硶瑙ｆ瀽鐨勫閮ㄧ鍙?__builtin_unreachable锛屽嚱鏁?main 涓紩鐢ㄤ簡璇ョ鍙?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\cmTC_0cc96.vcxproj]
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\Debug\\cmTC_0cc96.exe : fatal error LNK1120: 1 涓棤娉曡В鏋愮殑澶栭儴鍛戒护 [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\cmTC_0cc96.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\cmTC_0cc96.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\cmTC_0cc96.vcxproj鈥?榛樿鐩爣) (1) ->
+        (Link 鐩爣) -> 
+          src.obj : error LNK2019: 鏃犳硶瑙ｆ瀽鐨勫閮ㄧ鍙?__builtin_unreachable锛屽嚱鏁?main 涓紩鐢ㄤ簡璇ョ鍙?[D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\cmTC_0cc96.vcxproj]
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\Debug\\cmTC_0cc96.exe : fatal error LNK1120: 1 涓棤娉曡В鏋愮殑澶栭儴鍛戒护 [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-vzot32\\cmTC_0cc96.vcxproj]
+        
+            0 涓鍛?
+            2 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.61
+        
+      exitCode: 1
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "D:/Program Files/CMake/share/cmake-3.28/Modules/CheckCSourceCompiles.cmake:52 (cmake_check_source_compiles)"
+      - "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt:278 (check_c_source_compiles)"
+    checks:
+      - "Performing Test INTEL_CET_ENABLED"
+    directories:
+      source: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-5o669s"
+      binary: "D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-5o669s"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake"
+    buildResult:
+      variable: "INTEL_CET_ENABLED"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/CMakeScratch/TryCompile-5o669s'
+        
+        Run Build Command(s): "D:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_6ccd2.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        閫傜敤浜?.NET Framework MSBuild 鐗堟湰 17.14.40+3e7442088
+        鐢熸垚鍚姩鏃堕棿涓?2026/4/26 19:44:58銆?
+        
+        鑺傜偣 1 涓婄殑椤圭洰鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\cmTC_6ccd2.vcxproj鈥?榛樿鐩爣)銆?
+        PrepareForBuild:
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_6ccd2.dir\\Debug\\鈥濄€?
+          宸插惎鐢ㄧ粨鏋勫寲杈撳嚭銆傜紪璇戝櫒璇婃柇鐨勬牸寮忚缃皢鍙嶆槧閿欒灞傛缁撴瀯銆傛湁鍏宠缁嗕俊鎭紝璇峰弬闃?https://aka.ms/cpp/structured-output銆?
+          姝ｅ湪鍒涘缓鐩綍鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\Debug\\鈥濄€?
+          姝ｅ湪鍒涘缓鐩綍鈥渃mTC_6ccd2.dir\\Debug\\cmTC_6ccd2.tlog\\鈥濄€?
+        InitializeBuildStatus:
+          姝ｅ湪鍒涘缓鈥渃mTC_6ccd2.dir\\Debug\\cmTC_6ccd2.tlog\\unsuccessfulbuild鈥濓紝鍥犱负宸叉寚瀹氣€淎lwaysCreate鈥濄€?
+          姝ｅ湪瀵光€渃mTC_6ccd2.dir\\Debug\\cmTC_6ccd2.tlog\\unsuccessfulbuild鈥濇墽琛?Touch 浠诲姟銆?
+        ClCompile:
+          D:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D INTEL_CET_ENABLED /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_6ccd2.dir\\Debug\\\\" /Fd"cmTC_6ccd2.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\src.c"
+          鐢ㄤ簬 x64 鐨?Microsoft (R) C/C++ 浼樺寲缂栬瘧鍣?19.42.34444 鐗?
+          鐗堟潈鎵€鏈?C) Microsoft Corporation銆備繚鐣欐墍鏈夋潈鍒┿€?
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D INTEL_CET_ENABLED /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"cmTC_6ccd2.dir\\Debug\\\\" /Fd"cmTC_6ccd2.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\src.c"
+          src.c
+        D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\src.c(2,1): error C1189: #error:  CET is not enabled [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\cmTC_6ccd2.vcxproj]
+        宸插畬鎴愮敓鎴愰」鐩€淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\cmTC_6ccd2.vcxproj鈥?榛樿鐩爣)鐨勬搷浣?- 澶辫触銆?
+        
+        鐢熸垚澶辫触銆?
+        
+        鈥淒:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\cmTC_6ccd2.vcxproj鈥?榛樿鐩爣) (1) ->
+        (ClCompile 鐩爣) -> 
+          D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\src.c(2,1): error C1189: #error:  CET is not enabled [D:\\Code\\rasp\\DetectPsByAmsi\\src\\rasp_mod_amsi\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5o669s\\cmTC_6ccd2.vcxproj]
+        
+            0 涓鍛?
+            1 涓敊璇?
+        
+        宸茬敤鏃堕棿 00:00:00.37
+        
+      exitCode: 1
+...

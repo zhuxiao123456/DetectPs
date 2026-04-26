@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\CMakeFiles\cf2e4c2cf2e81a5a222cdbae50818303\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{C7FDD35C-0E6F-3637-8DD5-22CF82921EC9}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

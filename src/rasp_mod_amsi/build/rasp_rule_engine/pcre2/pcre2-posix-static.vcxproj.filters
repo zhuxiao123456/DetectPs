@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\src\pcre2posix.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_mod_amsi\build\rasp_rule_engine\pcre2\interface\pcre2posix.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Code\rasp\DetectPsByAmsi\src\rasp_rule_engine\third_party\pcre2\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{2F767489-57CC-3AFE-84EA-CD1126A7220A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{FFA2D921-3C32-3501-9EB8-D5A9A19BD8E0}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

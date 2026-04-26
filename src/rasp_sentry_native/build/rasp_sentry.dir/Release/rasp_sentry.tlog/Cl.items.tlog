@@ -1,0 +1,7 @@
+D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\src\main.cpp;D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\build\rasp_sentry.dir\Release\main.obj
+D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\src\sentry_log.cpp;D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\build\rasp_sentry.dir\Release\sentry_log.obj
+D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\src\pipe_security.cpp;D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\build\rasp_sentry.dir\Release\pipe_security.obj
+D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\src\event_collector.cpp;D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\build\rasp_sentry.dir\Release\event_collector.obj
+D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\src\rule_server.cpp;D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\build\rasp_sentry.dir\Release\rule_server.obj
+D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\src\config_watcher.cpp;D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\build\rasp_sentry.dir\Release\config_watcher.obj
+D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\src\amsi_staging_watcher.cpp;D:\Code\rasp\DetectPsByAmsi\src\rasp_sentry_native\build\rasp_sentry.dir\Release\amsi_staging_watcher.obj

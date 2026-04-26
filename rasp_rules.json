@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "globalMode": "block",
+  "globalLibraries": [
+    "rules/lib/rasp_lib.lua"
+  ],
+  "rules": [
+    {
+      "id": "AMSI-P01",
+      "sensor": "AmsiProvider",
+      "enabled": true,
+      "mode": "block",
+      "description": "System-wide AMSI script execution — telemetry and obfuscation detection",
+      "urlPatterns": [],
+      "methods": [],
+      "script": "rules/amsi_p01.lua",
+      "scriptEval": "exclusive",
+      "scriptTimeoutMs": 10,
+      "confidence": 60,
+      "config": {
+        "severity": "low"
+      }
+    },
+    {
+      "id": "AMSI-P02",
+      "sensor": "AmsiProvider",
+      "enabled": true,
+      "mode": "block",
+      "description": "AMSI bypass attempts — no Lua required, JSON-level regex only",
+      "urlPatterns": [],
+      "methods": [],
+      "confidence": 85,
+      "config": {
+        "regexField": "body",
+        "regexPatterns": [
+          "(?i)(amsiutils|amsiinitfailed|amsicontext)",
+          "(?i)(invoke-expression|\\biex\\b)\\s*[({\"']",
+          "(?i)\\[ref\\]\\.assembly\\.gettype\\(",
+          "(?i)amsi\\.dll.*virtualprotect"
+        ]
+      }
+    }
+  ]
+}

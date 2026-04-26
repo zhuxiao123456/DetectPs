@@ -1,0 +1,10 @@
+^D:\CODE\RASP\DETECTPSBYAMSI\SRC\RASP_MOD_AMSI\BUILD\CMAKEFILES\CF2E4C2CF2E81A5A222CDBAE50818303\GENERATE.STAMP.RULE
+setlocal
+"D:\Program Files\CMake\bin\cmake.exe" -SD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi -BD:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_mod_amsi.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -1,0 +1,13 @@
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/rasp_mod_amsi.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/INSTALL.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/ALL_BUILD.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/CMakeFiles/ZERO_CHECK.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/CMakeFiles/lua54_static.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/CMakeFiles/rasp_rule_engine.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/CMakeFiles/INSTALL.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/CMakeFiles/ALL_BUILD.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/CMakeFiles/pcre2-8-static.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/CMakeFiles/pcre2-posix-static.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/CMakeFiles/pcre2grep.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/CMakeFiles/INSTALL.dir
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/CMakeFiles/ALL_BUILD.dir

@@ -1,0 +1,34 @@
+# CMake generation dependency list for this directory.
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/libpcre2-8.pc.generator
+D:/Code/rasp/DetectPsByAmsi/src/rasp_mod_amsi/build/rasp_rule_engine/pcre2/libpcre2-posix.pc.generator
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/CMakeLists.txt
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake/FindEditline.cmake
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake/FindReadline.cmake
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake/PCRE2CheckVscript.cmake
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake/PCRE2UseSystemExtensions.cmake
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake/PCRE2WarningAsError.cmake
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/cmake/pcre2-config.cmake.in
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/libpcre2-8.pc.in
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/libpcre2-posix.pc.in
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/pcre2-config.in
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/src/config-cmake.h.in
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/src/pcre2.h.in
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/src/pcre2_chartables.c.dist
+D:/Code/rasp/DetectPsByAmsi/src/rasp_rule_engine/third_party/pcre2/src/pcre2posix.h
+D:/Program Files/CMake/share/cmake-3.28/Modules/BasicConfigVersion-SameMajorVersion.cmake.in
+D:/Program Files/CMake/share/cmake-3.28/Modules/CMakePackageConfigHelpers.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/CMakePushCheckState.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/CheckCSourceCompiles.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/CheckFunctionExists.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/CheckIncludeFile.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/CheckIncludeFileCXX.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/CheckSymbolExists.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/CheckTypeSize.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/FindBZip2.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/FindPackageHandleStandardArgs.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/FindPackageMessage.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/FindZLIB.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/GNUInstallDirs.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/Internal/CheckSourceCompiles.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/SelectLibraryConfigurations.cmake
+D:/Program Files/CMake/share/cmake-3.28/Modules/WriteBasicConfigVersionFile.cmake
