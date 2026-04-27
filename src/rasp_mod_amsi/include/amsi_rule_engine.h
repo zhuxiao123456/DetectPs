@@ -60,6 +60,12 @@ private:
     std::shared_ptr<const RuleSnapshot> m_snapshot;
     std::string m_libSource;
 
+    std::shared_ptr<const RuleSnapshot> BuildNextSnapshot(
+        const std::string& json,
+        const std::string& libSource,
+        std::string& effectiveLib);
+    void PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
+                         const std::string& effectiveLib);
     void PrecompileAll(const std::vector<AmsiRaspRuleConfig>& rules,
                        const std::string& libSource);
     void SwapRules(std::vector<AmsiRaspRuleConfig>&& rules);

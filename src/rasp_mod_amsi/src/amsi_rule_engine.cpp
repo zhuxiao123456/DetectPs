@@ -102,7 +102,53 @@ static void RaspLog(const char *fmt, ...) {
 // AMSI has no additional JSON fields beyond the base struct.
 // =========================================================================
 
+std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSnapshot(
+        const std::string &json,
+        const std::string &libSource,
+        std::string &effectiveLib) {
+    std::vector <std::unique_ptr<RaspRuleBase>> rawRules;
+    std::string lib;
+    if (!ParseRulesJson(json, lib, rawRules) || rawRules.empty()) {
+        Log("[RaspAmsi] BuildNextSnapshot: no rules parsed");
+        return {};
+    }
+
+    effectiveLib = lib.empty() ? libSource : lib;
+    std::vector <AmsiRaspRuleConfig> configs;
+    configs.reserve(rawRules.size());
+    for (auto &ptr: rawRules) {
+        auto *derived = static_cast<AmsiRaspRuleConfig *>(ptr.get());
+        if (derived->sensor != "AmsiProvider")
+            continue;
+        configs.push_back(std::move(*derived));
+    }
+
+    PrecompileAll(configs, effectiveLib);
+    return std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(configs)});
+}
+
+void AmsiRuleEngine::PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
+                                     const std::string &effectiveLib) {
+    if (!next)
+        return;
+
+    std::atomic_store(&m_snapshot, next);
+    m_libSource = effectiveLib;
+
+    auto snap = std::atomic_load(&m_snapshot);
+    Log("[RaspAmsi] ParseAndSwap: %zu AmsiProvider rule(s) loaded",
+        snap ? snap->rules.size() : 0u);
+}
+
 bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &libSource) {
+    std::string nextEffectiveLib;
+    auto next = BuildNextSnapshot(json, libSource, nextEffectiveLib);
+    if (!next)
+        return false;
+    PublishSnapshot(next, nextEffectiveLib);
+    return true;
+
+#if 0
     std::vector <std::unique_ptr<RaspRuleBase>> rawRules;
     std::string lib;
     // 调用基类解析json
@@ -132,6 +178,7 @@ bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &li
     Log("[RaspAmsi] ParseAndSwap: %zu AmsiProvider rule(s) loaded",
         snap ? snap->rules.size() : 0u);
     return true;
+#endif
 }
 
 /*
@@ -141,16 +188,53 @@ bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &li
 - **失败处理**：保留当前快照
 */
 void AmsiRuleEngine::OnReloadSignal() {
+    EngineRuntime& runtime = GetAmsiEngineRuntime();
+    if (!runtime.CanAttemptReload()) {
+        runtime.EmitTelemetry("reload_rejected", "state_not_reloadable");
+        return;
+    }
+
+    bool buildOk = false;
+    std::shared_ptr<const RuleSnapshot> next;
+    std::string effectiveLib;
+    for (int attempt = 0; attempt < 3 && !buildOk; attempt++) {
+        if (attempt > 0)
+            Sleep(1000);
+        std::string json, lib;
+        if (ConnectSentry(json, lib)) {
+            next = BuildNextSnapshot(json, lib, effectiveLib);
+            buildOk = (next != nullptr);
+        }
+    }
+
+    if (!buildOk) {
+        runtime.EmitTelemetry("reload_failed", "build_snapshot_failed");
+        Log("[RaspAmsi] OnReloadSignal: sentry unavailable after 3 attempts - keeping snapshot");
+        return;
+    }
+
+    auto guard = runtime.TryEnterReload("reload_signal");
+    if (!guard.IsActive()) {
+        runtime.EmitTelemetry("reload_rejected", "shutdown_or_state_changed");
+        return;
+    }
+
+    PublishSnapshot(next, effectiveLib);
+    guard.Complete(true, "published");
+    return;
+
+#if 0
     bool ok = false;
     for (int attempt = 0; attempt < 3 && !ok; attempt++) {
         if (attempt > 0)
             Sleep(1000);
         std::string json, lib;
-        ok = ConnectSentry(json, lib) && ParseAndSwap(json, lib);
+        ok = false;
     }
 
     if (!ok)
         Log("[RaspAmsi] OnReloadSignal: sentry unavailable after 3 attempts — keeping snapshot");
+#endif
 }
 
 /*

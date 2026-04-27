@@ -36,6 +36,49 @@ const char* EngineStateName(EngineState state)
     }
 }
 
+ReloadGuard::ReloadGuard(ReloadGuard&& other) noexcept
+    : m_runtime(other.m_runtime),
+      m_reason(other.m_reason),
+      m_completed(other.m_completed)
+{
+    other.m_runtime = nullptr;
+    other.m_reason = nullptr;
+    other.m_completed = true;
+}
+
+ReloadGuard& ReloadGuard::operator=(ReloadGuard&& other) noexcept
+{
+    if (this != &other) {
+        Reset(false, "move_assignment");
+        m_runtime = other.m_runtime;
+        m_reason = other.m_reason;
+        m_completed = other.m_completed;
+        other.m_runtime = nullptr;
+        other.m_reason = nullptr;
+        other.m_completed = true;
+    }
+    return *this;
+}
+
+ReloadGuard::~ReloadGuard()
+{
+    Reset(false, "guard_destructor");
+}
+
+void ReloadGuard::Complete(bool success, const char* detail)
+{
+    Reset(success, detail);
+}
+
+void ReloadGuard::Reset(bool success, const char* detail)
+{
+    if (m_runtime && !m_completed)
+        m_runtime->CompleteReload(success, m_reason, detail);
+    m_runtime = nullptr;
+    m_reason = nullptr;
+    m_completed = true;
+}
+
 ScanGuard::ScanGuard(ScanGuard&& other) noexcept
     : m_runtime(other.m_runtime), m_engine(other.m_engine)
 {
@@ -117,18 +160,60 @@ bool EngineRuntime::EnsureInitialized()
 
 ScanGuard EngineRuntime::TryEnterScan()
 {
+    bool rejected = false;
+    EngineState rejectedState = EngineState::Uninitialized;
+    long active = 0;
     std::lock_guard<std::mutex> lock(m_mutex);
     if ((m_state != EngineState::Ready && m_state != EngineState::Reloading) || !m_engine) {
-        char msg[160];
+        rejected = true;
+        rejectedState = m_state;
+        active = m_activeScans.load();
+    }
+
+    if (rejected) {
+        char msg[256];
         snprintf(msg, sizeof(msg),
-                 "[RaspAmsi] telemetry scan_enter_rejected state=%s active=%ld\n",
-                 EngineStateName(m_state), m_activeScans.load());
+                 "[RaspAmsi] telemetry event=scan_enter_rejected state=%s detail=%s active=%ld tid=%lu\n",
+                 EngineStateName(rejectedState), EngineStateName(rejectedState),
+                 active, GetCurrentThreadId());
         OutputDebugStringA(msg);
         return {};
     }
-
     ++m_activeScans;
     return ScanGuard(this, m_engine.get());
+}
+
+bool EngineRuntime::CanAttemptReload() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_state == EngineState::Ready && m_engine != nullptr;
+}
+
+ReloadGuard EngineRuntime::TryEnterReload(const char* reason)
+{
+    EngineState rejectedState = EngineState::Uninitialized;
+    bool entered = false;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != EngineState::Ready || !m_engine) {
+            rejectedState = m_state;
+        } else {
+            SetStateLocked(EngineState::Reloading, reason ? reason : "reload_begin");
+            entered = true;
+        }
+    }
+    if (entered) {
+        EmitTelemetry("reload_begin", reason ? reason : "reload_begin");
+        return ReloadGuard(this, reason ? reason : "reload");
+    }
+
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "[RaspAmsi] telemetry event=reload_rejected state=%s detail=%s active=%ld tid=%lu\n",
+             EngineStateName(rejectedState), EngineStateName(rejectedState),
+             ActiveScanCount(), GetCurrentThreadId());
+    OutputDebugStringA(msg);
+    return {};
 }
 
 bool EngineRuntime::BeginShutdown(const char* reason, DWORD drainTimeoutMs)
@@ -141,6 +226,7 @@ bool EngineRuntime::BeginShutdown(const char* reason, DWORD drainTimeoutMs)
         SetStateLocked(EngineState::Stopping, reason ? reason : "shutdown");
         engine = m_engine.get();
     }
+    EmitTelemetry("shutdown_begin", reason ? reason : "shutdown");
 
     bool drained = WaitForActiveScansToDrain(drainTimeoutMs);
     if (!drained) {
@@ -168,15 +254,54 @@ bool EngineRuntime::WaitForActiveScansToDrain(DWORD timeoutMs)
 
 void EngineRuntime::EnterInert(const char* reason)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state != EngineState::Stopped)
-        SetStateLocked(EngineState::Inert, reason ? reason : "enter_inert");
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != EngineState::Stopped) {
+            SetStateLocked(EngineState::Inert, reason ? reason : "enter_inert");
+            changed = true;
+        }
+    }
+    if (changed)
+        EmitTelemetry("enter_inert", reason ? reason : "enter_inert");
+}
+
+void EngineRuntime::EnterFaulted(const char* reason)
+{
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != EngineState::Stopped && m_state != EngineState::Inert) {
+            SetStateLocked(EngineState::Faulted, reason ? reason : "faulted");
+            changed = true;
+        }
+    }
+    if (changed)
+        EmitTelemetry("faulted", reason ? reason : "faulted");
+}
+
+void EngineRuntime::EmitTelemetry(const char* event, const char* detail) const
+{
+    EngineState state;
+    long active;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        state = m_state;
+        active = m_activeScans.load();
+    }
+
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "[RaspAmsi] telemetry event=%s state=%s detail=%s active=%ld tid=%lu\n",
+             event ? event : "", EngineStateName(state), detail ? detail : "",
+             active, GetCurrentThreadId());
+    OutputDebugStringA(msg);
 }
 
 bool EngineRuntime::TryBeginReload()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state != EngineState::Ready)
+    if (m_state != EngineState::Ready || !m_engine)
         return false;
     SetStateLocked(EngineState::Reloading, "reload_begin");
     return true;
@@ -184,10 +309,7 @@ bool EngineRuntime::TryBeginReload()
 
 void EngineRuntime::EndReload(bool success)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state == EngineState::Reloading)
-        SetStateLocked(success ? EngineState::Ready : EngineState::Faulted,
-                       success ? "reload_success" : "reload_failed");
+    CompleteReload(success, "legacy_end_reload", success ? "success" : "failed");
 }
 
 EngineState EngineRuntime::GetState() const
@@ -217,8 +339,32 @@ void EngineRuntime::Log(const char* fmt, ...) const
 void EngineRuntime::ReleaseScan()
 {
     long remaining = --m_activeScans;
+    if (remaining < 0) {
+        m_activeScans.store(0);
+        EnterFaulted("active_scan_count_underflow");
+        remaining = 0;
+    }
     if (remaining <= 0)
         m_scanDrained.notify_all();
+}
+
+void EngineRuntime::CompleteReload(bool success, const char* reason, const char* detail)
+{
+    bool ignored = false;
+    const char* event = success ? "reload_success" : "reload_failed";
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != EngineState::Reloading) {
+            ignored = true;
+        } else {
+            SetStateLocked(EngineState::Ready, success ? "reload_success" : "reload_failed");
+        }
+    }
+
+    if (ignored)
+        EmitTelemetry("reload_complete_ignored", detail ? detail : (reason ? reason : ""));
+    else
+        EmitTelemetry(event, detail ? detail : (reason ? reason : ""));
 }
 
 void EngineRuntime::SetStateLocked(EngineState next, const char* reason)
