@@ -2,27 +2,11 @@
 // amsi_provider.cpp - IAntimalwareProvider implementation
 // =========================================================================
 
-#include <mutex>
 #include <new>
 
 #include "../include/rasp_mod_amsi.h"
 #include "../include/amsi_rule_engine.h"
-
-static std::once_flag g_engineInitOnce;
-
-static void EnsureEngineInitialized() {
-    if (g_unloadInProgress.load())
-        return;
-
-    std::call_once(g_engineInitOnce, []() {
-        AmsiRuleEngine *engine = new(std::nothrow) AmsiRuleEngine();
-        if (!engine)
-            return;
-
-        engine->Initialize();
-        g_engine = engine;
-    });
-}
+#include "../include/engine_runtime.h"
 
 static void LogHostProcess(const char *event) {
     char path[MAX_PATH] = {};
@@ -40,8 +24,7 @@ static void LogHostProcess(const char *event) {
     sprintf_s(msg, "[AMSI] %s - process: %s pid: %s\n", event, name, pid);
     OutputDebugStringA(msg);
 
-    if (g_engine)
-        g_engine->Log("[RaspAmsi] %s - process=%s pid=%s", event, name, pid);
+    GetAmsiEngineRuntime().Log("[RaspAmsi] %s - process=%s pid=%s", event, name, pid);
 }
 
 long g_serverLocks(0);
@@ -83,21 +66,24 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
 
     *result = AMSI_RESULT_NOT_DETECTED;
 
-    if (g_unloadInProgress.load()) {
-        OutputDebugStringA("[AMSI:Scan] inert mode active - pass-through\n");
-        return S_OK;
-    }
-
     if (!stream) {
         OutputDebugStringA("[AMSI:Scan] Stream not ready\n");
         return S_OK;
     }
 
-    EnsureEngineInitialized();
-    if (g_unloadInProgress.load() || !g_engine) {
+    EngineRuntime& runtime = GetAmsiEngineRuntime();
+    if (!runtime.EnsureInitialized()) {
         OutputDebugStringA("[AMSI:Scan] Engine not available\n");
         return S_OK;
     }
+
+    ScanGuard scan = runtime.TryEnterScan();
+    if (!scan.IsActive() || !scan.Engine()) {
+        OutputDebugStringA("[AMSI:Scan] runtime rejected scan - pass-through\n");
+        return S_OK;
+    }
+
+    AmsiRuleEngine* engine = scan.Engine();
 
     wchar_t contentName[512] = {};
     ULONG cbOut = 0;
@@ -180,7 +166,7 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
         OutputDebugStringA(dbgSize);
     }
 
-    AmsiEvalResult eval = g_engine->Evaluate(contentName, appName, evalSample, evalLen);
+    AmsiEvalResult eval = engine->Evaluate(contentName, appName, evalSample, evalLen);
     if (eval.ruleMatched)
         OutputDebugStringA("[AMSI:Scan] rule matched - event already sent by engine\n");
     if (eval.block)
@@ -219,7 +205,7 @@ public:
     STDMETHODIMP_(ULONG) Release() override { return 1; }
 
     STDMETHODIMP CreateInstance(IUnknown *pOuter, REFIID riid, void **ppv) override {
-        EnsureEngineInitialized();
+        GetAmsiEngineRuntime().EnsureInitialized();
         if (pOuter)
             return CLASS_E_NOAGGREGATION;
         CRaspAmsiProvider *p = new(std::nothrow) CRaspAmsiProvider();

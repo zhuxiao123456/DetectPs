@@ -21,6 +21,7 @@
 // =========================================================================
 
 #include "../include/amsi_rule_engine.h"
+#include "../include/engine_runtime.h"
 
 #include <algorithm>
 #include <cstdarg>
@@ -88,8 +89,7 @@ static void RaspLog(const char *fmt, ...) {
     va_start(va, fmt);
     vsnprintf(buf, sizeof(buf), fmt, va);
     va_end(va);
-    if (g_engine)
-        g_engine->Log("%s", buf);
+    GetAmsiEngineRuntime().Log("%s", buf);
 }
 
 // =========================================================================
@@ -128,8 +128,9 @@ bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &li
     SwapRules(std::move(configs));  // 原子指针替换
     m_libSource = effectiveLib;
 
+    auto snap = std::atomic_load(&m_snapshot);
     Log("[RaspAmsi] ParseAndSwap: %zu AmsiProvider rule(s) loaded",
-        m_snapshot.load() ? m_snapshot.load()->rules.size() : 0u);
+        snap ? snap->rules.size() : 0u);
     return true;
 }
 
@@ -178,31 +179,27 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
 
 // 原子交换规则快照
 void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
-    auto *next = new RuleSnapshot{std::move(rules)};
-    auto *old = m_snapshot.exchange(next);
-    delete old;
+    std::shared_ptr<const RuleSnapshot> next =
+            std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(rules)});
+    std::atomic_store(&m_snapshot, next);
 }
 
 // =========================================================================
 // Self-unload support — triggered by IPC signal byte 0x02
 //
-// OnUnloadSignal() is called by ConfigPipeThread.  It sets g_unloadInProgress
-// (so Scan() drains immediately) and spawns UnloadThreadProc, which calls
-// Shutdown() then FreeLibraryAndExitThread so the OS loader refcount drops.
-// If AMSI still holds a COM reference the DLL stays mapped but is inert.
+// OnUnloadSignal() is called by ConfigPipeThread. It enters EngineRuntime's
+// inert/shutdown path so new scans are rejected and in-flight scans drain with
+// a bounded timeout. The DLL deliberately avoids self-unload from this path.
 // =========================================================================
 
 DWORD WINAPI AmsiRuleEngine::UnloadThreadProc(LPVOID)
 {
     Sleep(200);
 
-    AmsiRuleEngine *engine = g_engine;
-    if (engine)
-    {
-        engine->Log("[RaspAmsi] UnloadThreadProc: entering inert mode and stopping background threads");
-        engine->Shutdown();
-        engine->Log("[RaspAmsi] UnloadThreadProc: background threads stopped");
-    }
+    EngineRuntime& runtime = GetAmsiEngineRuntime();
+    runtime.Log("[RaspAmsi] UnloadThreadProc: entering inert mode and stopping background threads");
+    runtime.BeginShutdown("unload_signal", 200);
+    runtime.Log("[RaspAmsi] UnloadThreadProc: background threads stopped");
 
     char pid[12];
     char ackLine[192];
@@ -222,9 +219,6 @@ DWORD WINAPI AmsiRuleEngine::UnloadThreadProc(LPVOID)
 }
 
 void AmsiRuleEngine::OnUnloadSignal() {
-    if (g_unloadInProgress.exchange(true))
-        return;
-
     Log("[RaspAmsi] OnUnloadSignal: unload requested - entering inert mode");
 
     HANDLE hThread = CreateThread(nullptr, 0, UnloadThreadProc, nullptr, 0, nullptr);
@@ -249,7 +243,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
 {
     std::vector <RaspEvalResult> results;
 
-    RuleSnapshot *snap = m_snapshot.load();
+    auto snap = std::atomic_load(&m_snapshot);
     if (!snap)
         return results;
 

@@ -38,6 +38,7 @@ add_library(rasp_mod_amsi SHARED
     src/rasp_mod_amsi.cpp
     src/amsi_provider.cpp
     src/amsi_rule_engine.cpp
+    src/engine_runtime.cpp
     src/rasp_mod_amsi.def
 )
 
@@ -67,3 +68,30 @@ set_target_properties(rasp_mod_amsi PROPERTIES
     PREFIX ""
     OUTPUT_NAME "rasp_mod_amsi"
 )
+
+add_executable(engine_runtime_tests
+    tests/engine_runtime_tests.cpp
+    src/amsi_rule_engine.cpp
+    src/engine_runtime.cpp
+)
+
+target_include_directories(engine_runtime_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(engine_runtime_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+)
+
+target_link_libraries(engine_runtime_tests PRIVATE
+    rasp_rule_engine
+    ole32
+    oleaut32
+)
+
+if(MSVC)
+    target_compile_options(engine_runtime_tests PRIVATE /W3 /WX-)
+endif()
