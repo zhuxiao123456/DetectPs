@@ -19,8 +19,17 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+
+namespace {
+
+constexpr uint32_t kLuaHookInstructionStep = 1000;
+constexpr const char* kLuaBudgetRegistryKey = "rasp_scan_budget";
+
+} // namespace
 
 // ── Destructor ────────────────────────────────────────────────────────────────
 // 释放 PCRE2 预编译的正则表达式对象。使用了 std::lock_guard 保证线程安全释放。
@@ -50,6 +59,46 @@ void RaspLuaEngine::Log(const char *msg) const
 }
 
 #ifdef RASP_PCRE2_AVAILABLE
+
+namespace {
+
+pcre2_match_context* CreateBudgetedMatchContext(const ScanExecutionContext* exec)
+{
+    pcre2_match_context* mctx = pcre2_match_context_create(nullptr);
+    if (!mctx)
+        return nullptr;
+
+    if (exec) {
+        pcre2_set_match_limit(mctx, exec->budget.pcre2MatchLimit);
+        pcre2_set_depth_limit(mctx, exec->budget.pcre2DepthLimit);
+        pcre2_set_heap_limit(mctx, exec->budget.pcre2HeapLimitKiB);
+    } else {
+        pcre2_set_match_limit(mctx, 500000);
+    }
+    return mctx;
+}
+
+void RecordRegexLimit(int rc, ScanExecutionContext* exec)
+{
+    if (!exec)
+        return;
+
+    if (rc == PCRE2_ERROR_MATCHLIMIT) {
+        exec->regexLimitHit = true;
+        exec->regexLimitType = "match_limit";
+        exec->MarkTimeout("regex_limit_hit");
+    } else if (rc == PCRE2_ERROR_DEPTHLIMIT) {
+        exec->regexLimitHit = true;
+        exec->regexLimitType = "depth_limit";
+        exec->MarkTimeout("regex_limit_hit");
+    } else if (rc == PCRE2_ERROR_HEAPLIMIT) {
+        exec->regexLimitHit = true;
+        exec->regexLimitType = "heap_limit";
+        exec->MarkTimeout("regex_limit_hit");
+    }
+}
+
+} // namespace
 
 /*
  * 首次使用时编译模式；后续调用返回缓存的代码对象。
@@ -108,21 +157,24 @@ pcre2_real_code_8 *RaspLuaEngine::GetOrCompilePcre2(const std::string &pattern) 
 // ── MatchesAnyRegex ───────────────────────────────────────────────────────────
 
 bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
-                                    const std::string &text,
-                                    std::string &matchedPatternOut) const
+                                     const std::string &text,
+                                     std::string &matchedPatternOut,
+                                     ScanExecutionContext *exec) const
 {
+    size_t subjectLen = exec ? exec->BoundedRegexSubjectLength(text.size()) : text.size();
     for (const auto &pat : patterns)
     {
         if (pat.empty())
             continue;
 
+        if (exec && !exec->TryEnterRegexCall())
+            return false;
+
         pcre2_code *re = GetOrCompilePcre2(pat);
         if (!re)
             continue;
 
-        pcre2_match_context *mctx = pcre2_match_context_create(nullptr);
-        if (mctx)
-            pcre2_set_match_limit(mctx, 500000);
+        pcre2_match_context *mctx = CreateBudgetedMatchContext(exec);
 
         pcre2_match_data *md = pcre2_match_data_create_from_pattern(re, nullptr);
         if (!md)
@@ -135,7 +187,7 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
         int rc = pcre2_match(
             re,
             reinterpret_cast<PCRE2_SPTR8>(text.c_str()),
-            text.size(),
+            subjectLen,
             0, // start offset
             0, // options
             md,
@@ -150,6 +202,7 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
             matchedPatternOut = pat;
             return true;
         }
+        RecordRegexLimit(rc, exec);
         // PCRE2_ERROR_NOMATCH (-1) is expected; other negative codes are errors.
     }
     return false;
@@ -181,6 +234,18 @@ static int lua_pcre2_match(lua_State *L)
         return 1;
     }
 
+    lua_getfield(L, LUA_REGISTRYINDEX, kLuaBudgetRegistryKey);
+    auto *exec = static_cast<ScanExecutionContext *>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+
+    if (exec && !exec->TryEnterRegexCall())
+    {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    if (exec)
+        textLen = exec->BoundedRegexSubjectLength(textLen);
+
     pcre2_code *re = eng->GetOrCompilePcre2(std::string(pattern));
     if (!re)
     {
@@ -188,9 +253,7 @@ static int lua_pcre2_match(lua_State *L)
         return 1;
     }
 
-    pcre2_match_context *mctx = pcre2_match_context_create(nullptr);
-    if (mctx)
-        pcre2_set_match_limit(mctx, 500000);
+    pcre2_match_context *mctx = CreateBudgetedMatchContext(exec);
 
     pcre2_match_data *md = pcre2_match_data_create_from_pattern(re, nullptr);
     int rc = md ? pcre2_match(re,
@@ -203,6 +266,7 @@ static int lua_pcre2_match(lua_State *L)
     if (mctx)
         pcre2_match_context_free(mctx);
 
+    RecordRegexLimit(rc, exec);
     lua_pushboolean(L, rc >= 0 ? 1 : 0);
     return 1;
 }
@@ -224,6 +288,18 @@ static int lua_pcre2_capture(lua_State *L)
         return 1;
     }
 
+    lua_getfield(L, LUA_REGISTRYINDEX, kLuaBudgetRegistryKey);
+    auto *exec = static_cast<ScanExecutionContext *>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+
+    if (exec && !exec->TryEnterRegexCall())
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+    if (exec)
+        textLen = exec->BoundedRegexSubjectLength(textLen);
+
     pcre2_code *re = eng->GetOrCompilePcre2(std::string(pattern));
     if (!re)
     {
@@ -231,9 +307,7 @@ static int lua_pcre2_capture(lua_State *L)
         return 1;
     }
 
-    pcre2_match_context *mctx = pcre2_match_context_create(nullptr);
-    if (mctx)
-        pcre2_set_match_limit(mctx, 500000);
+    pcre2_match_context *mctx = CreateBudgetedMatchContext(exec);
 
     pcre2_match_data *md = pcre2_match_data_create_from_pattern(re, nullptr);
     if (!md)
@@ -247,6 +321,7 @@ static int lua_pcre2_capture(lua_State *L)
     int rc = pcre2_match(re,
                          reinterpret_cast<PCRE2_SPTR8>(text), textLen,
                          0, 0, md, mctx);
+    RecordRegexLimit(rc, exec);
 
     if (rc >= 2) // rc = number of capture pairs captured; >= 2 means group 1 matched
     {
@@ -277,6 +352,23 @@ static int lua_pcre2_capture(lua_State *L)
 static void LuaTimeoutHook(lua_State *L, lua_Debug *)
 {
     luaL_error(L, "script timeout");
+}
+
+static void LuaBudgetHook(lua_State *L, lua_Debug *)
+{
+    lua_getfield(L, LUA_REGISTRYINDEX, kLuaBudgetRegistryKey);
+    auto *exec = static_cast<ScanExecutionContext *>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+
+    if (exec && !exec->AddLuaInstructions(kLuaHookInstructionStep))
+        luaL_error(L, "lua budget timeout");
+}
+
+static void ClearLuaBudgetHook(lua_State *L)
+{
+    lua_sethook(L, nullptr, 0, 0);
+    lua_pushnil(L);
+    lua_setfield(L, LUA_REGISTRYINDEX, kLuaBudgetRegistryKey);
 }
 
 // ── print() → module log backend ─────────────────────────────────────────────
@@ -388,7 +480,8 @@ RaspLuaResult RaspLuaEngine::Run(
     const std::string &sensorName,
     const RaspLuaContext &ctx,
     int timeoutInstructions,
-    const std::vector<std::string> &matchedCheckIds)
+    const std::vector<std::string> &matchedCheckIds,
+    ScanExecutionContext *exec)
 {
     RaspLuaResult result;
 
@@ -440,9 +533,17 @@ RaspLuaResult RaspLuaEngine::Run(
 #endif
 
     // ── Phase 4: set instruction-count timeout ────────────────────────────────
-    if (timeoutInstructions <= 0)
-        timeoutInstructions = 500000;
-    lua_sethook(L, LuaTimeoutHook, LUA_MASKCOUNT, timeoutInstructions);
+    if (exec) {
+        exec->luaDeadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec->budget.luaBudgetMs));
+        exec->luaDeadlineActive = true;
+        lua_pushlightuserdata(L, exec);
+        lua_setfield(L, LUA_REGISTRYINDEX, kLuaBudgetRegistryKey);
+        lua_sethook(L, LuaBudgetHook, LUA_MASKCOUNT, static_cast<int>(kLuaHookInstructionStep));
+    } else {
+        if (timeoutInstructions <= 0)
+            timeoutInstructions = 500000;
+        lua_sethook(L, LuaTimeoutHook, LUA_MASKCOUNT, timeoutInstructions);
+    }
 
     // ── Phase 5: luaL_loadbuffer + lua_pcall 编译并执行外层包裹，注册 rule 函数 ──────────────
     if (luaL_loadbuffer(L, src.c_str(), src.size(), ruleId.c_str()) != LUA_OK)
@@ -452,6 +553,7 @@ RaspLuaResult RaspLuaEngine::Run(
         snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s loadbuffer: %s\n",
                  ruleId.c_str(), err ? err : "(null)");
         Log(msg);
+        ClearLuaBudgetHook(L);
         lua_close(L);
         return result;
     }
@@ -462,6 +564,11 @@ RaspLuaResult RaspLuaEngine::Run(
         snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s chunk exec: %s\n",
                  ruleId.c_str(), err ? err : "(null)");
         Log(msg);
+        if (exec && exec->timedOut) {
+            result.timedOut = true;
+            result.timeoutReason = exec->timeoutReason;
+        }
+        ClearLuaBudgetHook(L);
         lua_close(L);
         return result;
     }
@@ -474,6 +581,7 @@ RaspLuaResult RaspLuaEngine::Run(
         snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s 'rule' is not a function\n",
                  ruleId.c_str());
         Log(msg);
+        ClearLuaBudgetHook(L);
         lua_close(L);
         return result;
     }
@@ -529,6 +637,11 @@ RaspLuaResult RaspLuaEngine::Run(
         snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s call error: %s\n",
                  ruleId.c_str(), err ? err : "(null)");
         Log(msg);
+        if (exec && exec->timedOut) {
+            result.timedOut = true;
+            result.timeoutReason = exec->timeoutReason;
+        }
+        ClearLuaBudgetHook(L);
         lua_close(L);
         return result;
     }
@@ -559,6 +672,7 @@ RaspLuaResult RaspLuaEngine::Run(
         Log(msg);
     }
 
+    ClearLuaBudgetHook(L);
     lua_close(L);
     return result;
 }

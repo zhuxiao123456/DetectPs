@@ -95,3 +95,26 @@ target_link_libraries(engine_runtime_tests PRIVATE
 if(MSVC)
     target_compile_options(engine_runtime_tests PRIVATE /W3 /WX-)
 endif()
+
+add_executable(scan_budget_tests
+    tests/scan_budget_tests.cpp
+)
+
+target_include_directories(scan_budget_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(scan_budget_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+)
+
+target_link_libraries(scan_budget_tests PRIVATE
+    rasp_rule_engine
+)
+
+if(MSVC)
+    target_compile_options(scan_budget_tests PRIVATE /W3 /WX-)
+endif()

@@ -22,6 +22,7 @@
 
 #include "../include/amsi_rule_engine.h"
 #include "../include/engine_runtime.h"
+#include "rasp_scan_budget.h"
 
 #include <algorithm>
 #include <cstdarg>
@@ -125,6 +126,42 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
 
     PrecompileAll(configs, effectiveLib);
     return std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(configs)});
+}
+
+static const char* ResolveTimeoutDecision(const std::vector<RaspEvalResult>& results,
+                                          ScanExecutionContext& exec)
+{
+    for (const auto& r : results) {
+        if (r.block) {
+            exec.decisionAfterTimeout = "block";
+            return "block";
+        }
+    }
+    if (!results.empty()) {
+        exec.decisionAfterTimeout = "audit";
+        return "audit";
+    }
+    exec.decisionAfterTimeout = "allow";
+    return "allow";
+}
+
+static void EmitScanBudgetTelemetry(const ScanExecutionContext& exec)
+{
+    if (!exec.timedOut && !exec.regexLimitHit && !exec.regexSubjectTruncated)
+        return;
+
+    char msg[512];
+    snprintf(msg, sizeof(msg),
+             "[RaspAmsi][telemetry] scan_budget reason=%s decision=%s rules=%u regex_calls=%u lua_instr=%u regex_limit=%s subject_truncated=%d matched_before_timeout=%d\n",
+             exec.timeoutReason.empty() ? "none" : exec.timeoutReason.c_str(),
+             exec.decisionAfterTimeout.empty() ? "none" : exec.decisionAfterTimeout.c_str(),
+             exec.rulesEvaluated,
+             exec.regexCalls,
+             exec.luaInstructions,
+             exec.regexLimitType.empty() ? "none" : exec.regexLimitType.c_str(),
+             exec.regexSubjectTruncated ? 1 : 0,
+             exec.matchedBeforeTimeout ? 1 : 0);
+    OutputDebugStringA(msg);
 }
 
 void AmsiRuleEngine::PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
@@ -326,6 +363,7 @@ void AmsiRuleEngine::OnUnloadSignal() {
 std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor, const RaspLuaContext &ctx)
 {
     std::vector <RaspEvalResult> results;
+    ScanExecutionContext exec;
 
     auto snap = std::atomic_load(&m_snapshot);
     if (!snap)
@@ -342,6 +380,9 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
     }
     // 遍历每个规则
     for (const auto &rule: snap->rules) {
+        if (!exec.TryEnterRule())
+            break;
+
         if (!rule.enabled || rule.IsOff())
             continue;
 
@@ -365,9 +406,13 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
                     }
                 std::string mp;
                 if (fp && !fp->empty() &&
-                    m_luaEngine.MatchesAnyRegex(chk.patterns, *fp, mp))
+                    m_luaEngine.MatchesAnyRegex(chk.patterns, *fp, mp, &exec))
                     matchedIds.push_back(chk.id);
+                if (exec.timedOut)
+                    break;
             }
+            if (exec.timedOut)
+                break;
             bool gatePassed = (rule.regexCondition == RegexCondition::All)
                 ? matchedIds.size() == rule.regexChecks.size()
                 : !matchedIds.empty();
@@ -377,7 +422,9 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
             if (m_luaEngine.IsLoaded(rule.id))
             {
                 // Gate passed → run Lua with matched IDs injected into context
-                RaspLuaResult lr = m_luaEngine.Run(rule.id, sensor, ctx, rule.scriptTimeoutInstructions, matchedIds);
+                RaspLuaResult lr = m_luaEngine.Run(rule.id, sensor, ctx, rule.scriptTimeoutInstructions, matchedIds, &exec);
+                if (lr.timedOut)
+                    break;
                 if (lr.matched) {
                     matched = true;
                     desc    = lr.desc.empty() ? rule.description : lr.desc;
@@ -408,12 +455,14 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
             if (fieldPtr && !fieldPtr->empty())
             {
                 std::string matchedPat;
-                if (m_luaEngine.MatchesAnyRegex(rule.regexPatterns, *fieldPtr, matchedPat))
+                if (m_luaEngine.MatchesAnyRegex(rule.regexPatterns, *fieldPtr, matchedPat, &exec))
                 {
                     matched = true;
                     desc    = rule.description;
                     payload = matchedPat;
                 }
+                if (exec.timedOut)
+                    break;
             }
         }
 #endif // RASP_PCRE2_AVAILABLE
@@ -421,7 +470,11 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         // ── lua脚本check, PrecompileAll在这里预编译, 可以不走此部分 ─
         if (!matched && rule.regexChecks.empty() && m_luaEngine.IsLoaded(rule.id)) {
             RaspLuaResult lr = m_luaEngine.Run(rule.id, sensor, ctx,
-                                               rule.scriptTimeoutInstructions);
+                                               rule.scriptTimeoutInstructions,
+                                               {},
+                                               &exec);
+            if (lr.timedOut)
+                break;
             if (lr.matched) {
                 matched = true;
                 desc = lr.desc.empty() ? rule.description : lr.desc;
@@ -454,12 +507,16 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
             r.confidence = DEFAULT_CONFIDENCE;
         }
         SendDetectionEvent(r);
+        exec.matchedBeforeTimeout = true;
         results.push_back(std::move(r));
         if (r.block) {
             break;  // 匹配到第一个阻断的才行
         }
     }
 
+    if (exec.timedOut)
+        ResolveTimeoutDecision(results, exec);
+    EmitScanBudgetTelemetry(exec);
     return results;
 }
 

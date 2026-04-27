@@ -27,6 +27,8 @@
 #include <unordered_map>
 #include <mutex>
 
+#include "rasp_scan_budget.h"
+
 extern "C" {
 #include "lua.h"
 #include "lauxlib.h"
@@ -69,8 +71,10 @@ using RaspLuaLogFn = void(*)(const char* msg);
 struct RaspLuaResult
 {
     bool        matched = false;
+    bool        timedOut = false;
     std::string desc;
     std::string payload;
+    std::string timeoutReason;
 };
 
 // ── Engine ───────────────────────────────────────────────────────────────────
@@ -103,7 +107,8 @@ public:
                       const std::string&              sensorName,
                       const RaspLuaContext&           ctx,
                       int                             timeoutInstructions = 500000,
-                      const std::vector<std::string>& matchedCheckIds     = {});
+                      const std::vector<std::string>& matchedCheckIds     = {},
+                      ScanExecutionContext*           exec                = nullptr);
 
 #ifdef RASP_PCRE2_AVAILABLE
     // Tests text against each PCRE2 pattern in sequence.
@@ -112,7 +117,8 @@ public:
     // Thread-safe. Invalid patterns are skipped with a diagnostic log.
     bool MatchesAnyRegex(const std::vector<std::string>& patterns,
                          const std::string&               text,
-                         std::string&                     matchedPatternOut) const;
+                         std::string&                     matchedPatternOut,
+                         ScanExecutionContext*            exec = nullptr) const;
 
     // Compile-or-fetch a PCRE2 pattern from the regex cache.
     // Public only so the static Lua C functions lua_pcre2_match / lua_pcre2_capture
