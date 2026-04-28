@@ -507,6 +507,67 @@ static std::string SentryJsonEscape(const std::string& s)
     return out;
 }
 
+static size_t Utf8SafePrefixLength(const std::string& s, size_t limit)
+{
+    size_t i = 0;
+    size_t last = 0;
+    while (i < s.size() && i < limit) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        size_t width = 1;
+        if (c < 0x80) {
+            width = 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            width = 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            width = 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            width = 4;
+        } else {
+            ++i;
+            last = i;
+            continue;
+        }
+
+        if (i + width > s.size() || i + width > limit)
+            break;
+
+        bool valid = true;
+        for (size_t j = 1; j < width; ++j) {
+            unsigned char cc = static_cast<unsigned char>(s[i + j]);
+            if ((cc & 0xC0) != 0x80) {
+                valid = false;
+                break;
+            }
+        }
+
+        if (!valid) {
+            ++i;
+            last = i;
+            continue;
+        }
+
+        i += width;
+        last = i;
+    }
+    return last;
+}
+
+static std::string TruncateUtf8Field(const std::string& value, size_t maxBytes)
+{
+    static const char kSuffix[] = "...[Truncated]";
+    const size_t suffixLen = sizeof(kSuffix) - 1;
+    if (value.size() <= maxBytes)
+        return value;
+    if (maxBytes <= suffixLen)
+        return std::string(kSuffix, maxBytes);
+
+    size_t prefixLimit = maxBytes - suffixLen;
+    size_t prefixLen = Utf8SafePrefixLength(value, prefixLimit);
+    std::string out = value.substr(0, prefixLen);
+    out.append(kSuffix);
+    return out;
+}
+
 } // anonymous namespace
 /*
  * 隐患：发送告警时，使用了 CreateFileW 打开命名管道且 WaitNamedPipe 都没有用。
@@ -520,11 +581,13 @@ void RaspSentryBase::SendDetectionEvent(const RaspEvalResult& result) const
 
 EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& result) const
 {
+    static constexpr size_t kMaxEventPayloadFieldBytes = 8 * 1024;
     std::string id  = SentryGenerateEventId();
     std::string ts  = SentryUtcTimestamp();
     std::string sev = result.severity.empty() ? "High" : result.severity;
     std::string act = result.block ? "block" : "audit";
     std::string  confidence = result.confidence ? std::to_string(result.confidence): "70";
+    std::string payload = TruncateUtf8Field(result.payload, kMaxEventPayloadFieldBytes);
 
     std::ostringstream json;
     json << "{"
@@ -542,7 +605,7 @@ EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& resu
          << "\"confidence\":\""  << SentryJsonEscape(confidence)      << "\","
          << "\"ip\":\""      << SentryJsonEscape(result.ip)       << "\","
          << "\"ua\":\""      << SentryJsonEscape(result.ua)       << "\","
-         << "\"pattern\":\""  << SentryJsonEscape(result.payload) << "\""
+         << "\"pattern\":\""  << SentryJsonEscape(payload) << "\""
          << "}";
 
     AsyncEvent event;
@@ -556,6 +619,7 @@ EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& resu
     event.appName = result.appName;
     event.sampleLen = result.payload.size();
     event.reason = result.desc;
+    event.eventTruncated = payload.size() != result.payload.size();
     event.compactJson = json.str();
     return m_eventSink.TrySubmit(event);
 }

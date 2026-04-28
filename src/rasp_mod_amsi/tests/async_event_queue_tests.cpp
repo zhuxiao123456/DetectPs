@@ -29,6 +29,12 @@ AsyncEvent MakeEvent(EventPriority priority, const char* id)
     return event;
 }
 
+bool HasBalancedJsonObjectShape(const std::string& json)
+{
+    return json.size() >= 2 && json.front() == '{' && json.back() == '}' &&
+           json.find("\"rule\"") != std::string::npos;
+}
+
 } // namespace
 
 int main()
@@ -77,13 +83,11 @@ int main()
     {
         AsyncEventQueue queue({4, 256});
         AsyncEvent event = MakeEvent(EventPriority::Detection, "huge");
-        event.compactJson.assign(1024, 'A');
+        event.compactJson = "{\"rule\":\"huge\",\"pattern\":\"" + std::string(1024, 'A') + "\"}";
         EnqueueResult r = queue.TryEnqueue(event);
-        if (!Expect(r == EnqueueResult::Enqueued, "oversized compactJson is truncated into budget"))
+        if (!Expect(r == EnqueueResult::DroppedTooLarge, "oversized compactJson is dropped instead of truncated"))
             return 1;
-        AsyncEvent out;
-        queue.TryDequeue(out);
-        if (!Expect(out.eventTruncated, "oversized event records truncation"))
+        if (!Expect(queue.Size() == 0, "oversized compactJson is not enqueued as broken JSON"))
             return 1;
 
         AsyncEvent impossible = MakeEvent(EventPriority::Detection, "too-large");
@@ -91,6 +95,20 @@ int main()
         impossible.compactJson.assign(512, 'J');
         r = queue.TryEnqueue(impossible);
         if (!Expect(r == EnqueueResult::DroppedTooLarge, "event too large after truncation is dropped"))
+            return 1;
+    }
+
+    {
+        AsyncEventQueue queue({4, 512});
+        AsyncEvent event = MakeEvent(EventPriority::Detection, "valid");
+        event.compactJson = "{\"rule\":\"valid\",\"pattern\":\"short\"}";
+        EnqueueResult r = queue.TryEnqueue(event);
+        if (!Expect(r == EnqueueResult::Enqueued, "valid compactJson within budget is enqueued"))
+            return 1;
+        AsyncEvent out;
+        if (!Expect(queue.TryDequeue(out), "valid compactJson dequeues"))
+            return 1;
+        if (!Expect(HasBalancedJsonObjectShape(out.compactJson), "queued compactJson remains a complete JSON object"))
             return 1;
     }
 

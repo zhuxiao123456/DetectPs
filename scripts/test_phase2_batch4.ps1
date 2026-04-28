@@ -45,7 +45,8 @@ $required = @(
     "TrySubmitDetectionEvent",
     "maxEventBytes",
     "workerBackoffCount",
-    "shutdownFlushTimeoutCount"
+    "shutdownFlushTimeoutCount",
+    "TruncateUtf8Field"
 )
 
 foreach ($pattern in $required) {
@@ -73,6 +74,7 @@ foreach ($path in $hotPathFiles) {
 $forbidden = @(
     "TerminateThread",
     "std::async",
+    "compactJson.resize",
     "session_cache",
     "window_scan"
 )

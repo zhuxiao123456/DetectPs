@@ -152,4 +152,6 @@ private:
     std::thread worker_;
     std::atomic<bool> running_{false};
     uint32_t consecutiveFailures_ = 0;
+    std::mutex stopMutex_;
+    std::condition_variable stopCv_;
 };

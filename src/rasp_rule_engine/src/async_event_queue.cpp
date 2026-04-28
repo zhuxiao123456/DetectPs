@@ -64,6 +64,8 @@ EnqueueResult AsyncEventQueue::TryEnqueue(const AsyncEvent& event)
     }
 
     eventsEnqueuedTotal_.fetch_add(1);
+    if (event.eventTruncated)
+        eventsTruncatedTotal_.fetch_add(1);
     UpdateSizeMetricsLocked();
     lock.unlock();
     cv_.notify_one();
@@ -197,15 +199,7 @@ bool AsyncEventQueue::PrepareEvent(AsyncEvent& event)
     if (size <= options_.maxEventBytes)
         return true;
 
-    event.eventTruncated = true;
-    size_t fixed = EstimateEventBytes(event) - event.compactJson.size();
-    if (fixed >= options_.maxEventBytes)
-        return false;
-
-    size_t remaining = options_.maxEventBytes - fixed;
-    event.compactJson.resize(remaining);
-    eventsTruncatedTotal_.fetch_add(1);
-    return EstimateEventBytes(event) <= options_.maxEventBytes;
+    return false;
 }
 
 size_t AsyncEventQueue::EstimateEventBytes(const AsyncEvent& event) const
@@ -340,13 +334,19 @@ void AsyncEventSink::Stop(std::chrono::milliseconds flushTimeout)
         return;
 
     queue_.Stop();
+    stopCv_.notify_all();
     auto deadline = std::chrono::steady_clock::now() + flushTimeout;
-    while (queue_.Size() > 0 && std::chrono::steady_clock::now() < deadline)
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    {
+        std::unique_lock<std::mutex> lock(stopMutex_);
+        while (queue_.Size() > 0 && std::chrono::steady_clock::now() < deadline) {
+            stopCv_.wait_until(lock, deadline);
+        }
+    }
 
     if (queue_.Size() > 0) {
         queue_.RecordShutdownFlushTimeout();
         queue_.DropRemaining();
+        stopCv_.notify_all();
     }
 
     if (worker_.joinable())
@@ -369,13 +369,16 @@ void AsyncEventSink::WorkerLoop()
         if (ok) {
             queue_.RecordSendSuccess();
             ResetBackoff();
+            stopCv_.notify_all();
         } else {
             queue_.RecordSendFailure();
             queue_.RecordBackoff();
+            stopCv_.notify_all();
             auto backoff = NextBackoff();
-            auto deadline = std::chrono::steady_clock::now() + backoff;
-            while (running_.load() && std::chrono::steady_clock::now() < deadline)
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::unique_lock<std::mutex> lock(stopMutex_);
+            stopCv_.wait_for(lock, backoff, [&]() {
+                return !running_.load();
+            });
         }
     }
 }
