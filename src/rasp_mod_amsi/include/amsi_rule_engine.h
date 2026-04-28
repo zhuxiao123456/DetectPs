@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "rasp_sentry_base.h"
+#include "script_input_normalizer.h"
 
 struct AmsiRaspRuleConfig : public RaspRuleBase {};
 
@@ -57,6 +58,7 @@ protected:
 
 private:
     struct RuleSnapshot { std::vector<AmsiRaspRuleConfig> rules; };
+    ScriptInputNormalizer m_inputNormalizer;
     std::shared_ptr<const RuleSnapshot> m_snapshot;
     std::string m_libSource;
 

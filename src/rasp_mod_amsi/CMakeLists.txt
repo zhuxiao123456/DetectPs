@@ -39,6 +39,7 @@ add_library(rasp_mod_amsi SHARED
     src/amsi_provider.cpp
     src/amsi_rule_engine.cpp
     src/engine_runtime.cpp
+    src/script_input_normalizer.cpp
     src/rasp_mod_amsi.def
 )
 
@@ -56,6 +57,7 @@ target_compile_definitions(rasp_mod_amsi PRIVATE
 
 target_link_libraries(rasp_mod_amsi PRIVATE
     rasp_rule_engine
+    bcrypt
     ole32
     oleaut32
 )
@@ -73,6 +75,7 @@ add_executable(engine_runtime_tests
     tests/engine_runtime_tests.cpp
     src/amsi_rule_engine.cpp
     src/engine_runtime.cpp
+    src/script_input_normalizer.cpp
 )
 
 target_include_directories(engine_runtime_tests PRIVATE
@@ -88,6 +91,7 @@ target_compile_definitions(engine_runtime_tests PRIVATE
 
 target_link_libraries(engine_runtime_tests PRIVATE
     rasp_rule_engine
+    bcrypt
     ole32
     oleaut32
 )
@@ -140,4 +144,28 @@ target_link_libraries(async_event_queue_tests PRIVATE
 
 if(MSVC)
     target_compile_options(async_event_queue_tests PRIVATE /W3 /WX-)
+endif()
+
+add_executable(script_input_normalizer_tests
+    tests/script_input_normalizer_tests.cpp
+    src/script_input_normalizer.cpp
+)
+
+target_include_directories(script_input_normalizer_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(script_input_normalizer_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+)
+
+target_link_libraries(script_input_normalizer_tests PRIVATE
+    bcrypt
+)
+
+if(MSVC)
+    target_compile_options(script_input_normalizer_tests PRIVATE /W3 /WX-)
 endif()

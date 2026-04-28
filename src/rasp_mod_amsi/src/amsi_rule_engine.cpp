@@ -543,8 +543,20 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
             {"appName",     appNameUtf8},
     };
     // true代表 isBinary
-    if (sample && sampleLen > 0)
-        ctx.fields.push_back({"body", std::string(sample, sampleLen), true});
+    NormalizedScriptInput normalized = m_inputNormalizer.Normalize(sample, sampleLen);
+    if (!normalized.normalized.empty()) {
+        ctx.fields.push_back({"body", normalized.normalized, true});
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "[RaspAmsi][normalizer] rawLen=%zu normalizedLen=%zu truncated=%d utf16=%d b64=%d nulls=%d\n",
+                 normalized.rawLen,
+                 normalized.normalizedLen,
+                 normalized.truncated ? 1 : 0,
+                 normalized.decodedUtf16Le ? 1 : 0,
+                 normalized.decodedBase64 ? 1 : 0,
+                 normalized.hadNullBytes ? 1 : 0);
+        OutputDebugStringA(msg);
+    }
 
     auto results = Evaluate("AmsiProvider", ctx);  // 调用真正的 Evaluate 函数
     if (!results.empty() && results[0].matched) {
