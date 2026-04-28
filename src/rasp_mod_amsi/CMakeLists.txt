@@ -118,3 +118,26 @@ target_link_libraries(scan_budget_tests PRIVATE
 if(MSVC)
     target_compile_options(scan_budget_tests PRIVATE /W3 /WX-)
 endif()
+
+add_executable(async_event_queue_tests
+    tests/async_event_queue_tests.cpp
+)
+
+target_include_directories(async_event_queue_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(async_event_queue_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+)
+
+target_link_libraries(async_event_queue_tests PRIVATE
+    rasp_rule_engine
+)
+
+if(MSVC)
+    target_compile_options(async_event_queue_tests PRIVATE /W3 /WX-)
+endif()

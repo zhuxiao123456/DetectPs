@@ -506,7 +506,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         } else {
             r.confidence = DEFAULT_CONFIDENCE;
         }
-        SendDetectionEvent(r);
+        TrySubmitDetectionEvent(r);
         exec.matchedBeforeTimeout = true;
         results.push_back(std::move(r));
         if (r.block) {

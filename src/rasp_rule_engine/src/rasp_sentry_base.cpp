@@ -515,6 +515,11 @@ static std::string SentryJsonEscape(const std::string& s)
  * */
 void RaspSentryBase::SendDetectionEvent(const RaspEvalResult& result) const
 {
+    TrySubmitDetectionEvent(result);
+}
+
+EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& result) const
+{
     std::string id  = SentryGenerateEventId();
     std::string ts  = SentryUtcTimestamp();
     std::string sev = result.severity.empty() ? "High" : result.severity;
@@ -540,16 +545,37 @@ void RaspSentryBase::SendDetectionEvent(const RaspEvalResult& result) const
          << "\"pattern\":\""  << SentryJsonEscape(result.payload) << "\""
          << "}";
 
-    std::string line = json.str();
+    AsyncEvent event;
+    event.priority = EventPriority::Detection;
+    event.type = EventType::Detection;
+    event.pid = GetCurrentProcessId();
+    event.tid = GetCurrentThreadId();
+    event.ruleId = result.ruleId;
+    event.decision = act;
+    event.contentName = result.contentName;
+    event.appName = result.appName;
+    event.sampleLen = result.payload.size();
+    event.reason = result.desc;
+    event.compactJson = json.str();
+    return m_eventSink.TrySubmit(event);
+}
 
+bool RaspSentryBase::SendDetectionEventSyncWorkerOnly(const AsyncEvent& event) const
+{
+    // Worker-only. Must never be called from Scan hot path.
     HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_events",
                                GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (hPipe == INVALID_HANDLE_VALUE)
-        return; // sentry not running — silently drop
+        return false;
 
     DWORD written = 0;
-    WriteFile(hPipe, line.c_str(), (DWORD)line.size(), &written, nullptr);
+    BOOL ok = WriteFile(hPipe,
+                        event.compactJson.c_str(),
+                        static_cast<DWORD>(event.compactJson.size()),
+                        &written,
+                        nullptr);
     CloseHandle(hPipe);
+    return ok && written == event.compactJson.size();
 }
 
 // =========================================================================
@@ -775,6 +801,9 @@ void RaspSentryBase::Initialize()
 {
     m_running.store(true);
     EnsureLogCsInit();
+    m_eventSink.Start([this](const AsyncEvent& event) {
+        return SendDetectionEventSyncWorkerOnly(event);
+    });
 
     // Wire Lua print() to this engine's Log so dbg() in rule scripts routes
     // through the ring buffer and appears in DebugView + rasp_sentry_events.
@@ -813,6 +842,7 @@ void RaspSentryBase::Initialize()
 void RaspSentryBase::Shutdown()
 {
     m_running.store(false);
+    m_eventSink.Stop(std::chrono::milliseconds(1000));
 
     // 1. Drain log thread first (final flush before other threads close)
     m_logThreadAlive = false;

@@ -35,6 +35,7 @@
 
 #include "rasp_lua_engine.h"
 #include "rasp_rule_base.h"
+#include "async_event_queue.h"
 
 // ── RaspEvalResult ────────────────────────────────────────────────────────
 // Returned by Evaluate() per matched rule. url/method/ip/ua are populated by
@@ -157,6 +158,10 @@ protected:
     // Non-blocking: returns immediately if pipe unavailable (event silently dropped).
     // Replaces amsi_event_sender::SendAmsiEvent() — used by all modules.
     void SendDetectionEvent(const RaspEvalResult& result) const;
+    EnqueueResult TrySubmitDetectionEvent(const RaspEvalResult& result) const;
+
+    // Worker-only. Must never be called from Scan hot path.
+    bool SendDetectionEventSyncWorkerOnly(const AsyncEvent& event) const;
 
     // Called after ConnectSentry() succeeds — module parses JSON into its typed
     // snapshot, precompiles Lua scripts, and swaps atomically.
@@ -198,6 +203,7 @@ private:
     // Unconditional for all modules — active polling handles AMSI processes
     // that start before rasp_sentry (passive reload signal would never reach them).
     HANDLE m_retryThread  = INVALID_HANDLE_VALUE;
+    mutable AsyncEventSink m_eventSink;
 
     static DWORD WINAPI LogForwardThreadProc(LPVOID param);
     static DWORD WINAPI ConfigPipeThreadProc(LPVOID param);
