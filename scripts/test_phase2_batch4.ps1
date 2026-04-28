@@ -46,7 +46,8 @@ $required = @(
     "maxEventBytes",
     "workerBackoffCount",
     "shutdownFlushTimeoutCount",
-    "TruncateUtf8Field"
+    "TruncateUtf8Field",
+    "std::shared_ptr<RaspLuaEngine> luaEngine"
 )
 
 foreach ($pattern in $required) {
@@ -75,6 +76,7 @@ $forbidden = @(
     "TerminateThread",
     "std::async",
     "compactJson.resize",
+    "move_assignment",
     "session_cache",
     "window_scan"
 )

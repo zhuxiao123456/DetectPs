@@ -46,20 +46,6 @@ ReloadGuard::ReloadGuard(ReloadGuard&& other) noexcept
     other.m_completed = true;
 }
 
-ReloadGuard& ReloadGuard::operator=(ReloadGuard&& other) noexcept
-{
-    if (this != &other) {
-        Reset(false, "move_assignment");
-        m_runtime = other.m_runtime;
-        m_reason = other.m_reason;
-        m_completed = other.m_completed;
-        other.m_runtime = nullptr;
-        other.m_reason = nullptr;
-        other.m_completed = true;
-    }
-    return *this;
-}
-
 ReloadGuard::~ReloadGuard()
 {
     Reset(false, "guard_destructor");
@@ -171,12 +157,20 @@ ScanGuard EngineRuntime::TryEnterScan()
     }
 
     if (rejected) {
-        char msg[256];
-        snprintf(msg, sizeof(msg),
-                 "[RaspAmsi] telemetry event=scan_enter_rejected state=%s detail=%s active=%ld tid=%lu\n",
-                 EngineStateName(rejectedState), EngineStateName(rejectedState),
-                 active, GetCurrentThreadId());
-        OutputDebugStringA(msg);
+        DWORD now = GetTickCount();
+        DWORD last = m_lastScanRejectTelemetryTick.load();
+        bool emit = last == 0 || (now - last) >= 1000;
+        if (emit && m_lastScanRejectTelemetryTick.compare_exchange_strong(last, now)) {
+            uint64_t suppressed = m_suppressedScanRejectTelemetry.exchange(0);
+            char msg[320];
+            snprintf(msg, sizeof(msg),
+                     "[RaspAmsi] telemetry event=scan_enter_rejected state=%s detail=%s active=%ld suppressed=%llu tid=%lu\n",
+                     EngineStateName(rejectedState), EngineStateName(rejectedState),
+                     active, static_cast<unsigned long long>(suppressed), GetCurrentThreadId());
+            OutputDebugStringA(msg);
+        } else {
+            m_suppressedScanRejectTelemetry.fetch_add(1);
+        }
         return {};
     }
     ++m_activeScans;

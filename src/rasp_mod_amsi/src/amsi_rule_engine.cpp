@@ -124,8 +124,9 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
         configs.push_back(std::move(*derived));
     }
 
-    PrecompileAll(configs, effectiveLib);
-    return std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(configs)});
+    auto luaEngine = std::make_shared<RaspLuaEngine>();
+    PrecompileAll(configs, effectiveLib, *luaEngine);
+    return std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(configs), std::move(luaEngine)});
 }
 
 static const char* ResolveTimeoutDecision(const std::vector<RaspEvalResult>& results,
@@ -279,9 +280,8 @@ PrecompileAll / SwapRules
 将 Base64 编码的 Lua 脚本源码与公共库 (libSource) 拼接后，交给 MoonSharp / Lua 虚拟机进行 JIT 或字节码编译
 */
 void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules,
-                                   const std::string &libSource) {
-    m_luaEngine.Reset();
-
+                                   const std::string &libSource,
+                                   RaspLuaEngine& luaEngine) {
     for (const auto &rule: rules) {
         if (rule.scriptBodyBase64.empty())
             continue;
@@ -291,7 +291,7 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
             std::string combined = libSource.empty()
                                    ? decoded
                                    : libSource + "\n" + decoded;
-            m_luaEngine.Precompile(rule.id, combined);
+            luaEngine.Precompile(rule.id, combined);
         } else {
             Log("[RaspAmsi] PrecompileAll: base64 decode failed rule=%s", rule.id.c_str());
         }
@@ -301,7 +301,7 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
 // 原子交换规则快照
 void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
     std::shared_ptr<const RuleSnapshot> next =
-            std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(rules)});
+            std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(rules), std::make_shared<RaspLuaEngine>()});
     std::atomic_store(&m_snapshot, next);
 }
 
@@ -366,8 +366,9 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
     ScanExecutionContext exec;
 
     auto snap = std::atomic_load(&m_snapshot);
-    if (!snap)
+    if (!snap || !snap->luaEngine)
         return results;
+    RaspLuaEngine& luaEngine = *snap->luaEngine;
 
     // Extract context fields for result population
     std::string contentName;
@@ -406,7 +407,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
                     }
                 std::string mp;
                 if (fp && !fp->empty() &&
-                    m_luaEngine.MatchesAnyRegex(chk.patterns, *fp, mp, &exec))
+                    luaEngine.MatchesAnyRegex(chk.patterns, *fp, mp, &exec))
                     matchedIds.push_back(chk.id);
                 if (exec.timedOut)
                     break;
@@ -419,10 +420,10 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
             if (!gatePassed)
                 continue; // gate not satisfied — skip rule
 
-            if (m_luaEngine.IsLoaded(rule.id))
+            if (luaEngine.IsLoaded(rule.id))
             {
                 // Gate passed → run Lua with matched IDs injected into context
-                RaspLuaResult lr = m_luaEngine.Run(rule.id, sensor, ctx, rule.scriptTimeoutInstructions, matchedIds, &exec);
+                RaspLuaResult lr = luaEngine.Run(rule.id, sensor, ctx, rule.scriptTimeoutInstructions, matchedIds, &exec);
                 if (lr.timedOut)
                     break;
                 if (lr.matched) {
@@ -455,7 +456,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
             if (fieldPtr && !fieldPtr->empty())
             {
                 std::string matchedPat;
-                if (m_luaEngine.MatchesAnyRegex(rule.regexPatterns, *fieldPtr, matchedPat, &exec))
+                if (luaEngine.MatchesAnyRegex(rule.regexPatterns, *fieldPtr, matchedPat, &exec))
                 {
                     matched = true;
                     desc    = rule.description;
@@ -468,8 +469,8 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
 #endif // RASP_PCRE2_AVAILABLE
 
         // ── lua脚本check, PrecompileAll在这里预编译, 可以不走此部分 ─
-        if (!matched && rule.regexChecks.empty() && m_luaEngine.IsLoaded(rule.id)) {
-            RaspLuaResult lr = m_luaEngine.Run(rule.id, sensor, ctx,
+        if (!matched && rule.regexChecks.empty() && luaEngine.IsLoaded(rule.id)) {
+            RaspLuaResult lr = luaEngine.Run(rule.id, sensor, ctx,
                                                rule.scriptTimeoutInstructions,
                                                {},
                                                &exec);
@@ -481,7 +482,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
                 payload = lr.payload;
             }
         } else if (!matched && rule.regexChecks.empty() &&
-                   !m_luaEngine.IsLoaded(rule.id) && rule.regexPatterns.empty()) {
+                   !luaEngine.IsLoaded(rule.id) && rule.regexPatterns.empty()) {
             Log("[RaspAmsi] Evaluate: rule=%s has no regexChecks, no Lua, and no regexPatterns — skipping",
                 rule.id.c_str());
             continue;

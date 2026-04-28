@@ -5,6 +5,7 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <thread>
 
 namespace {
@@ -27,6 +28,31 @@ std::unique_ptr<EngineRuntime> MakeRuntime()
     return std::make_unique<EngineRuntime>(
         []() { return std::make_unique<AmsiRuleEngine>(); },
         [](AmsiRuleEngine&) { return true; });
+}
+
+class TestAmsiRuleEngine : public AmsiRuleEngine
+{
+public:
+    using AmsiRuleEngine::BuildNextSnapshot;
+    using AmsiRuleEngine::ParseAndSwap;
+};
+
+std::string LuaBase64(const char* script)
+{
+    // Minimal fixtures needed by this regression. Avoid adding another encoder
+    // dependency to the test binary.
+    if (std::string(script) == "function rule(sensor, context) return { match = true, desc = 'old' } end")
+        return "ZnVuY3Rpb24gcnVsZShzZW5zb3IsIGNvbnRleHQpIHJldHVybiB7IG1hdGNoID0gdHJ1ZSwgZGVzYyA9ICdvbGQnIH0gZW5k";
+    if (std::string(script) == "function rule(sensor, context) return { match = true, desc = 'new' } end")
+        return "ZnVuY3Rpb24gcnVsZShzZW5zb3IsIGNvbnRleHQpIHJldHVybiB7IG1hdGNoID0gdHJ1ZSwgZGVzYyA9ICduZXcnIH0gZW5k";
+    return {};
+}
+
+std::string OneLuaRuleJson(const char* id, const char* desc, const char* script)
+{
+    return std::string("{\"rules\":[{\"id\":\"") + id +
+           "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"" +
+           desc + "\",\"scriptBodyBase64\":\"" + LuaBase64(script) + "\"}]}";
 }
 
 } // namespace
@@ -182,6 +208,33 @@ int main()
             return 1;
         if (!Expect(runtime->GetState() == EngineState::Inert,
                     "publish after shutdown rejection does not restore ready"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const char* oldScript = "function rule(sensor, context) return { match = true, desc = 'old' } end";
+        const char* newScript = "function rule(sensor, context) return { match = true, desc = 'new' } end";
+        if (!Expect(engine.ParseAndSwap(OneLuaRuleJson("old_rule", "old_desc", oldScript), ""),
+                    "old snapshot publishes"))
+            return 1;
+
+        RaspLuaContext ctx;
+        auto before = engine.Evaluate("AmsiProvider", ctx);
+        if (!Expect(!before.empty() && before[0].ruleId == "old_rule",
+                    "old Lua rule matches before reload build"))
+            return 1;
+
+        std::string effectiveLib;
+        auto next = engine.BuildNextSnapshot(OneLuaRuleJson("new_rule", "new_desc", newScript),
+                                             "",
+                                             effectiveLib);
+        if (!Expect(next != nullptr, "next snapshot builds without publishing"))
+            return 1;
+
+        auto duringBuild = engine.Evaluate("AmsiProvider", ctx);
+        if (!Expect(!duringBuild.empty() && duringBuild[0].ruleId == "old_rule",
+                    "building next snapshot does not clear old snapshot Lua engine"))
             return 1;
     }
 

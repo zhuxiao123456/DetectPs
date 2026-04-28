@@ -33,7 +33,7 @@ public:
     ReloadGuard& operator=(const ReloadGuard&) = delete;
 
     ReloadGuard(ReloadGuard&& other) noexcept;
-    ReloadGuard& operator=(ReloadGuard&& other) noexcept;
+    ReloadGuard& operator=(ReloadGuard&& other) noexcept = delete;
     ~ReloadGuard();
 
     bool IsActive() const { return m_runtime != nullptr; }
@@ -124,6 +124,8 @@ private:
     std::unique_ptr<AmsiRuleEngine> m_engine;
     EngineFactory m_factory;
     EngineInitializer m_initializer;
+    std::atomic<DWORD> m_lastScanRejectTelemetryTick{0};
+    std::atomic<uint64_t> m_suppressedScanRejectTelemetry{0};
 };
 
 EngineRuntime& GetAmsiEngineRuntime();

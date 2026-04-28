@@ -56,20 +56,27 @@ protected:
     const char* ModuleName()      const override { return "rasp_mod_amsi"; }
     const char* LogEventPattern() const override { return "amsi-log"; }
 
-private:
-    struct RuleSnapshot { std::vector<AmsiRaspRuleConfig> rules; };
-    ScriptInputNormalizer m_inputNormalizer;
-    std::shared_ptr<const RuleSnapshot> m_snapshot;
-    std::string m_libSource;
+protected:
+    struct RuleSnapshot {
+        std::vector<AmsiRaspRuleConfig> rules;
+        std::shared_ptr<RaspLuaEngine> luaEngine;
+    };
 
     std::shared_ptr<const RuleSnapshot> BuildNextSnapshot(
         const std::string& json,
         const std::string& libSource,
         std::string& effectiveLib);
+
+private:
+    ScriptInputNormalizer m_inputNormalizer;
+    std::shared_ptr<const RuleSnapshot> m_snapshot;
+    std::string m_libSource;
+
     void PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
                          const std::string& effectiveLib);
     void PrecompileAll(const std::vector<AmsiRaspRuleConfig>& rules,
-                       const std::string& libSource);
+                       const std::string& libSource,
+                       RaspLuaEngine& luaEngine);
     void SwapRules(std::vector<AmsiRaspRuleConfig>&& rules);
 
     static DWORD WINAPI UnloadThreadProc(LPVOID);
