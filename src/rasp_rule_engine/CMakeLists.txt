@@ -96,6 +96,7 @@ set(RASP_PCRE2_AVAILABLE TRUE)
 # ── rasp_rule_engine static library ──────────────────────────────────────────
 add_library(rasp_rule_engine STATIC
     src/async_event_queue.cpp
+    src/rule_json_parser.cpp
     src/rasp_lua_engine.cpp
     src/rasp_sentry_base.cpp
 )

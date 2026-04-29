@@ -89,7 +89,7 @@ void RaspSentryBase::Log(const char* fmt, ...) const
  * 流程：Log 写入环形数组（如果满了就覆盖最老的）-> 触发 m_logEvent -> 后台线程 LogForwardThreadProc 醒来 ->
  * 拼装为 JSON -> 通过命名管道 \\.\pipe\rasp_sentry_events 发出
  * Mark: 日志限制长度(防止恶意日志填满缓冲区)
- * */
+*/
 void RaspSentryBase::EnqueueLog(const char* text)
 {
     EnsureLogCsInit();
@@ -217,115 +217,9 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut, std::string& libSourceO
     return true;
 }
 
-// =========================================================================
-// Parser method implementations
-// =========================================================================
-
-bool RaspSentryBase::Parser::read_string(std::string& out)
-{
-    if (!consume('"')) return false;
-    out.clear();
-    while (p < end && *p != '"')
-    {
-        if (*p == '\\') { ++p; if (p < end) { out += *p; ++p; } }
-        else            { out += *p++; }
-    }
-    return consume('"');
-}
-
-bool RaspSentryBase::Parser::read_bool(bool& out)
-{
-    skip_ws();
-    if (p + 4 <= end && strncmp(p, "true",  4) == 0) { out = true;  p += 4; return true; }
-    if (p + 5 <= end && strncmp(p, "false", 5) == 0) { out = false; p += 5; return true; }
-    return false;
-}
-
-bool RaspSentryBase::Parser::read_int(int& out)
-{
-    skip_ws();
-    if (!ok()) return false;
-    bool neg = false;
-    if (*p == '-') { neg = true; ++p; }
-    if (!ok() || !isdigit((unsigned char)*p)) return false;
-    out = 0;
-    while (ok() && isdigit((unsigned char)*p))
-        out = out * 10 + (*p++ - '0');
-    if (neg) out = -out;
-    return true;
-}
-
-bool RaspSentryBase::Parser::read_string_array(std::vector<std::string>& out)
-{
-    if (!consume('[')) return false;
-    out.clear();
-    while (!peek(']'))
-    {
-        std::string s;
-        if (!read_string(s)) { skip_value(); break; }
-        out.push_back(s);
-        consume(',');
-    }
-    return consume(']');
-}
 /*
  * 递归解析检查项数组
  * */
-bool RaspSentryBase::Parser::read_regex_check_array(std::vector<RegexCheck>& out)
-{
-    if (!consume('[')) return false;
-    out.clear();
-    while (!peek(']') && ok())
-    {
-        if (!consume('{')) { skip_value(); consume(','); continue; }
-        RegexCheck chk;
-        while (!peek('}') && ok())
-        {
-            std::string key;
-            if (!read_string(key) || !consume(':')) break;
-            if      (key == "id")       read_string(chk.id);
-            else if (key == "field")    read_string(chk.field);
-            else if (key == "patterns") read_string_array(chk.patterns);
-            else                        skip_value();
-            consume(',');
-        }
-        consume('}');
-        if (!chk.id.empty() && !chk.patterns.empty())
-            out.push_back(std::move(chk));
-        consume(',');
-    }
-    return consume(']');
-}
-
-void RaspSentryBase::Parser::skip_value()
-{
-    skip_ws();
-    if (!ok()) return;
-    if (*p == '"') { std::string d; read_string(d); return; }
-    if (*p == '{') { skip_object(); return; }
-    if (*p == '[') { skip_array();  return; }
-    while (ok() && *p != ',' && *p != '}' && *p != ']' &&
-           *p != ' '  && *p != '\t' && *p != '\r' && *p != '\n')
-        ++p;
-}
-
-void RaspSentryBase::Parser::skip_array()
-{
-    consume('[');
-    while (!peek(']') && ok()) { skip_value(); consume(','); }
-    consume(']');
-}
-
-void RaspSentryBase::Parser::skip_object()
-{
-    consume('{');
-    while (!peek('}') && ok())
-    {
-        std::string key; read_string(key); consume(':'); skip_value(); consume(',');
-    }
-    consume('}');
-}
-
 // =========================================================================
 // ParseRulesJson — base-field parser
 // =========================================================================
@@ -346,116 +240,38 @@ bool RaspSentryBase::ParseRulesJson(
     std::string&                                libSourceOut,
     std::vector<std::unique_ptr<RaspRuleBase>>& rulesOut)
 {
-    if (json.empty()) return false;
+    class FactoryAdapter final : public IRuleObjectFactory {
+    public:
+        explicit FactoryAdapter(const RaspSentryBase& owner) : owner_(owner) {}
+        RaspRuleBase* CreateRule() const override { return owner_.AllocRule(); }
+    private:
+        const RaspSentryBase& owner_;
+    };
 
-    libSourceOut.clear();
-    rulesOut.clear();
-
-    Parser p(json.c_str(), json.size());
-    if (!p.consume('{')) return false;
-
-    while (!p.peek('}') && p.ok())
-    {
-        std::string key;
-        if (!p.read_string(key) || !p.consume(':')) break;
-
-        if (key == "globalLibrariesBase64" || key == "globalLibraries")
+    class ExtensionAdapter final : public IRuleExtensionParser {
+    public:
+        explicit ExtensionAdapter(RaspSentryBase& owner) : owner_(owner) {}
+        void ParseRuleExtension(const std::string& key,
+                                void* parserContext,
+                                RaspRuleBase& rule) override
         {
-            // Array of base64 strings: ["<b64>", "<b64>", ...]
-            // Also accept bare single string for backward compat.
-            p.skip_ws();
-            if (p.peek('['))
-            {
-                std::vector<std::string> items;
-                p.read_string_array(items);
-                for (const auto& b64 : items)
-                {
-                    std::string decoded;
-                    if (Base64Decode(b64, decoded))
-                        libSourceOut += decoded + "\n";
-                }
-            }
-            else
-            {
-                // Bare string (legacy / AMSI single-library format)
-                std::string b64;
-                p.read_string(b64);
-                std::string decoded;
-                if (!b64.empty() && Base64Decode(b64, decoded))
-                    libSourceOut = decoded;
-            }
+            owner_.ParseRuleExtension(key, parserContext, rule);
         }
-        else if (key == "rules")
-        {
-            if (!p.consume('[')) { p.skip_value(); p.consume(','); continue; }
+    private:
+        RaspSentryBase& owner_;
+    };
 
-            while (!p.peek(']') && p.ok())
-            {
-                if (!p.peek('{')) { p.skip_value(); p.consume(','); continue; }
+    FactoryAdapter factory(*this);
+    ExtensionAdapter extensionParser(*this);
+    RuleJsonParser parser;
+    RuleParseResult result = parser.Parse(json, factory, extensionParser);
 
-                // Allocate the concrete rule type via the virtual factory.
-                auto rulePtr = std::unique_ptr<RaspRuleBase>(AllocRule());
-                RaspRuleBase& rule = *rulePtr;
-
-                if (!p.consume('{')) { p.consume(','); continue; }
-
-                while (!p.peek('}') && p.ok())
-                {
-                    std::string rkey;
-                    if (!p.read_string(rkey) || !p.consume(':')) break;
+    libSourceOut = std::move(result.libSource);
+    rulesOut = std::move(result.rules);
+    return result.ok;
 
                     // ── Base fields ──────────────────────────────────────
-                    if      (rkey == "id")               p.read_string(rule.id);
-                    else if (rkey == "sensor")            p.read_string(rule.sensor);
-                    else if (rkey == "enabled")           p.read_bool(rule.enabled);
-                    else if (rkey == "description")       p.read_string(rule.description);
-                    else if (rkey == "severity")          p.read_string(rule.severity);
-                    else if (rkey == "scriptBodyBase64")  p.read_string(rule.scriptBodyBase64);
-                    else if (rkey == "scriptEval")        p.read_string(rule.scriptEval);
-                    else if (rkey == "confidence")        p.read_int(rule.confidence);
-                    else if (rkey == "mode")
-                    {
-                        std::string m;
-                        p.read_string(m);
-                        if      (m == "block") rule.mode = RaspRuleMode::Block;
-                        else if (m == "off")   rule.mode = RaspRuleMode::Off;
-                        else                   rule.mode = RaspRuleMode::Audit;
-                    }
-                    else if (rkey == "scriptTimeoutMs")
-                    {
-                        int ms = 0; p.read_int(ms);
-                        rule.scriptTimeoutInstructions = ms * 50000;
-                        if (rule.scriptTimeoutInstructions <= 0)
-                            rule.scriptTimeoutInstructions = 500000;
-                    }
                     // ── Module-specific fields ────────────────────────────
-                    else
-                    {
-                        // Derived classes override ParseRuleExtension to handle
-                        // their sensor-specific keys. Default: skip the value.
-                        ParseRuleExtension(rkey, &p, rule);
-                    }
-
-                    p.consume(',');
-                }
-                p.consume('}'); // close rule object
-
-                if (!rule.id.empty())
-                    rulesOut.push_back(std::move(rulePtr));
-
-                p.consume(',');
-            }
-            p.consume(']');
-        }
-        else
-        {
-            p.skip_value();
-        }
-
-        p.consume(',');
-    }
-
-    return !rulesOut.empty();
 }
 
 // =========================================================================

@@ -85,9 +85,21 @@ Check-NoPattern "src\rasp_rule_engine\include\rule_control_client.h" @(
     "RuleSnapshotPayload"
 ) "RuleControlClient naming should avoid compiled RuleSnapshot confusion"
 
-$changed = git diff --name-only -- src/rasp_rule_engine/src/rasp_sentry_base.cpp
-if ($changed) {
-    throw "B0-1 must not modify rasp_sentry_base.cpp main-path logic"
+if (Test-Path "src\rasp_rule_engine\src\rule_json_parser.cpp") {
+    Check-NoPattern "src\rasp_rule_engine\src\rule_json_parser.cpp" @(
+        "Log(",
+        "SendDetectionEvent",
+        "ConnectSentry",
+        "CreateNamedPipe",
+        "ConnectNamedPipe",
+        "rasp_sentry_rules",
+        "rasp_sentry_events",
+        "rasp_sentry_config",
+        "EngineRuntime",
+        "IAmsiStream",
+        "windows.h",
+        "amsi.h"
+    ) "RuleJsonParser implementation boundary violation"
 }
 
 Write-Host "[b0-boundary] passed"

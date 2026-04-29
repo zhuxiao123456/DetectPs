@@ -36,6 +36,7 @@
 #include "rasp_lua_engine.h"
 #include "rasp_rule_base.h"
 #include "async_event_queue.h"
+#include "rule_json_parser.h"
 
 // ── RaspEvalResult ────────────────────────────────────────────────────────
 // Returned by Evaluate() per matched rule. url/method/ip/ua are populated by
@@ -90,43 +91,8 @@ protected:
     static bool Base64Decode(const std::string& b64, std::string& out);
 
     // ── Shared JSON parser ────────────────────────────────────────────────
-    // Parser is exposed as a protected nested struct so derived classes can
-    // implement ParseRuleExtension() by casting void* to Parser* and calling
-    // methods (read_string_array, parse_config, etc.) to consume values.
-    struct Parser
-    {
-        const char* p;
-        const char* end;
-
-        Parser(const char* data, size_t len) : p(data), end(data + len) {}
-
-        bool ok() const { return p < end; }
-
-        void skip_ws()
-        {
-            while (p < end && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n'))
-                ++p;
-        }
-
-        bool peek(char c) { skip_ws(); return ok() && *p == c; }
-
-        bool consume(char c)
-        {
-            skip_ws();
-            if (ok() && *p == c) { ++p; return true; }
-            return false;
-        }
-
-        bool read_string(std::string& out);
-        bool read_bool(bool& out);
-        bool read_int(int& out);
-        bool read_string_array(std::vector<std::string>& out);
-        // Reads [{id, field, patterns}, ...] into out.
-        bool read_regex_check_array(std::vector<RegexCheck>& out);
-        void skip_value();
-        void skip_array();
-        void skip_object();
-    };
+    // Parser context remains available to derived ParseRuleExtension() handlers.
+    using Parser = RuleJsonParser::Parser;
 
     // Parse GET_ALL_RULES response JSON.
     // Accumulates globalLibrariesBase64 into libSourceOut.
