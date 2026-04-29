@@ -55,6 +55,13 @@ std::string OneLuaRuleJson(const char* id, const char* desc, const char* script)
            desc + "\",\"scriptBodyBase64\":\"" + LuaBase64(script) + "\"}]}";
 }
 
+std::string OneRegexRuleJson(const char* id, const char* pattern)
+{
+    return std::string("{\"rules\":[{\"id\":\"") + id +
+           "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"split_regex\",\"config\":{\"regexPatterns\":[\"" +
+           pattern + "\"]}}]}";
+}
+
 } // namespace
 
 int main()
@@ -235,6 +242,22 @@ int main()
         auto duringBuild = engine.Evaluate("AmsiProvider", ctx);
         if (!Expect(!duringBuild.empty() && duringBuild[0].ruleId == "old_rule",
                     "building next snapshot does not clear old snapshot Lua engine"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("split_iex", "IEX"), ""),
+                    "split regex snapshot publishes"))
+            return 1;
+
+        AmsiEvalResult first = engine.Evaluate(L"same-content", L"powershell.exe", "I", 1);
+        if (!Expect(!first.ruleMatched, "first split chunk alone does not match"))
+            return 1;
+
+        AmsiEvalResult second = engine.Evaluate(L"same-content", L"powershell.exe", "EX", 2);
+        if (!Expect(second.ruleMatched && second.ruleId == "split_iex",
+                    "session context exposes split token across chunks"))
             return 1;
     }
 
