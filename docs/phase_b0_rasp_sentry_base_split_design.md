@@ -90,6 +90,11 @@ B0 拆成两个子阶段：
 - `DiagLogger` 不参与检测决策。
 - 新接口头文件不 include AMSI / COM / EDR SDK / DB。
 
+接口语义补充：
+
+- `RawRuleBundle` 是 control-plane 边界上的原始规则包，不是已经编译好的 `RuleSnapshot`。后续 EDR 迁移时可映射到 `RuleBundlePayload`，避免和 scanner-core 的 compiled snapshot 混淆。
+- `DetectionEventLite::payload` 只能承载轻量、长度有界的证据摘要。它不应是完整样本，不应承载 DB schema，不应直接等于旧 JSONL wire format。EDR adapter 负责把该 DTO 映射到目标事件结构。
+
 ## 5. B0-1 运行行为约束
 
 B0-1 只新增文档、接口草案和静态检查脚本。除必要 build 引用外，不修改 `RaspSentryBase` 主路径逻辑。
@@ -122,6 +127,41 @@ B0-2 抽 parser 时必须遵守：
 - 不改事件 schema。
 - 不改 pipe 协议。
 - `RuleJsonParser` 内部不调用 `Log` / pipe / event。
+
+### 6.1 RuleJsonParser 抽离设计草案
+
+B0-2 的最小代码动作：
+
+1. 新增 `src/rasp_rule_engine/src/rule_json_parser.cpp`。
+2. 将 `Parser` nested struct 和 `ParseRulesJson()` 的纯解析逻辑迁出。
+3. `RaspSentryBase` 仅保留调用方职责，并作为 rule factory / extension parser provider。
+4. 旧 `RaspSentryBase::ParseRulesJson()` 对外签名和行为保持一致。
+5. 新增 parser 单测，证明解析结果与旧实现一致。
+
+建议结果结构：
+
+```cpp
+struct RuleParseResult {
+    bool ok = false;
+    std::vector<std::unique_ptr<RaspRuleBase>> rules;
+    std::string libSource;
+    std::string error;
+};
+```
+
+错误语义：
+
+- JSON 解析失败时，通过 `RuleParseResult.error` 返回原因。
+- `RuleJsonParser` 不记录日志，不调用 pipe，不发送事件。
+- 是否记录日志、是否保留旧 snapshot、是否进入 reload failure，由调用方决定。
+
+必须不变：
+
+- JSON 字段语义不变。
+- reload 行为不变。
+- snapshot publish 行为不变。
+- event/log/pipe 行为不变。
+- sentry pipe 协议不变。
 
 ## 7. 静态边界检查
 

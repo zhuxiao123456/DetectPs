@@ -81,6 +81,10 @@ Check-NoPattern "src\rasp_rule_engine\include\legacy_pipe_transport.h" @(
     "ScanStatus"
 ) "LegacyPipeTransport boundary violation"
 
+Check-NoPattern "src\rasp_rule_engine\include\rule_control_client.h" @(
+    "RuleSnapshotPayload"
+) "RuleControlClient naming should avoid compiled RuleSnapshot confusion"
+
 $changed = git diff --name-only -- src/rasp_rule_engine/src/rasp_sentry_base.cpp
 if ($changed) {
     throw "B0-1 must not modify rasp_sentry_base.cpp main-path logic"

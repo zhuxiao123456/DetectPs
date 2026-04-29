@@ -16,6 +16,8 @@ struct DetectionEventLite {
     std::string decision;
     std::string severity;
     std::string description;
+    // Lightweight bounded evidence only. This must not carry a full sample,
+    // persisted schema, or the legacy JSONL wire format.
     std::string payload;
 };
 

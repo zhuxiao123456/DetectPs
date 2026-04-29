@@ -11,7 +11,9 @@ enum class RuleControlStatus {
     Faulted
 };
 
-struct RuleSnapshotPayload {
+// Raw rule bundle used at the control-plane boundary. This is not a compiled
+// RuleSnapshot; rule-runtime/scanner-core owns parsing and compilation.
+struct RawRuleBundle {
     std::string json;
     std::string libSource;
     uint64_t version = 0;
@@ -20,5 +22,5 @@ struct RuleSnapshotPayload {
 class IRuleControlClient {
 public:
     virtual ~IRuleControlClient() = default;
-    virtual RuleControlStatus FetchRules(RuleSnapshotPayload& out) = 0;
+    virtual RuleControlStatus FetchRules(RawRuleBundle& out) = 0;
 };
