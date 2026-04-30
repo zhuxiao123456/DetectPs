@@ -148,6 +148,29 @@ if(MSVC)
     target_compile_options(rule_json_parser_tests PRIVATE /W3 /WX-)
 endif()
 
+add_executable(event_json_builder_tests
+    tests/event_json_builder_tests.cpp
+)
+
+target_include_directories(event_json_builder_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(event_json_builder_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+)
+
+target_link_libraries(event_json_builder_tests PRIVATE
+    rasp_rule_engine
+)
+
+if(MSVC)
+    target_compile_options(event_json_builder_tests PRIVATE /W3 /WX-)
+endif()
+
 add_executable(async_event_queue_tests
     tests/async_event_queue_tests.cpp
 )

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <cstddef>
 
 enum class EventSubmitStatus {
     Submitted,
@@ -19,6 +20,35 @@ struct DetectionEventLite {
     // Lightweight bounded evidence only. This must not carry a full sample,
     // persisted schema, or the legacy JSONL wire format.
     std::string payload;
+};
+
+struct EventJsonBuildInput {
+    std::string eventId;
+    std::string timestamp;
+    std::string moduleName;
+    std::string ruleId;
+    std::string sensor;
+    bool block = false;
+    std::string severity;
+    std::string description;
+    std::string appName;
+    std::string contentName;
+    int confidence = 0;
+    std::string ip;
+    std::string ua;
+    std::string payload;
+};
+
+struct EventJsonBuildResult {
+    std::string compactJson;
+    std::string decision;
+    std::string payload;
+    bool eventTruncated = false;
+};
+
+class EventJsonBuilder {
+public:
+    EventJsonBuildResult BuildDetection(const EventJsonBuildInput& input) const;
 };
 
 class IEventSubmitClient {
