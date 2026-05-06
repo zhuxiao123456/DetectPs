@@ -194,6 +194,29 @@ if(MSVC)
     target_compile_options(event_transport_tests PRIVATE /W3 /WX-)
 endif()
 
+add_executable(legacy_pipe_event_transport_tests
+    tests/legacy_pipe_event_transport_tests.cpp
+)
+
+target_include_directories(legacy_pipe_event_transport_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(legacy_pipe_event_transport_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+)
+
+target_link_libraries(legacy_pipe_event_transport_tests PRIVATE
+    rasp_rule_engine
+)
+
+if(MSVC)
+    target_compile_options(legacy_pipe_event_transport_tests PRIVATE /W3 /WX-)
+endif()
+
 add_executable(async_event_queue_tests
     tests/async_event_queue_tests.cpp
 )

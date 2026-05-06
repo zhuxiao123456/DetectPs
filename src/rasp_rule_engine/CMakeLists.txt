@@ -98,6 +98,7 @@ add_library(rasp_rule_engine STATIC
     src/async_event_queue.cpp
     src/event_submit_client.cpp
     src/event_worker_sender.cpp
+    src/legacy_pipe_event_transport.cpp
     src/rule_json_parser.cpp
     src/rasp_lua_engine.cpp
     src/rasp_sentry_base.cpp
