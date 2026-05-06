@@ -495,6 +495,32 @@ if (Test-Path "src\rasp_rule_engine\src\legacy_pipe_event_transport.cpp") {
     ) "LegacyPipeEventTransport implementation must not expose business semantics"
 }
 
+$legacyDiagJsonBuilderFiles = @(
+    "src\rasp_rule_engine\include\legacy_diag_json_builder.h",
+    "src\rasp_rule_engine\src\legacy_diag_json_builder.cpp"
+)
+
+foreach ($file in $legacyDiagJsonBuilderFiles) {
+    if (Test-Path $file) {
+        Check-NoPattern $file @(
+            "CreateFileW",
+            "WriteFile",
+            "WaitNamedPipe",
+            "EventSubmitClient",
+            "AsyncEventQueue",
+            "LegacyPipeEventTransport",
+            "IEventTransport",
+            "RuleSnapshot",
+            "lua_State",
+            "pcre2",
+            "AMSI_RESULT",
+            "EDR",
+            "SQL",
+            "database"
+        ) "LegacyDiagJsonBuilder boundary violation"
+    }
+}
+
 Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
     "bool RaspSentryBase::SendDetectionEventSyncWorkerOnly" @(
         "CreateFileW",
@@ -544,5 +570,24 @@ Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
         "SQL",
         "database"
     ) "EnqueueLog must not grow transport or product-log dependencies"
+
+Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
+    "bool RaspSentryBase::PopLogEntryLocked" @(
+        "SetEvent",
+        "OutputDebugStringA",
+        "CreateFileW",
+        "WriteFile",
+        "WaitNamedPipe",
+        "snprintf",
+        "SentryGenerateEventId",
+        "SentryUtcTimestamp",
+        "EventSubmitClient",
+        "AsyncEventQueue",
+        "LegacyPipeEventTransport",
+        "IEventTransport",
+        "EDR",
+        "SQL",
+        "database"
+    ) "PopLogEntryLocked must remain a locked ring-buffer drain helper"
 
 Write-Host "[b0-boundary] passed"

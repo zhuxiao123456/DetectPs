@@ -164,6 +164,9 @@ private:
     void EnqueueLog(const char* text);
     // Requires m_logCs to be held by caller.
     void PushLogEntryLocked(const char* text);
+    // Requires m_logCs to be held by caller.
+    // out must point to a writable buffer with outSize > 0.
+    bool PopLogEntryLocked(char* out, size_t outSize);
 
     // ── Background threads ────────────────────────────────────────────────
     HANDLE m_logThread    = INVALID_HANDLE_VALUE;

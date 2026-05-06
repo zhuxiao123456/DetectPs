@@ -114,6 +114,20 @@ void RaspSentryBase::PushLogEntryLocked(const char* text)
     m_logHead = (m_logHead + 1) % kLogQueueCap;
 }
 
+// 调用方必须已经持有 m_logCs。
+bool RaspSentryBase::PopLogEntryLocked(char* out, size_t outSize)
+{
+    bool hasItem = (m_logCount > 0);
+    if (hasItem)
+    {
+        int slot = (int)(m_logTail % kLogQueueCap);
+        strncpy_s(out, outSize, m_logQueue[slot].text, _TRUNCATE);
+        m_logTail = (m_logTail + 1) % kLogQueueCap;
+        InterlockedDecrement(&m_logCount);
+    }
+    return hasItem;
+}
+
 // =========================================================================
 // Base64 decoder — 可以添加一个输入、输出长度限制（防止dos攻击）
 // =========================================================================
@@ -380,15 +394,7 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
             char entryText[1024] = {};
 
             EnterCriticalSection(&self->m_logCs);
-            bool hasItem = (self->m_logCount > 0);
-            if (hasItem)
-            {
-                int slot = (int)(self->m_logTail % kLogQueueCap);
-                strncpy_s(entryText, sizeof(entryText),
-                          self->m_logQueue[slot].text, _TRUNCATE);
-                self->m_logTail = (self->m_logTail + 1) % kLogQueueCap;
-                InterlockedDecrement(&self->m_logCount);
-            }
+            bool hasItem = self->PopLogEntryLocked(entryText, sizeof(entryText));
             LeaveCriticalSection(&self->m_logCs);
 
             if (!hasItem) break;
