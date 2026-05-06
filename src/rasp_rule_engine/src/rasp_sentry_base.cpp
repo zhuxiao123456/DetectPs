@@ -96,19 +96,22 @@ void RaspSentryBase::EnqueueLog(const char* text)
 {
     EnsureLogCsInit();
     EnterCriticalSection(&m_logCs);
-    {
-        if (m_logCount >= kLogQueueCap)
-            m_logTail = (m_logTail + 1) % kLogQueueCap;   // evict oldest
-        else
-            InterlockedIncrement(&m_logCount);
-
-        int slot = (int)(m_logHead % kLogQueueCap);
-        strncpy_s(m_logQueue[slot].text, sizeof(m_logQueue[slot].text), text, _TRUNCATE);
-        m_logHead = (m_logHead + 1) % kLogQueueCap;
-    }
+    PushLogEntryLocked(text);
     LeaveCriticalSection(&m_logCs);
 
     if (m_logEvent) SetEvent(m_logEvent);
+}
+
+void RaspSentryBase::PushLogEntryLocked(const char* text)
+{
+    if (m_logCount >= kLogQueueCap)
+        m_logTail = (m_logTail + 1) % kLogQueueCap;   // evict oldest
+    else
+        InterlockedIncrement(&m_logCount);
+
+    int slot = (int)(m_logHead % kLogQueueCap);
+    strncpy_s(m_logQueue[slot].text, sizeof(m_logQueue[slot].text), text, _TRUNCATE);
+    m_logHead = (m_logHead + 1) % kLogQueueCap;
 }
 
 // =========================================================================

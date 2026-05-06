@@ -162,6 +162,8 @@ private:
 
     void EnsureLogCsInit();
     void EnqueueLog(const char* text);
+    // Requires m_logCs to be held by caller.
+    void PushLogEntryLocked(const char* text);
 
     // ── Background threads ────────────────────────────────────────────────
     HANDLE m_logThread    = INVALID_HANDLE_VALUE;

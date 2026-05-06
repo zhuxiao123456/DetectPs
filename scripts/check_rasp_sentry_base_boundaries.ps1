@@ -519,4 +519,30 @@ Check-NoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" @(
     "static std::string TruncateUtf8Field"
 ) "Legacy detection JSON helpers must stay in EventJsonBuilder"
 
+Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
+    "void RaspSentryBase::PushLogEntryLocked" @(
+        "SetEvent",
+        "OutputDebugStringA",
+        "CreateFileW",
+        "WriteFile",
+        "WaitNamedPipe",
+        "EventSubmitClient",
+        "AsyncEventQueue",
+        "EDR",
+        "SQL",
+        "database"
+    ) "PushLogEntryLocked must remain a locked ring-buffer helper"
+
+Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
+    "void RaspSentryBase::EnqueueLog" @(
+        "CreateFileW",
+        "WriteFile",
+        "WaitNamedPipe",
+        "EventSubmitClient",
+        "AsyncEventQueue",
+        "EDR",
+        "SQL",
+        "database"
+    ) "EnqueueLog must not grow transport or product-log dependencies"
+
 Write-Host "[b0-boundary] passed"
