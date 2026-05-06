@@ -31,6 +31,8 @@
 #include <sstream>
 
 #include "../include/rasp_sentry_base.h"
+#include "../include/event_worker_sender.h"
+#include "../include/legacy_pipe_event_transport.h"
 
 // =========================================================================
 // 处理所有与 rasp_sentry（外部守护进程）的 IPC 通信、无锁环形日志队列、以及极轻量级的 JSON 解析
@@ -386,10 +388,10 @@ static std::string TruncateUtf8Field(const std::string& value, size_t maxBytes)
 
 } // anonymous namespace
 /*
- * 隐患：发送告警时，使用了 CreateFileW 打开命名管道且 WaitNamedPipe 都没有用。
- * 如果后端 rasp_sentry 正在处理高并发，或者管道缓冲区满了，CreateFileW 或 WriteFile 会立刻失败，在产品中无法接受
- * 修复建议：应当为告警事件引入一个类似 EnqueueLog 的内存环形缓冲队列 (Event Queue)，由专门的后台线程负责保证投递的可靠性（重试机制）
- * */
+ * Detection events are converted to AsyncEvent and queued for the async worker.
+ * Worker-only pipe writes are handled by LegacyPipeEventTransport.
+ * Diag log forwarding remains on the legacy path until B0-3-3.
+ */
 void RaspSentryBase::SendDetectionEvent(const RaspEvalResult& result) const
 {
     TrySubmitDetectionEvent(result);
@@ -443,19 +445,8 @@ EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& resu
 bool RaspSentryBase::SendDetectionEventSyncWorkerOnly(const AsyncEvent& event) const
 {
     // Worker-only. Must never be called from Scan hot path.
-    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_events",
-                               GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (hPipe == INVALID_HANDLE_VALUE)
-        return false;
-
-    DWORD written = 0;
-    BOOL ok = WriteFile(hPipe,
-                        event.compactJson.c_str(),
-                        static_cast<DWORD>(event.compactJson.size()),
-                        &written,
-                        nullptr);
-    CloseHandle(hPipe);
-    return ok && written == event.compactJson.size();
+    LegacyPipeEventTransport transport;
+    return SendAsyncEventWorkerOnly(event, transport, 0);
 }
 
 // =========================================================================

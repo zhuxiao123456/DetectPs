@@ -78,6 +78,58 @@ function Write-WeakPatternWarnings($Path, [string[]]$Patterns, $Message) {
     }
 }
 
+function Get-CppFunctionBlock($Path, [string]$Signature) {
+    if (-not (Test-Path $Path)) {
+        throw "File not found: $Path"
+    }
+
+    $lines = Get-Content $Path
+    $start = -1
+    for ($i = 0; $i -lt $lines.Length; $i++) {
+        if ($lines[$i].Contains($Signature)) {
+            $start = $i
+            break
+        }
+    }
+    if ($start -lt 0) {
+        throw "Function signature not found: $Signature"
+    }
+
+    $block = New-Object System.Collections.Generic.List[string]
+    $braceDepth = 0
+    $seenOpen = $false
+    for ($i = $start; $i -lt $lines.Length; $i++) {
+        $line = $lines[$i]
+        $block.Add($line)
+        foreach ($ch in $line.ToCharArray()) {
+            if ($ch -eq '{') {
+                $braceDepth++
+                $seenOpen = $true
+            } elseif ($ch -eq '}') {
+                $braceDepth--
+            }
+        }
+        if ($seenOpen -and $braceDepth -eq 0) {
+            return $block.ToArray()
+        }
+    }
+
+    throw "Function block not closed: $Signature"
+}
+
+function Check-FunctionBlockNoPattern($Path, [string]$Signature, [string[]]$Patterns, $Message) {
+    $block = Get-CppFunctionBlock $Path $Signature
+    for ($i = 0; $i -lt $block.Length; $i++) {
+        $line = $block[$i]
+        foreach ($pattern in $Patterns) {
+            if ($line.Contains($pattern)) {
+                Write-Host ("{0}:{1} {2}" -f $Path, ($i + 1), $line)
+                throw "$Message : $pattern"
+            }
+        }
+    }
+}
+
 $interfaceFiles = @(
     "src\rasp_rule_engine\include\rule_json_parser.h",
     "src\rasp_rule_engine\include\rule_control_client.h",
@@ -331,5 +383,13 @@ if (Test-Path "src\rasp_rule_engine\src\legacy_pipe_event_transport.cpp") {
         "ConfigUpdate"
     ) "LegacyPipeEventTransport implementation must not expose business semantics"
 }
+
+Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
+    "bool RaspSentryBase::SendDetectionEventSyncWorkerOnly" @(
+        "CreateFileW",
+        "WriteFile",
+        "CloseHandle",
+        "rasp_sentry_events"
+    ) "SendDetectionEventSyncWorkerOnly must use event transport wrapper"
 
 Write-Host "[b0-boundary] passed"

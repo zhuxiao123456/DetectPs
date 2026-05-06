@@ -6,7 +6,9 @@ B0-3-2 的目标是从 `RaspSentryBase` 中逐步抽离事件 JSON 构造和 wor
 
 本阶段必须小步提交，不允许把 JSON builder 生产接入、transport seam、真实 pipe adapter 混在一个 commit 中。
 
-当前下一步只做 **B0-3-2b-2 design-only**：补充 `LegacyPipeEventTransport` 文档和测试计划，不改代码。
+当前阶段为 **B0-3-2b-4**：将 `SendDetectionEventSyncWorkerOnly()` 改为 transport 薄包装。
+
+本批只改 detection event worker-only path，不改 `TrySubmitDetectionEvent()`、`AsyncEventQueue`、JSON schema、pipe 协议、diag log forward、retry/backoff 或 EDR 接入。
 
 ## 2. 分批路线
 
@@ -120,6 +122,21 @@ B0-3-2b-1 已建立 fake transport seam：
 - 不修改 `SendDetectionEventSyncWorkerOnly()`。
 - 不修改 `TrySubmitDetectionEvent()`。
 - 不修改 `AsyncEventQueue`。
+
+`SendAsyncEventWorkerOnly()` 的固定语义：
+
+- 输入：`const AsyncEvent& event`、`IEventTransport& transport`、`uint32_t timeoutMs`。
+- 如果 `event.compactJson` 为空，返回 `false`，不调用 transport。
+- 否则调用 `transport.Send(event.compactJson, timeoutMs)`。
+- `EventTransportStatus::Sent` 返回 `true`。
+- 其它 transport 状态返回 `false`。
+- 不修改 `AsyncEvent`。
+- 不记录日志。
+- 不做 retry。
+- 不调用 `WaitNamedPipeW`。
+- 不理解 detection / diag / reload / unload 业务语义。
+
+B0-3-2b-4 只复用该 helper，不重新定义发送语义。
 
 ## 8. B0-3-2b-2 Design-Only 目标
 
@@ -268,9 +285,103 @@ B0-3-2b-3 实现真实 adapter 后必须跑：
 - `scripts/test_phase3_input_normalization.ps1 -SkipConfigure`
 - `scripts/test_phase3_batch2_session_context.ps1 -SkipConfigure`
 
-## 13. 静态边界检查
+## 13. B0-3-2b-4 生产薄包装接入设计
 
-### 13.1 event_submit_client.* 禁止项
+B0-3-2b-4 只迁移 detection event worker-only 发送路径：
+
+```cpp
+bool RaspSentryBase::SendDetectionEventSyncWorkerOnly(const AsyncEvent& event) const
+{
+    LegacyPipeEventTransport transport;
+    return SendAsyncEventWorkerOnly(event, transport, 0);
+}
+```
+
+接入要求：
+
+- 保留 `RaspSentryBase::SendDetectionEventSyncWorkerOnly(const AsyncEvent&)` 旧入口。
+- `timeoutMs = 0`，保持旧行为：不等待、不重试、不改变 worker/backoff 时序。
+- `event.compactJson` 空值由 `SendAsyncEventWorkerOnly()` 拒绝。
+- `EventTransportStatus::Sent` -> `true`。
+- 其它 transport 状态 -> `false`。
+- 不记录日志，避免递归日志或阻塞。
+- 不修改 `TrySubmitDetectionEvent()`。
+- 不修改 `AsyncEventQueue`。
+- 不修改 `EventJsonBuilder`。
+- 不修改 pipe 名称、wire format 或事件 schema。
+
+建议第一版在函数内创建局部 `LegacyPipeEventTransport`：
+
+- 该对象只持有 pipe name，不持有句柄。
+- 避免引入 `RaspSentryBase` 成员生命周期。
+- 后续如需复用或注入 transport，再单独评审。
+
+## 14. 本批范围澄清：diag log forward 不迁移
+
+B0-3-2b-4 只迁移 detection event worker-only path。
+
+如果 `LogForwardThreadProc()` 仍直接写 `rasp_sentry_events`，不阻塞本批验收。该路径属于 diag log forward，后续 B0-3-3 `DiagLogger` 抽离阶段处理。
+
+因此本批验收表述必须精确为：
+
+- `SendDetectionEventSyncWorkerOnly()` 不再直接写 event pipe。
+- detection event worker-only 写入由 `legacy_pipe_event_transport.cpp` 承担。
+- `LogForwardThreadProc()` 的 diag pipe 写入不在本批范围。
+
+## 15. B0-3-2b-4 静态检查计划
+
+新增或扩展脚本规则：
+
+- `SendDetectionEventSyncWorkerOnly()` 代码块内不允许出现 `CreateFileW`。
+- `SendDetectionEventSyncWorkerOnly()` 代码块内不允许出现 `WriteFile`。
+- `SendDetectionEventSyncWorkerOnly()` 代码块内不允许出现 `CloseHandle`。
+- `rasp_sentry_base.cpp` 中 detection event worker-only path 不再直接引用 `\\.\pipe\rasp_sentry_events`。
+
+注意：`rasp_sentry_base.cpp` 仍可能包含 config pipe、rules pipe、log forward pipe，不能粗暴禁止整个文件出现 `CreateFileW` / `WriteFile`。
+
+## 16. B0-3-2b-4 验收标准
+
+代码验收：
+
+- `SendDetectionEventSyncWorkerOnly()` 保留旧入口。
+- `SendDetectionEventSyncWorkerOnly()` 不直接调用 `CreateFileW` / `WriteFile` / `CloseHandle`。
+- `SendDetectionEventSyncWorkerOnly()` 通过 `SendAsyncEventWorkerOnly()` + `LegacyPipeEventTransport` 发送。
+- `timeoutMs = 0`，保持旧行为。
+- `TrySubmitDetectionEvent()` 未改。
+- `AsyncEventQueue` 未改。
+- Scan 热路径未新增 transport 调用。
+
+边界验收：
+
+- `EventSubmitClient` / `EventJsonBuilder` 不含 pipe API。
+- `LegacyPipeEventTransport` 只接收 `std::string_view payload`。
+- `LegacyPipeEventTransport` 不依赖 `AsyncEvent` / `RaspEvalResult` / `RuleSnapshot` / Lua / PCRE2 / `EngineRuntime`。
+- 不新增 `WaitNamedPipeW`。
+- 不新增 retry / backoff。
+- 不新增日志 / telemetry。
+
+测试验收：
+
+- `event_transport_tests.exe` 通过。
+- `legacy_pipe_event_transport_tests.exe` 通过。
+- `event_json_builder_tests.exe` 通过。
+- `scripts/check_rasp_sentry_base_boundaries.ps1` 通过。
+- Phase 2 / Phase 3 回归通过。
+
+## 17. B0-3-2b-4 回滚策略
+
+如果 transport wrapper 行为异常：
+
+- revert B0-3-2b-4 commit。
+- 恢复 `SendDetectionEventSyncWorkerOnly()` 直接 `CreateFileW` / `WriteFile` 旧实现。
+- 不涉及 `TrySubmitDetectionEvent()`。
+- 不涉及 `AsyncEventQueue`。
+- 不涉及事件 JSON。
+- 不涉及 pipe 协议。
+
+## 18. 静态边界检查
+
+### 18.1 event_submit_client.* 禁止项
 
 `event_submit_client.h/.cpp` 不得出现：
 
@@ -290,7 +401,7 @@ B0-3-2b-3 实现真实 adapter 后必须跑：
 - `SQL`
 - `database`
 
-### 13.2 event_transport.* 禁止项
+### 18.2 event_transport.* 禁止项
 
 `event_transport.h/.cpp` 不得出现：
 
@@ -313,7 +424,7 @@ B0-3-2b-3 实现真实 adapter 后必须跑：
 - `SQL`
 - `database`
 
-### 13.3 legacy_pipe_event_transport.* 边界
+### 18.3 legacy_pipe_event_transport.* 边界
 
 `legacy_pipe_event_transport.*` 允许出现：
 
@@ -344,7 +455,7 @@ B0-3-2b-3 实现真实 adapter 后必须跑：
 
 `legacy_pipe_event_transport.*` 只能接收 `std::string_view payload`，不能依赖 `AsyncEvent`。
 
-## 14. AsyncEvent 字段保持要求
+## 19. AsyncEvent 字段保持要求
 
 如果后续 `TrySubmitDetectionEvent()` 改用 `EventJsonBuilder`，必须保证以下字段不变：
 
@@ -363,7 +474,7 @@ B0-3-2b-3 实现真实 adapter 后必须跑：
 
 这属于后续 B0-3-2b-A，不在 B0-3-2b-2 中实现。
 
-## 15. 红线
+## 20. 红线
 
 B0-3-2 后续实现禁止：
 
@@ -378,7 +489,7 @@ B0-3-2 后续实现禁止：
 - 接入 EDR SDK。
 - 新增事件 schema。
 
-## 16. 回滚策略
+## 21. 回滚策略
 
 - `RaspSentryBase::TrySubmitDetectionEvent()` 保留旧入口。
 - `SendDetectionEventSyncWorkerOnly()` 保留旧入口。
