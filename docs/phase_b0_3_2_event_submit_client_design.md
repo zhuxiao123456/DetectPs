@@ -4,17 +4,22 @@
 
 B0-3-2 的目标是从 `RaspSentryBase` 中逐步抽离事件 JSON 构造和 worker-only 发送边界，同时保持现有事件 schema、字段顺序、pipe 协议、`AsyncEventQueue` 行为和 Scan 热路径非阻塞模型不变。
 
-本阶段必须继续小步提交，不允许把 JSON builder 生产接入、transport seam、真实 pipe adapter 混在一个 commit 中。
+本阶段必须小步提交，不允许把 JSON builder 生产接入、transport seam、真实 pipe adapter 混在一个 commit 中。
 
-## 2. 评审意见处理结论
+当前下一步只做 **B0-3-2b-2 design-only**：补充 `LegacyPipeEventTransport` 文档和测试计划，不改代码。
 
-本次评审提出的 5 个收敛点全部接受，原因如下：
+## 2. 分批路线
 
-- 先做 fake transport 能把 worker-only wrapper 的行为验证清楚，避免过早引入 Windows pipe API、错误码映射、超时语义和部分写入处理。
-- 真实 pipe adapter 必须位于 compatibility / transport 层，不能污染 `event_submit_client.*`，否则会破坏 B0-3 已经建立的 seam 边界。
-- pipe 错误映射必须先定义，否则 B0-3-2b 容易在“抽象 transport”时顺手改变旧失败语义。
-- `TrySubmitDetectionEvent()` 改用 `EventJsonBuilder` 和 `SendDetectionEventSyncWorkerOnly()` 改用 transport 是两个独立风险点，必须拆开评审和提交。
-- `TrySubmitDetectionEvent()` 除了 compact JSON，还填充 `AsyncEvent` 多个 DTO 字段，必须用测试锁定，避免生产接入 builder 时发生隐式漂移。
+| 批次 | 目标 | 是否改生产路径 |
+| --- | --- | --- |
+| B0-3-2a | 固化 `EventJsonBuilder` golden JSON | 否 |
+| B0-3-2b-1 | 新增 `IEventTransport` seam、fake transport 测试、worker-only helper | 否 |
+| B0-3-2b-2 | 设计真实 `LegacyPipeEventTransport` adapter 和测试计划 | 否 |
+| B0-3-2b-3 | 实现真实 `LegacyPipeEventTransport`，但不接生产路径 | 否 |
+| B0-3-2b-4 | 评审后将 `SendDetectionEventSyncWorkerOnly()` 改成 transport 薄包装 | 是 |
+| B0-3-2b-A | 评审后将 `TrySubmitDetectionEvent()` 改用 `EventJsonBuilder` | 是 |
+
+`B0-3-2b-4` 和 `B0-3-2b-A` 是两个独立风险点，必须独立 commit、独立 review。
 
 ## 3. 非目标
 
@@ -48,7 +53,7 @@ Evaluate()
                   -> 写入 \\.\pipe\rasp_sentry_events
 ```
 
-当前 `TrySubmitDetectionEvent()` 同时负责两类事情：
+当前 `TrySubmitDetectionEvent()` 同时负责：
 
 - 构造 detection compact JSON。
 - 填充 `AsyncEvent` 队列 DTO。
@@ -93,25 +98,7 @@ Evaluate()
 - `pattern`：当前按 8KB 字段上限截断，并追加 `...[Truncated]`。
 - 所有字符串字段必须经过与旧路径一致的 JSON escape。
 
-## 6. JSON Escape 与截断语义
-
-`EventJsonBuilder` 必须与旧路径保持一致：
-
-- `"` -> `\"`
-- `\` -> `\\`
-- `\n` -> `\n`
-- `\r` -> `\r`
-- `\t` -> `\t`
-- 其他小于 `0x20` 的控制字符 -> `\u00xx`
-
-payload 截断必须是 UTF-8 安全截断：
-
-- 不允许截断在中文、emoji 等多字节字符中间。
-- 如果边界落在多字节字符内部，必须回退到上一个完整字符，再追加 `...[Truncated]`。
-- 输出 `pattern` 字段最大为 8192 字节。
-- `desc` 超长当前不截断，这是 legacy 行为，测试必须显式覆盖。
-
-## 7. B0-3-2a 当前状态
+## 6. B0-3-2a 当前状态
 
 B0-3-2a 已固化纯 JSON builder seam：
 
@@ -120,133 +107,88 @@ B0-3-2a 已固化纯 JSON builder seam：
 - 不替换 `RaspSentryBase` 生产路径。
 - 不修改 `AsyncEventQueue`。
 
-进入 B0-3-2b 前，`event_json_builder_tests.exe` 必须持续通过。
+进入后续批次前，`event_json_builder_tests.exe` 必须持续通过。
 
-## 8. B0-3-2b 分批方案
+## 7. B0-3-2b-1 当前状态
 
-### 8.1 B0-3-2b-0：设计文档更新
+B0-3-2b-1 已建立 fake transport seam：
 
-目标：
+- `event_transport.h` 定义 `EventTransportStatus` 和 bytes-only `IEventTransport`。
+- `event_worker_sender.h/.cpp` 定义 `SendAsyncEventWorkerOnly()`。
+- `event_transport_tests.cpp` 使用 fake transport 验证状态映射。
+- 不接真实 pipe。
+- 不修改 `SendDetectionEventSyncWorkerOnly()`。
+- 不修改 `TrySubmitDetectionEvent()`。
+- 不修改 `AsyncEventQueue`。
 
-- 更新本设计文档。
-- 明确 `EventTransportStatus`。
-- 明确 `IEventTransport` 只发送 bytes。
-- 明确旧 pipe 错误映射表。
-- 明确第一版不改变 pipe 等待 / 失败行为。
-- 明确 builder 替换和 transport 替换分开 commit。
+## 8. B0-3-2b-2 Design-Only 目标
 
-本批只保存文档，不改运行行为。
-
-### 8.2 B0-3-2b-1：fake transport seam 测试
-
-目标：
-
-- 新增 `IEventTransport` seam。
-- 新增 fake transport 测试。
-- 验证 worker-only wrapper 行为。
-- 不新增真实 pipe adapter。
-- 不改 `TrySubmitDetectionEvent()`。
-
-建议接口：
-
-```cpp
-enum class EventTransportStatus {
-    Sent,
-    Timeout,
-    AccessDenied,
-    Unavailable,
-    Failed
-};
-
-class IEventTransport {
-public:
-    virtual ~IEventTransport() = default;
-    virtual EventTransportStatus Send(std::string_view payload,
-                                      uint32_t timeoutMs) = 0;
-};
-```
-
-`IEventTransport` 只发送 bytes / string payload，不知道 `DetectionEvent`、`DiagEvent`、`RuleId`、`severity`、`decision` 等业务字段。
-
-禁止出现：
-
-```cpp
-IEventTransport::SendDetection(...)
-IEventTransport::SendDiag(...)
-IEventTransport::SendDroppedSummary(...)
-```
-
-测试要求：
-
-- `compactJson` 非空时调用 `Send()`。
-- `EventTransportStatus::Sent` -> wrapper 返回 `true`。
-- `Failed / Timeout / AccessDenied / Unavailable` -> wrapper 返回 `false`。
-- `compactJson` 为空 -> wrapper 返回 `false`，且不调用 transport。
-- wrapper 不修改 `AsyncEvent`。
-
-### 8.3 B0-3-2b-2：生产 LegacyPipeEventTransport
+B0-3-2b-2 只补文档和测试计划，不改代码。
 
 目标：
 
-- 新增真实 legacy pipe adapter。
-- 保持旧 pipe 名称 `\\.\pipe\rasp_sentry_events`。
-- 保持旧 `CreateFileW + WriteFile` 行为。
-- 不构造 JSON。
-- 不理解业务字段。
-- 不调用 `DiagLogger`。
-- 不访问 `RuleSnapshot` / Lua / PCRE2 / `EngineRuntime`。
+- 明确 `LegacyPipeEventTransport` 的文件位置、职责和禁止依赖。
+- 明确旧 pipe 行为保持策略。
+- 明确 Win32 错误码到 `EventTransportStatus` 的映射。
+- 明确单元测试、可跳过集成测试和回归测试范围。
+- 明确后续实现仍不得接入生产 `SendDetectionEventSyncWorkerOnly()`。
+
+## 9. LegacyPipeEventTransport 设计
 
 建议文件：
 
 ```text
-src/rasp_rule_engine/include/event_transport.h
 src/rasp_rule_engine/include/legacy_pipe_event_transport.h
 src/rasp_rule_engine/src/legacy_pipe_event_transport.cpp
+src/rasp_mod_amsi/tests/legacy_pipe_event_transport_tests.cpp
 ```
 
-不允许把 `CreateFileW` / `WriteFile` / `WaitNamedPipeW` 放进：
+建议接口：
 
-```text
-event_submit_client.h
-event_submit_client.cpp
+```cpp
+class LegacyPipeEventTransport final : public IEventTransport {
+public:
+    LegacyPipeEventTransport();
+    explicit LegacyPipeEventTransport(std::wstring pipeName);
+
+    EventTransportStatus Send(std::string_view payload,
+                              uint32_t timeoutMs) override;
+};
 ```
 
-### 8.4 B0-3-2b-3：worker-only 薄包装接入
+职责：
 
-目标：
+- 只负责发送 `std::string_view payload`。
+- 默认 pipe 为 `\\.\pipe\rasp_sentry_events`。
+- 内部执行 `CreateFileW`、`WriteFile`、`CloseHandle`。
+- 将 Win32 结果映射为 `EventTransportStatus`。
 
-- `SendDetectionEventSyncWorkerOnly()` 改为调用 transport seam。
-- `AsyncEventQueue` / worker / backoff / drop policy 不变。
-- 不修改 `TrySubmitDetectionEvent()` JSON 构造。
+禁止：
 
-注意：`TrySubmitDetectionEvent()` 是否改用 `EventJsonBuilder` 是单独动作，不能和 transport seam 接入同一个 commit。
+- 不构造 JSON。
+- 不理解 `ruleId`、`severity`、`decision`、`sensor`、`contentName`。
+- 不依赖 `AsyncEvent`。
+- 不依赖 `RaspEvalResult`。
+- 不访问 `RuleSnapshot`、Lua、PCRE2、`RaspLuaEngine`、`EngineRuntime`。
+- 不调用 `DiagLogger`。
+- 不接 EDR SDK。
+- 不访问数据库。
 
-### 8.5 B0-3-2b-A：TrySubmitDetectionEvent 使用 EventJsonBuilder
+## 10. 旧 pipe 行为保持策略
 
-这是独立评审 / 独立 commit，不属于 worker-only transport seam 本身。
+第一版必须保持旧行为：
 
-目标：
+- 不新增 `WaitNamedPipeW`。
+- 不新增重试。
+- 不新增同步等待。
+- 不改变 worker/backoff 时序。
+- `CreateFileW` 失败即返回非 `Sent` 状态。
+- `WriteFile` 完整写入才返回 `Sent`。
+- `WriteFile` 失败或部分写入返回 `Failed`。
 
-- 用 B0-3-2a 的 `EventJsonBuilder` 替换 `TrySubmitDetectionEvent()` 中的内联 JSON 构造。
-- 保持 `AsyncEvent` DTO 字段完全一致。
-- 保持入队行为完全一致。
+`timeoutMs` 参数先保留为未来扩展，第一版 `LegacyPipeEventTransport` 不主动引入等待语义。
 
-必须新增测试锁定 `AsyncEvent` 字段。
-
-### 8.6 B0-3-2b-B：SendDetectionEventSyncWorkerOnly 使用 IEventTransport
-
-这是独立评审 / 独立 commit。
-
-目标：
-
-- 用 `IEventTransport` 替换 `SendDetectionEventSyncWorkerOnly()` 中的直接 pipe 写。
-- 保持旧失败语义：写失败返回 `false`，由现有 worker/backoff 处理。
-
-## 9. 真实 pipe adapter 错误映射
-
-第一版必须保持旧行为：不新增 `WaitNamedPipeW` 等待，不改变 `CreateFileW` 失败即 `false` 的时序。
-
-`timeoutMs` 参数先保留为未来扩展，legacy adapter 第一版不主动引入等待语义。
+## 11. 错误映射表
 
 | Win32 / 旧 pipe 情况 | EventTransportStatus |
 | --- | --- |
@@ -259,37 +201,76 @@ event_submit_client.cpp
 | `WriteFile` 成功但部分写入 | `Failed` |
 | 其它 `CreateFileW` 失败 | `Failed` |
 
-## 10. AsyncEvent 字段保持要求
+建议后续实现把错误映射拆成纯 helper，便于单测：
 
-如果后续 `TrySubmitDetectionEvent()` 改用 `EventJsonBuilder`，必须保证以下字段不变：
+```cpp
+EventTransportStatus MapCreateFileErrorForEventPipe(DWORD error);
+EventTransportStatus MapWriteFileErrorForEventPipe(DWORD error);
+```
 
-- `AsyncEvent.priority == EventPriority::Detection`
-- `AsyncEvent.type == EventType::Detection`
-- `AsyncEvent.pid == GetCurrentProcessId()`
-- `AsyncEvent.tid == GetCurrentThreadId()`
-- `AsyncEvent.ruleId == result.ruleId`
-- `AsyncEvent.decision == block/audit`
-- `AsyncEvent.contentName == result.contentName`
-- `AsyncEvent.appName == result.appName`
-- `AsyncEvent.sampleLen == result.payload.size()`
-- `AsyncEvent.reason == result.desc`
-- `AsyncEvent.eventTruncated` 与 builder payload 截断结果一致
-- `AsyncEvent.compactJson` 与 B0-3-2a golden JSON 一致
+helper 可放在 `.cpp` 内部匿名命名空间；若需要单测，可通过 test-only include 或内部测试接口暴露。实现前需要评审具体暴露方式。
 
-必须新增测试覆盖这些字段，不能只测试 compact JSON。
+## 12. B0-3-2b-2 测试计划
 
-## 11. 状态语义说明
+### 12.1 单元测试
 
-当前 `EventSubmitStatus::Submitted` 在不同层级含义不同：
+新增 `legacy_pipe_event_transport_tests.cpp`，优先覆盖纯状态映射，不依赖真实 pipe。
 
-- `TrySubmitDetectionEvent` 层：表示事件进入 `AsyncEventQueue`。
-- transport 层：应使用 `EventTransportStatus::Sent` 表示 payload 发送成功。
+必须测试：
 
-B0-3-2b 不应继续扩大 `EventSubmitStatus` 的含义。建议新增 `EventTransportStatus`，避免“入队成功”和“pipe 发送成功”语义混淆。
+- `ERROR_FILE_NOT_FOUND` -> `Unavailable`
+- `ERROR_PIPE_BUSY` -> `Unavailable`
+- `ERROR_ACCESS_DENIED` -> `AccessDenied`
+- 其它 `CreateFileW` 错误 -> `Failed`
+- `WriteFile` 返回 `ERROR_ACCESS_DENIED` -> `AccessDenied`
+- 其它 `WriteFile` 错误 -> `Failed`
+- 部分写入 -> `Failed`
+- 完整写入 -> `Sent`
 
-## 12. 静态边界检查
+空 payload 行为建议：
 
-### 12.1 event_submit_client.* 禁止项
+- 第一版允许发送空 payload 由 `WriteFile` 语义决定，transport 本身不做业务校验。
+- 空 `compactJson` 的拒绝逻辑保留在 `SendAsyncEventWorkerOnly()`，不放进 `LegacyPipeEventTransport`。
+
+### 12.2 可跳过集成测试
+
+如需验证真实 pipe，可新增单独脚本并默认可跳过：
+
+```text
+scripts/test_phase_b0_3_2_legacy_pipe_transport.ps1
+```
+
+集成测试原则：
+
+- 不要求 Scan 热路径参与。
+- 不启动 AMSI Provider。
+- 使用测试 pipe server 模拟 `rasp_sentry_events`。
+- 验证 adapter 能完整写入 payload。
+- pipe 不存在时返回 `Unavailable` 或 `Failed`，按错误码映射判断。
+
+该集成测试不能成为普通开发环境的硬依赖，避免环境不具备 pipe server 时阻塞回归。
+
+### 12.3 回归测试
+
+B0-3-2b-2 design-only 只需跑：
+
+- `scripts/check_rasp_sentry_base_boundaries.ps1`
+- `git diff --check`
+
+B0-3-2b-3 实现真实 adapter 后必须跑：
+
+- `legacy_pipe_event_transport_tests.exe`
+- `event_transport_tests.exe`
+- `event_json_builder_tests.exe`
+- `scripts/check_rasp_sentry_base_boundaries.ps1`
+- `scripts/test_phase_b0_2_rule_json_parser.ps1 -SkipConfigure`
+- `scripts/test_phase2_batch4.ps1 -SkipConfigure`
+- `scripts/test_phase3_input_normalization.ps1 -SkipConfigure`
+- `scripts/test_phase3_batch2_session_context.ps1 -SkipConfigure`
+
+## 13. 静态边界检查
+
+### 13.1 event_submit_client.* 禁止项
 
 `event_submit_client.h/.cpp` 不得出现：
 
@@ -309,7 +290,30 @@ B0-3-2b 不应继续扩大 `EventSubmitStatus` 的含义。建议新增 `EventTr
 - `SQL`
 - `database`
 
-### 12.2 legacy_pipe_event_transport.* 允许项
+### 13.2 event_transport.* 禁止项
+
+`event_transport.h/.cpp` 不得出现：
+
+- `CreateFileW`
+- `WriteFile`
+- `WaitNamedPipe`
+- `CreateNamedPipe`
+- `ConnectNamedPipe`
+- `AsyncEvent`
+- `RaspEvalResult`
+- `DetectionEventLite`
+- `RuleSnapshot`
+- `lua_State`
+- `pcre2`
+- `RaspLuaEngine`
+- `EngineRuntime`
+- `IAmsiStream`
+- `AMSI_RESULT`
+- `EDR`
+- `SQL`
+- `database`
+
+### 13.3 legacy_pipe_event_transport.* 边界
 
 `legacy_pipe_event_transport.*` 允许出现：
 
@@ -340,40 +344,28 @@ B0-3-2b 不应继续扩大 `EventSubmitStatus` 的含义。建议新增 `EventTr
 
 `legacy_pipe_event_transport.*` 只能接收 `std::string_view payload`，不能依赖 `AsyncEvent`。
 
-## 13. 测试方案
+## 14. AsyncEvent 字段保持要求
 
-B0-3-2b-1 fake transport 测试：
+如果后续 `TrySubmitDetectionEvent()` 改用 `EventJsonBuilder`，必须保证以下字段不变：
 
-- fake transport 记录是否被调用。
-- fake transport 记录收到的 payload。
-- fake transport 可配置返回 `Sent / Failed / Timeout / AccessDenied / Unavailable`。
-- wrapper 对空 payload 快速失败。
-- wrapper 不修改输入事件。
+- `AsyncEvent.priority == EventPriority::Detection`
+- `AsyncEvent.type == EventType::Detection`
+- `AsyncEvent.pid == GetCurrentProcessId()`
+- `AsyncEvent.tid == GetCurrentThreadId()`
+- `AsyncEvent.ruleId == result.ruleId`
+- `AsyncEvent.decision == block/audit`
+- `AsyncEvent.contentName == result.contentName`
+- `AsyncEvent.appName == result.appName`
+- `AsyncEvent.sampleLen == result.payload.size()`
+- `AsyncEvent.reason == result.desc`
+- `AsyncEvent.eventTruncated` 与 builder payload 截断结果一致
+- `AsyncEvent.compactJson` 与 B0-3-2a golden JSON 一致
 
-B0-3-2b-2 legacy adapter 测试：
+这属于后续 B0-3-2b-A，不在 B0-3-2b-2 中实现。
 
-- 优先单测错误映射 helper，不直接依赖真实 pipe。
-- 如需集成测试，必须单独脚本并可跳过。
-- 不要求 Scan 热路径参与真实 pipe 测试。
+## 15. 红线
 
-B0-3-2b-A builder 生产接入测试：
-
-- golden JSON 继续通过。
-- `AsyncEvent` 字段保持测试通过。
-- 入队状态语义不变。
-
-回归测试：
-
-- `event_json_builder_tests.exe`
-- `scripts/check_rasp_sentry_base_boundaries.ps1`
-- `scripts/test_phase_b0_2_rule_json_parser.ps1 -SkipConfigure`
-- `scripts/test_phase2_batch4.ps1 -SkipConfigure`
-- `scripts/test_phase3_input_normalization.ps1 -SkipConfigure`
-- `scripts/test_phase3_batch2_session_context.ps1 -SkipConfigure`
-
-## 14. 红线
-
-B0-3-2b 禁止：
+B0-3-2 后续实现禁止：
 
 - 在 Scan 热路径直接调用 transport。
 - 在 transport 中构造 JSON。
@@ -386,10 +378,10 @@ B0-3-2b 禁止：
 - 接入 EDR SDK。
 - 新增事件 schema。
 
-## 15. 回滚策略
+## 16. 回滚策略
 
 - `RaspSentryBase::TrySubmitDetectionEvent()` 保留旧入口。
 - `SendDetectionEventSyncWorkerOnly()` 保留旧入口。
-- B0-3-2b-1 只引入 fake transport seam，回滚不影响生产路径。
-- B0-3-2b-2 如果真实 pipe adapter 行为不一致，可回退到旧直接 pipe 写。
+- B0-3-2b-2 只改文档，回滚不影响代码。
+- B0-3-2b-3 如果真实 pipe adapter 行为不一致，可回退到旧直接 pipe 写。
 - B0-3-2b-A 如果 builder 生产接入导致 JSON 或 `AsyncEvent` 字段不一致，停止接入并保留旧内联 JSON 构造。
