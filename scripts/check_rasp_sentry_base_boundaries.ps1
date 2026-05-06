@@ -137,6 +137,8 @@ $interfaceFiles = @(
     "src\rasp_rule_engine\include\event_transport.h",
     "src\rasp_rule_engine\include\diag_logger.h",
     "src\rasp_rule_engine\include\diag_log_sink.h",
+    "src\rasp_rule_engine\include\diag_ring_buffer.h",
+    "src\rasp_rule_engine\include\diag_logger_runtime.h",
     "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h",
     "src\rasp_rule_engine\include\legacy_pipe_transport.h"
 )
@@ -245,6 +247,54 @@ Check-NoPattern "src\rasp_rule_engine\include\diag_log_sink.h" @(
     "SQL",
     "database"
 ) "DiagLogSink boundary violation"
+
+Check-NoPattern "src\rasp_rule_engine\include\diag_ring_buffer.h" @(
+    "CreateFileW",
+    "WriteFile",
+    "WaitNamedPipe",
+    "WaitNamedPipeW",
+    "CreateNamedPipe",
+    "CreateNamedPipeW",
+    "ConnectNamedPipe",
+    "ConnectNamedPipeW",
+    "OutputDebugStringA",
+    "EDR",
+    "SQL",
+    "database",
+    "DetectionAction",
+    "ScanStatus",
+    "AMSI_RESULT",
+    "RuleSnapshot",
+    "lua_State",
+    "pcre2",
+    "RaspLuaEngine",
+    "EventSubmitClient",
+    "AsyncEventQueue"
+) "DiagRingBuffer boundary violation"
+
+Check-NoPattern "src\rasp_rule_engine\include\diag_logger_runtime.h" @(
+    "CreateFileW",
+    "WriteFile",
+    "WaitNamedPipe",
+    "WaitNamedPipeW",
+    "CreateNamedPipe",
+    "CreateNamedPipeW",
+    "ConnectNamedPipe",
+    "ConnectNamedPipeW",
+    "EDR",
+    "SQL",
+    "database",
+    "DetectionAction",
+    "ScanStatus",
+    "AMSI_RESULT",
+    "RuleSnapshot",
+    "lua_State",
+    "pcre2",
+    "RaspLuaEngine",
+    "EventSubmitClient",
+    "AsyncEventQueue",
+    "diag JSON"
+) "DiagLoggerRuntime boundary violation"
 
 Check-NoPattern "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h" @(
     "RaspEvalResult",
