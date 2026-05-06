@@ -6,9 +6,9 @@ B0-3-2 的目标是从 `RaspSentryBase` 中逐步抽离事件 JSON 构造和 wor
 
 本阶段必须小步提交，不允许把 JSON builder 生产接入、transport seam、真实 pipe adapter 混在一个 commit 中。
 
-当前阶段为 **B0-3-2b-4**：将 `SendDetectionEventSyncWorkerOnly()` 改为 transport 薄包装。
+当前阶段为 **B0-3-2b-A**：`TrySubmitDetectionEvent()` 使用 `EventJsonBuilder` 替换内联 JSON 构造。
 
-本批只改 detection event worker-only path，不改 `TrySubmitDetectionEvent()`、`AsyncEventQueue`、JSON schema、pipe 协议、diag log forward、retry/backoff 或 EDR 接入。
+本批只改 `TrySubmitDetectionEvent()` 的 compact JSON 构造部分，不改 `SendDetectionEventSyncWorkerOnly()`、`AsyncEventQueue`、`LegacyPipeEventTransport`、pipe 协议、diag log forward、日志/telemetry、retry/backoff 或 EDR 接入。
 
 ## 2. 分批路线
 
@@ -46,23 +46,24 @@ B0-3-2 不做：
 Evaluate()
   -> TrySubmitDetectionEvent(RaspEvalResult)
       -> 生成 id / timestamp
-      -> 构造 compactJson
+      -> EventJsonBuilder 构造 compactJson
       -> 填充 AsyncEvent
       -> m_eventSink.TrySubmit(event)
           -> AsyncEventQueue
           -> worker
               -> SendDetectionEventSyncWorkerOnly(AsyncEvent)
-                  -> 写入 \\.\pipe\rasp_sentry_events
+                  -> SendAsyncEventWorkerOnly + LegacyPipeEventTransport
+                      -> 写入 \\.\pipe\rasp_sentry_events
 ```
 
 当前 `TrySubmitDetectionEvent()` 同时负责：
 
-- 构造 detection compact JSON。
+- 通过 `EventJsonBuilder` 构造 detection compact JSON。
 - 填充 `AsyncEvent` 队列 DTO。
 
 当前 `SendDetectionEventSyncWorkerOnly()` 负责：
 
-- worker-only 同步写旧 `rasp_sentry_events` pipe。
+- 通过 worker-only helper 和 `LegacyPipeEventTransport` 同步写旧 `rasp_sentry_events` pipe。
 - 返回 `true/false` 给 async worker。
 
 ## 5. Golden JSON 字段基线
@@ -457,7 +458,7 @@ B0-3-2b-4 只迁移 detection event worker-only path。
 
 ## 19. AsyncEvent 字段保持要求
 
-如果后续 `TrySubmitDetectionEvent()` 改用 `EventJsonBuilder`，必须保证以下字段不变：
+`TrySubmitDetectionEvent()` 改用 `EventJsonBuilder` 后，必须保证以下字段不变：
 
 - `AsyncEvent.priority == EventPriority::Detection`
 - `AsyncEvent.type == EventType::Detection`
@@ -472,9 +473,137 @@ B0-3-2b-4 只迁移 detection event worker-only path。
 - `AsyncEvent.eventTruncated` 与 builder payload 截断结果一致
 - `AsyncEvent.compactJson` 与 B0-3-2a golden JSON 一致
 
-这属于后续 B0-3-2b-A，不在 B0-3-2b-2 中实现。
+该字段一致性要求已纳入 B0-3-2b-A 实现验收。
 
-## 20. 红线
+## 20. B0-3-2b-A 实现说明 / 验收标准：TrySubmitDetectionEvent 接入 EventJsonBuilder
+
+当前已进入 B0-3-2b-A 实现：`TrySubmitDetectionEvent()` 使用 `EventJsonBuilder` 替换内联 JSON 构造。
+
+目标：
+
+- 移除 `TrySubmitDetectionEvent()` 内联 JSON 构造。
+- 复用 B0-3-2a 已固化的 `EventJsonBuilder` golden 行为。
+- 明确不新增公共 helper。
+- 明确 DTO 填充仍保留在 `TrySubmitDetectionEvent()` 原地。
+- 明确测试与回滚策略。
+- 清理 `rasp_sentry_base.cpp` 中已无引用的旧 detection JSON helper；diag JSON 构造仍留给后续 B0-3-3。
+
+### 20.1 推荐实现策略
+
+B0-3-2b-A 实现时，`TrySubmitDetectionEvent()` 只替换 compact JSON 构造部分：
+
+```cpp
+EventJsonBuildInput input;
+input.eventId = SentryGenerateEventId();
+input.timestamp = SentryUtcTimestamp();
+input.moduleName = ModuleName();
+input.ruleId = result.ruleId;
+input.sensor = result.sensor;
+input.block = result.block;
+input.severity = result.severity;
+input.description = result.desc;
+input.appName = result.appName;
+input.contentName = result.contentName;
+input.confidence = result.confidence;
+input.ip = result.ip;
+input.ua = result.ua;
+input.payload = result.payload;
+
+EventJsonBuildResult built = EventJsonBuilder().BuildDetection(input);
+```
+
+然后保持 `AsyncEvent` DTO 填充原地不动：
+
+```cpp
+event.priority = EventPriority::Detection;
+event.type = EventType::Detection;
+event.pid = GetCurrentProcessId();
+event.tid = GetCurrentThreadId();
+event.ruleId = result.ruleId;
+event.decision = built.decision;
+event.contentName = result.contentName;
+event.appName = result.appName;
+event.sampleLen = result.payload.size();
+event.reason = result.desc;
+event.eventTruncated = built.eventTruncated;
+event.compactJson = built.compactJson;
+```
+
+### 20.2 不新增公共 helper
+
+本批不新增：
+
+```cpp
+BuildDetectionAsyncEventForQueue(...)
+```
+
+原因：
+
+- 当前目标只是移除 `TrySubmitDetectionEvent()` 内联 JSON 构造。
+- `AsyncEvent` DTO 填充仍属于 `RaspSentryBase` 现有入队逻辑。
+- 新 helper 会扩大接口面，并提前引入 scanner-core / telemetry DTO 边界问题。
+
+如后续需要抽离 DTO 构造，应作为 B0 后续独立评审项。
+
+### 20.3 必须保持的旧行为
+
+B0-3-2b-A 实现后必须保持：
+
+- JSON 字段顺序与 B0-3-2a golden 一致。
+- `severity` 空值仍回退 `"High"`。
+- `confidence == 0` 仍回退 `"70"`。
+- `payload` 空值时 `pattern` 仍为空字符串。
+- `desc` 仍不截断。
+- `pattern` 仍按 8KB UTF-8 安全截断。
+- `AsyncEvent.sampleLen == result.payload.size()`，不是截断后的 payload 长度。
+- `AsyncEvent.eventTruncated == built.eventTruncated`。
+- `AsyncEvent.decision == built.decision`。
+- `m_eventSink.TrySubmit(event)` 调用语义不变。
+
+### 20.4 禁止项
+
+B0-3-2b-A 禁止：
+
+- 不修改 `SendDetectionEventSyncWorkerOnly()`。
+- 不修改 `LegacyPipeEventTransport`。
+- 不修改 `AsyncEventQueue`。
+- 不修改 pipe 协议。
+- 不新增事件 schema。
+- 不新增 dropped / timeout / diag event。
+- 不新增日志 / telemetry。
+- 不接 EDR SDK。
+- 不新增公共 DTO helper。
+
+### 20.5 测试计划
+
+实现前确认：
+
+- `event_json_builder_tests.exe` 已覆盖 JSON golden。
+- `TrySubmitDetectionEvent()` 的生产接入只使用 `EventJsonBuilder` 结果，不重新实现 escape / truncate。
+
+实现后必须验证：
+
+- `event_json_builder_tests.exe`
+- `event_transport_tests.exe`
+- `legacy_pipe_event_transport_tests.exe`
+- `scripts/check_rasp_sentry_base_boundaries.ps1`
+- `scripts/test_phase_b0_2_rule_json_parser.ps1 -SkipConfigure`
+- `scripts/test_phase2_batch4.ps1 -SkipConfigure`
+- `scripts/test_phase3_input_normalization.ps1 -SkipConfigure`
+- `scripts/test_phase3_batch2_session_context.ps1 -SkipConfigure`
+- `git diff --check`
+
+### 20.6 回滚策略
+
+如果接入后 JSON 或 `AsyncEvent` 字段行为异常：
+
+- revert B0-3-2b-A commit。
+- 恢复 `TrySubmitDetectionEvent()` 内联 JSON 构造。
+- 不影响 `SendDetectionEventSyncWorkerOnly()`。
+- 不影响 `AsyncEventQueue`。
+- 不影响 `LegacyPipeEventTransport`。
+
+## 21. 红线
 
 B0-3-2 后续实现禁止：
 
@@ -489,7 +618,7 @@ B0-3-2 后续实现禁止：
 - 接入 EDR SDK。
 - 新增事件 schema。
 
-## 21. 回滚策略
+## 22. 回滚策略
 
 - `RaspSentryBase::TrySubmitDetectionEvent()` 保留旧入口。
 - `SendDetectionEventSyncWorkerOnly()` 保留旧入口。

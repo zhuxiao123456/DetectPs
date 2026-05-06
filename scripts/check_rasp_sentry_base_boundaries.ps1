@@ -392,4 +392,20 @@ Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
         "rasp_sentry_events"
     ) "SendDetectionEventSyncWorkerOnly must use event transport wrapper"
 
+Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
+    "EnqueueResult RaspSentryBase::TrySubmitDetectionEvent" @(
+        "std::ostringstream json",
+        "SentryJsonEscape",
+        "TruncateUtf8Field",
+        "kMaxEventPayloadFieldBytes",
+        '"cat":"Detection"',
+        '"pattern":"'
+    ) "TrySubmitDetectionEvent must use EventJsonBuilder"
+
+Check-NoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" @(
+    "static std::string SentryJsonEscape",
+    "static size_t Utf8SafePrefixLength",
+    "static std::string TruncateUtf8Field"
+) "Legacy detection JSON helpers must stay in EventJsonBuilder"
+
 Write-Host "[b0-boundary] passed"

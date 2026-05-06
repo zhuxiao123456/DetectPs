@@ -28,9 +28,9 @@
 #include <cstdio>
 #include <ctime>
 #include <algorithm>
-#include <sstream>
 
 #include "../include/rasp_sentry_base.h"
+#include "../include/event_submit_client.h"
 #include "../include/event_worker_sender.h"
 #include "../include/legacy_pipe_event_transport.h"
 
@@ -277,9 +277,10 @@ bool RaspSentryBase::ParseRulesJson(
 }
 
 // =========================================================================
-// SendDetectionEvent — fire-and-forget JSONL to rasp_sentry_events
-// Replaces amsi_event_sender::SendAmsiEvent(). Non-blocking — drops silently
-// if sentry not running (0 ms WaitNamedPipe timeout, CreateFile returns ASAP).
+// SendDetectionEvent - queues detection events for async worker delivery.
+// JSON construction is handled by EventJsonBuilder.
+// Worker-only pipe writes are handled by LegacyPipeEventTransport.
+// Diag log forwarding remains on the legacy path until B0-3-3.
 // =========================================================================
 
 namespace {
@@ -304,88 +305,6 @@ static std::string SentryUtcTimestamp()
     return std::string(buf);
 }
 
-static std::string SentryJsonEscape(const std::string& s)
-{
-    std::string out;
-    out.reserve(s.size() + 8);
-    for (unsigned char c : s)
-    {
-        switch (c)
-        {
-        case '"':  out += "\\\""; break;
-        case '\\': out += "\\\\"; break;
-        case '\n': out += "\\n";  break;
-        case '\r': out += "\\r";  break;
-        case '\t': out += "\\t";  break;
-        default:
-            if (c < 0x20) { char b[8]; snprintf(b, sizeof(b), "\\u%04x", c); out += b; }
-            else           out += (char)c;
-        }
-    }
-    return out;
-}
-
-static size_t Utf8SafePrefixLength(const std::string& s, size_t limit)
-{
-    size_t i = 0;
-    size_t last = 0;
-    while (i < s.size() && i < limit) {
-        unsigned char c = static_cast<unsigned char>(s[i]);
-        size_t width = 1;
-        if (c < 0x80) {
-            width = 1;
-        } else if ((c & 0xE0) == 0xC0) {
-            width = 2;
-        } else if ((c & 0xF0) == 0xE0) {
-            width = 3;
-        } else if ((c & 0xF8) == 0xF0) {
-            width = 4;
-        } else {
-            ++i;
-            last = i;
-            continue;
-        }
-
-        if (i + width > s.size() || i + width > limit)
-            break;
-
-        bool valid = true;
-        for (size_t j = 1; j < width; ++j) {
-            unsigned char cc = static_cast<unsigned char>(s[i + j]);
-            if ((cc & 0xC0) != 0x80) {
-                valid = false;
-                break;
-            }
-        }
-
-        if (!valid) {
-            ++i;
-            last = i;
-            continue;
-        }
-
-        i += width;
-        last = i;
-    }
-    return last;
-}
-
-static std::string TruncateUtf8Field(const std::string& value, size_t maxBytes)
-{
-    static const char kSuffix[] = "...[Truncated]";
-    const size_t suffixLen = sizeof(kSuffix) - 1;
-    if (value.size() <= maxBytes)
-        return value;
-    if (maxBytes <= suffixLen)
-        return std::string(kSuffix, maxBytes);
-
-    size_t prefixLimit = maxBytes - suffixLen;
-    size_t prefixLen = Utf8SafePrefixLength(value, prefixLimit);
-    std::string out = value.substr(0, prefixLen);
-    out.append(kSuffix);
-    return out;
-}
-
 } // anonymous namespace
 /*
  * Detection events are converted to AsyncEvent and queued for the async worker.
@@ -399,32 +318,23 @@ void RaspSentryBase::SendDetectionEvent(const RaspEvalResult& result) const
 
 EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& result) const
 {
-    static constexpr size_t kMaxEventPayloadFieldBytes = 8 * 1024;
-    std::string id  = SentryGenerateEventId();
-    std::string ts  = SentryUtcTimestamp();
-    std::string sev = result.severity.empty() ? "High" : result.severity;
-    std::string act = result.block ? "block" : "audit";
-    std::string  confidence = result.confidence ? std::to_string(result.confidence): "70";
-    std::string payload = TruncateUtf8Field(result.payload, kMaxEventPayloadFieldBytes);
+    EventJsonBuildInput input;
+    input.eventId = SentryGenerateEventId();
+    input.timestamp = SentryUtcTimestamp();
+    input.moduleName = ModuleName();
+    input.ruleId = result.ruleId;
+    input.sensor = result.sensor;
+    input.block = result.block;
+    input.severity = result.severity;
+    input.description = result.desc;
+    input.appName = result.appName;
+    input.contentName = result.contentName;
+    input.confidence = result.confidence;
+    input.ip = result.ip;
+    input.ua = result.ua;
+    input.payload = result.payload;
 
-    std::ostringstream json;
-    json << "{"
-         << "\"id\":\""      << SentryJsonEscape(id)              << "\","
-         << "\"ts\":\""      << SentryJsonEscape(ts)              << "\","
-         << "\"sev\":\""     << SentryJsonEscape(sev)             << "\","
-         << "\"act\":\""     << act                               << "\","
-         << "\"cat\":\"Detection\","
-         << "\"mod\":\""     << SentryJsonEscape(ModuleName())    << "\","
-         << "\"sensor\":\""  << SentryJsonEscape(result.sensor)   << "\","
-         << "\"rule\":\""    << SentryJsonEscape(result.ruleId)   << "\","
-         << "\"desc\":\""    << SentryJsonEscape(result.desc)     << "\","
-         << "\"appName\":\""  << SentryJsonEscape(result.appName)   << "\","
-         << "\"contentName\":\""     << SentryJsonEscape(result.contentName)      << "\","
-         << "\"confidence\":\""  << SentryJsonEscape(confidence)      << "\","
-         << "\"ip\":\""      << SentryJsonEscape(result.ip)       << "\","
-         << "\"ua\":\""      << SentryJsonEscape(result.ua)       << "\","
-         << "\"pattern\":\""  << SentryJsonEscape(payload) << "\""
-         << "}";
+    EventJsonBuildResult built = EventJsonBuilder().BuildDetection(input);
 
     AsyncEvent event;
     event.priority = EventPriority::Detection;
@@ -432,13 +342,13 @@ EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& resu
     event.pid = GetCurrentProcessId();
     event.tid = GetCurrentThreadId();
     event.ruleId = result.ruleId;
-    event.decision = act;
+    event.decision = built.decision;
     event.contentName = result.contentName;
     event.appName = result.appName;
     event.sampleLen = result.payload.size();
     event.reason = result.desc;
-    event.eventTruncated = payload.size() != result.payload.size();
-    event.compactJson = json.str();
+    event.eventTruncated = built.eventTruncated;
+    event.compactJson = built.compactJson;
     return m_eventSink.TrySubmit(event);
 }
 
