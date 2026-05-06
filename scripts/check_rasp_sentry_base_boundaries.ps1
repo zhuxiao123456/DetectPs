@@ -136,6 +136,8 @@ $interfaceFiles = @(
     "src\rasp_rule_engine\include\event_submit_client.h",
     "src\rasp_rule_engine\include\event_transport.h",
     "src\rasp_rule_engine\include\diag_logger.h",
+    "src\rasp_rule_engine\include\diag_log_sink.h",
+    "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h",
     "src\rasp_rule_engine\include\legacy_pipe_transport.h"
 )
 
@@ -214,8 +216,67 @@ Check-NoPattern "src\rasp_rule_engine\include\diag_logger.h" @(
     "lua_State",
     "pcre2",
     "RaspLuaEngine",
-    "IAmsiStream"
+    "EngineRuntime",
+    "IAmsiStream",
+    "EDR",
+    "SQL",
+    "database",
+    "CreateFileW",
+    "WriteFile",
+    "WaitNamedPipe",
+    "WaitNamedPipeW",
+    "CreateNamedPipe",
+    "CreateNamedPipeW",
+    "ConnectNamedPipe",
+    "ConnectNamedPipeW"
 ) "DiagLogger boundary violation"
+
+Check-NoPattern "src\rasp_rule_engine\include\diag_log_sink.h" @(
+    "DetectionAction",
+    "ScanStatus",
+    "AMSI_RESULT",
+    "RuleSnapshot",
+    "lua_State",
+    "pcre2",
+    "RaspLuaEngine",
+    "EngineRuntime",
+    "IAmsiStream",
+    "EDR",
+    "SQL",
+    "database"
+) "DiagLogSink boundary violation"
+
+Check-NoPattern "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h" @(
+    "RaspEvalResult",
+    "AsyncEvent",
+    "DetectionEventLite",
+    "RuleSnapshot",
+    "lua_State",
+    "pcre2",
+    "RaspLuaEngine",
+    "DetectionAction",
+    "ScanStatus",
+    "AMSI_RESULT",
+    "EventSubmitClient",
+    "AsyncEventQueue",
+    "EDR",
+    "SQL",
+    "database",
+    "CreateFileW",
+    "WriteFile",
+    "WaitNamedPipe",
+    "WaitNamedPipeW",
+    "CreateNamedPipe",
+    "CreateNamedPipeW",
+    "ConnectNamedPipe",
+    "ConnectNamedPipeW"
+) "LegacyDiagLogForwarder boundary violation"
+
+Check-NoStrongPattern "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h" @(
+    "Reload",
+    "Unload",
+    "ConfigUpdate"
+) "LegacyDiagLogForwarder public seam must not expose control-plane semantics"
 
 Check-NoPattern "src\rasp_rule_engine\include\legacy_pipe_transport.h" @(
     "ControlMessage",
