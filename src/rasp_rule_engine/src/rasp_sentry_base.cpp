@@ -32,6 +32,7 @@
 #include "../include/rasp_sentry_base.h"
 #include "../include/event_submit_client.h"
 #include "../include/event_worker_sender.h"
+#include "../include/legacy_diag_json_builder.h"
 #include "../include/legacy_pipe_event_transport.h"
 
 // =========================================================================
@@ -399,45 +400,15 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
 
             if (!hasItem) break;
 
-            // Build JSONL diagnostic event (cat=diag)
-            std::string desc;
-            desc.reserve(strlen(entryText) + 4);
-            for (const char* cp = entryText; *cp; ++cp)
-            {
-                switch (*cp)
-                {
-                case '"':  desc += "\\\""; break;
-                case '\\': desc += "\\\\"; break;
-                case '\n': desc += "\\n";  break;
-                case '\r': desc += "\\r";  break;
-                case '\t': desc += "\\t";  break;
-                default:
-                    if ((unsigned char)*cp < 0x20)
-                    {
-                        char esc[8];
-                        snprintf(esc, sizeof(esc), "\\u%04x", (unsigned char)*cp);
-                        desc += esc;
-                    }
-                    else desc += *cp;
-                    break;
-                }
-            }
+            LegacyDiagJsonBuildInput input;
+            input.id = SentryGenerateEventId();
+            input.timestamp = SentryUtcTimestamp();
+            input.module = self->ModuleName();
+            input.pattern = self->LogEventPattern();
+            input.message = entryText;
 
-            std::string id = SentryGenerateEventId();
-            std::string ts = SentryUtcTimestamp();
-
-            char line[2048];
-            snprintf(line, sizeof(line),
-                     "{\"id\":\"%s\",\"ts\":\"%s\","
-                     "\"sev\":\"info\",\"act\":\"audit\",\"cat\":\"diag\","
-                     "\"mod\":\"%s\",\"sensor\":\"RaspLog\","
-                     "\"rule\":\"\",\"desc\":\"%s\","
-                     "\"method\":\"\",\"url\":\"\",\"ip\":\"\",\"ua\":\"\","
-                     "\"pattern\":\"%s\",\"payload\":\"\"}",
-                     id.c_str(), ts.c_str(),
-                     self->ModuleName(),
-                     desc.c_str(),
-                     self->LogEventPattern());
+            LegacyDiagJsonBuildResult built = LegacyDiagJsonBuilder().Build(input);
+            const std::string& compactJson = built.compactJson;
 
             HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_events",
                                        GENERIC_WRITE, 0, nullptr,
@@ -445,7 +416,11 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
             if (hPipe != INVALID_HANDLE_VALUE)
             {
                 DWORD written = 0;
-                WriteFile(hPipe, line, (DWORD)strlen(line), &written, nullptr);
+                WriteFile(hPipe,
+                          compactJson.data(),
+                          static_cast<DWORD>(compactJson.size()),
+                          &written,
+                          nullptr);
                 CloseHandle(hPipe);
             }
         }

@@ -591,4 +591,16 @@ Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
         "database"
     ) "PopLogEntryLocked must remain a locked ring-buffer drain helper"
 
+Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
+    "DWORD WINAPI RaspSentryBase::LogForwardThreadProc" @(
+        "std::string desc",
+        "for (const char* cp = entryText",
+        "char esc[8]",
+        "snprintf(esc",
+        "char line[2048]",
+        "snprintf(line, sizeof(line)",
+        "strlen(line)",
+        "built.truncated"
+    ) "LogForwardThreadProc must use LegacyDiagJsonBuilder for diag JSON construction"
+
 Write-Host "[b0-boundary] passed"
