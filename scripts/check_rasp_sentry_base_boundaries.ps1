@@ -685,7 +685,13 @@ Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
         "char line[2048]",
         "snprintf(line, sizeof(line)",
         "strlen(line)",
-        "built.truncated"
-    ) "LogForwardThreadProc must use LegacyDiagJsonBuilder for diag JSON construction"
+        "built.truncated",
+        "CreateFileW",
+        "WriteFile",
+        "CloseHandle",
+        "rasp_sentry_events",
+        "HANDLE hPipe",
+        "DWORD written"
+    ) "LogForwardThreadProc must use LegacyDiagJsonBuilder and LegacyDiagLogForwarder"
 
 Write-Host "[b0-boundary] passed"

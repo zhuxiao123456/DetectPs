@@ -33,6 +33,8 @@
 #include "../include/event_submit_client.h"
 #include "../include/event_worker_sender.h"
 #include "../include/legacy_diag_json_builder.h"
+#include "../include/legacy_diag_log_forwarder.h"
+#include "../include/legacy_diag_pipe_writer.h"
 #include "../include/legacy_pipe_event_transport.h"
 
 // =========================================================================
@@ -410,19 +412,9 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
             LegacyDiagJsonBuildResult built = LegacyDiagJsonBuilder().Build(input);
             const std::string& compactJson = built.compactJson;
 
-            HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_events",
-                                       GENERIC_WRITE, 0, nullptr,
-                                       OPEN_EXISTING, 0, nullptr);
-            if (hPipe != INVALID_HANDLE_VALUE)
-            {
-                DWORD written = 0;
-                WriteFile(hPipe,
-                          compactJson.data(),
-                          static_cast<DWORD>(compactJson.size()),
-                          &written,
-                          nullptr);
-                CloseHandle(hPipe);
-            }
+            LegacyDiagPipeWriter writer;
+            LegacyDiagLogForwarder forwarder(writer);
+            forwarder.Forward(compactJson);
         }
 
         if (!self->m_logThreadAlive && self->m_logCount == 0)
