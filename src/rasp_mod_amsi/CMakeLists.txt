@@ -263,6 +263,26 @@ if(MSVC)
     target_compile_options(legacy_diag_log_forwarder_tests PRIVATE /W3 /WX-)
 endif()
 
+add_executable(legacy_diag_pipe_writer_tests
+    tests/legacy_diag_pipe_writer_tests.cpp
+)
+
+target_include_directories(legacy_diag_pipe_writer_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../rasp_rule_engine/include
+)
+
+target_compile_definitions(legacy_diag_pipe_writer_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+)
+
+if(MSVC)
+    target_compile_options(legacy_diag_pipe_writer_tests PRIVATE /W3 /WX-)
+endif()
+
 add_executable(diag_ring_buffer_tests
     tests/diag_ring_buffer_tests.cpp
 )

@@ -141,6 +141,7 @@ $interfaceFiles = @(
     "src\rasp_rule_engine\include\diag_logger_runtime.h",
     "src\rasp_rule_engine\include\legacy_diag_json_builder.h",
     "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h",
+    "src\rasp_rule_engine\include\legacy_diag_pipe_writer.h",
     "src\rasp_rule_engine\include\legacy_pipe_transport.h"
 )
 
@@ -363,11 +364,55 @@ foreach ($file in $legacyDiagForwarderFiles) {
     }
 }
 
+if (Test-Path "src\rasp_rule_engine\src\legacy_diag_pipe_writer.cpp") {
+    Check-NoPattern "src\rasp_rule_engine\src\legacy_diag_pipe_writer.cpp" @(
+        "WaitNamedPipe",
+        "CreateNamedPipe",
+        "ConnectNamedPipe",
+        "Log(",
+        "OutputDebugStringA",
+        "EventSubmitClient",
+        "AsyncEventQueue",
+        "LegacyPipeEventTransport",
+        "LegacyDiagJsonBuilder",
+        "RuleSnapshot",
+        "lua_State",
+        "pcre2",
+        "AMSI_RESULT",
+        "EDR",
+        "SQL",
+        "database"
+    ) "LegacyDiagPipeWriter implementation boundary violation"
+    Check-NoStrongPattern "src\rasp_rule_engine\src\legacy_diag_pipe_writer.cpp" @(
+        "Reload",
+        "Unload",
+        "ConfigUpdate",
+        "DrainAck"
+    ) "LegacyDiagPipeWriter implementation must not expose control-plane semantics"
+}
+
 Check-NoStrongPattern "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h" @(
     "Reload",
     "Unload",
     "ConfigUpdate"
 ) "LegacyDiagLogForwarder public seam must not expose control-plane semantics"
+
+Check-NoPattern "src\rasp_rule_engine\include\legacy_diag_pipe_writer.h" @(
+    "windows.h",
+    "HANDLE",
+    "DWORD",
+    "CreateFileW",
+    "WriteFile",
+    "CloseHandle",
+    "GetLastError",
+    "WaitNamedPipe",
+    "EventSubmitClient",
+    "AsyncEventQueue",
+    "LegacyPipeEventTransport",
+    "EDR",
+    "SQL",
+    "database"
+) "LegacyDiagPipeWriter header boundary violation"
 
 Check-NoPattern "src\rasp_rule_engine\include\legacy_pipe_transport.h" @(
     "ControlMessage",
