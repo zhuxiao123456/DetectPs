@@ -298,6 +298,11 @@ Check-NoPattern "src\rasp_rule_engine\include\diag_logger_runtime.h" @(
 ) "DiagLoggerRuntime boundary violation"
 
 Check-NoPattern "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h" @(
+    "diag_log_sink",
+    "diag_logger",
+    "windows.h",
+    "objbase.h",
+    "sddl.h",
     "RaspEvalResult",
     "AsyncEvent",
     "DetectionEventLite",
@@ -310,6 +315,7 @@ Check-NoPattern "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h" @(
     "AMSI_RESULT",
     "EventSubmitClient",
     "AsyncEventQueue",
+    "LegacyPipeEventTransport",
     "EDR",
     "SQL",
     "database",
@@ -322,6 +328,40 @@ Check-NoPattern "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h" @(
     "ConnectNamedPipe",
     "ConnectNamedPipeW"
 ) "LegacyDiagLogForwarder boundary violation"
+
+$legacyDiagForwarderFiles = @(
+    "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h",
+    "src\rasp_rule_engine\src\legacy_diag_log_forwarder.cpp"
+)
+
+foreach ($file in $legacyDiagForwarderFiles) {
+    if (Test-Path $file) {
+        Check-NoPattern $file @(
+            "CreateFileW",
+            "WriteFile",
+            "CloseHandle",
+            "GetLastError",
+            "WaitNamedPipe",
+            "WaitNamedPipeW",
+            "windows.h",
+            "EventSubmitClient",
+            "AsyncEventQueue",
+            "LegacyPipeEventTransport",
+            "RaspEvalResult",
+            "AsyncEvent",
+            "DetectionEventLite",
+            "RuleSnapshot",
+            "lua_State",
+            "pcre2",
+            "AMSI_RESULT",
+            "EDR",
+            "SQL",
+            "database",
+            "Log(",
+            "OutputDebugStringA"
+        ) "LegacyDiagLogForwarder bytes-only boundary violation"
+    }
+}
 
 Check-NoStrongPattern "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h" @(
     "Reload",

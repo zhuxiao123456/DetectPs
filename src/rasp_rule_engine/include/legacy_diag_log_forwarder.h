@@ -1,15 +1,30 @@
 #pragma once
 
-#include "diag_log_sink.h"
+#include <cstdint>
+#include <limits>
+#include <string_view>
 
-// Legacy diag forwarder seam.
-//
-// This interface only models compatibility forwarding for diagnostic logs.
-// It intentionally does not expose pipe names, HANDLEs, Windows types, JSON
-// schema details, event submission clients, event queues, or detection DTOs.
-// A future .cpp implementation may use platform APIs behind this boundary.
-class ILegacyDiagLogForwarder {
+enum class LegacyDiagForwardStatus {
+    Sent,
+    EmptyPayload,
+    PayloadTooLarge,
+    PipeUnavailable,
+    AccessDenied,
+    WriteFailed
+};
+
+class ILegacyDiagBytesWriter {
 public:
-    virtual ~ILegacyDiagLogForwarder() = default;
-    virtual bool TryForward(const DiagLogRecord& record) = 0;
+    virtual ~ILegacyDiagBytesWriter() = default;
+    virtual LegacyDiagForwardStatus Send(std::string_view payload) = 0;
+};
+
+class LegacyDiagLogForwarder {
+public:
+    explicit LegacyDiagLogForwarder(ILegacyDiagBytesWriter& writer);
+
+    LegacyDiagForwardStatus Forward(std::string_view compactJson) const;
+
+private:
+    ILegacyDiagBytesWriter& writer_;
 };
