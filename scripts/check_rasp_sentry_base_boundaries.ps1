@@ -139,6 +139,7 @@ $interfaceFiles = @(
     "src\rasp_rule_engine\include\diag_log_sink.h",
     "src\rasp_rule_engine\include\diag_ring_buffer.h",
     "src\rasp_rule_engine\include\diag_logger_runtime.h",
+    "src\rasp_rule_engine\include\legacy_diag_json_builder.h",
     "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h",
     "src\rasp_rule_engine\include\legacy_pipe_transport.h"
 )
