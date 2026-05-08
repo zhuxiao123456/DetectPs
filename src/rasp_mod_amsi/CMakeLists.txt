@@ -40,7 +40,6 @@ add_library(rasp_mod_amsi SHARED
     src/amsi_rule_engine.cpp
     src/engine_runtime.cpp
     src/script_input_normalizer.cpp
-    src/script_session_context_cache.cpp
     src/rasp_mod_amsi.def
 )
 
@@ -77,7 +76,6 @@ add_executable(engine_runtime_tests
     src/amsi_rule_engine.cpp
     src/engine_runtime.cpp
     src/script_input_normalizer.cpp
-    src/script_session_context_cache.cpp
 )
 
 target_include_directories(engine_runtime_tests PRIVATE

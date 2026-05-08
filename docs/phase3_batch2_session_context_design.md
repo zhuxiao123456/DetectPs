@@ -333,3 +333,8 @@ database
 6. 跑 Phase 2 / Phase 3 Batch 1 回归。
 7. 跑边界检查脚本。
 8. 独立 commit / review。
+Status: Dormant / Experimental
+
+Production state: Not wired into current AMSI scan path
+
+Release commitment: Not supported in current version

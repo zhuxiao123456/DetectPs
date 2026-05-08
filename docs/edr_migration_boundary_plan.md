@@ -556,3 +556,12 @@ latest_allowed_release = <last release allowed to ship legacy pipe>
 - 优先抽象 `ScriptScanInput`、`ScriptScanResult`、`IRuleProvider`、`IEventSink`、`IConfigProvider`、`RuleSnapshot`。
 - 暂时不要改 `DllMain`、COM 注册、`IAntimalwareProvider::Scan()` 返回语义、Phase 2 `EngineRuntime` 状态机。
 - 下一步最小可执行任务：基于本门禁开发 Phase 3 Batch 2，并先写 `session-context` 测试。
+# Session aggregation status
+
+Status: Dormant / Experimental
+
+Production state: Not wired into current AMSI scan path
+
+Release commitment: Not supported in current version
+
+Any session-context references in this document describe a future candidate capability, not a current production AMSI detection feature.

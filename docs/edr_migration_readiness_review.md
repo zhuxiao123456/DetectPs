@@ -202,3 +202,12 @@
 - 未删除 legacy pipe。
 - 未接 EDR SDK。
 - 未修改 `LogForwardThreadProc()` / `Shutdown()` / Scan 相关逻辑。
+# Session aggregation status
+
+Status: Dormant / Experimental
+
+Production state: Not wired into current AMSI scan path
+
+Release commitment: Not supported in current version
+
+Session-context is retained as a dormant asset and is not part of the current production readiness claim.

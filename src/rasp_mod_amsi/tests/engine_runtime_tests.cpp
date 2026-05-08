@@ -256,8 +256,8 @@ int main()
             return 1;
 
         AmsiEvalResult second = engine.Evaluate(L"same-content", L"powershell.exe", "EX", 2);
-        if (!Expect(second.ruleMatched && second.ruleId == "split_iex",
-                    "session context exposes split token across chunks"))
+        if (!Expect(!second.ruleMatched,
+                    "production scan path does not aggregate split token chunks"))
             return 1;
     }
 

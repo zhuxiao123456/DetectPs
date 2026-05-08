@@ -26,8 +26,6 @@
 
 #include <algorithm>
 #include <cstdarg>
-#include <chrono>
-#include <functional>
 #define DEFAULT_CONFIDENCE 70
 // ── WideToUtf8 ────────────────────────────────────────────────────────────
 static std::string WideToUtf8(const wchar_t *w) {
@@ -165,13 +163,6 @@ static void EmitScanBudgetTelemetry(const ScanExecutionContext& exec)
              exec.regexSubjectTruncated ? 1 : 0,
              exec.matchedBeforeTimeout ? 1 : 0);
     OutputDebugStringA(msg);
-}
-
-static std::string MakeSessionContentHash(const std::string& contentName)
-{
-    if (contentName.empty())
-        return {};
-    return std::to_string(std::hash<std::string>{}(contentName));
 }
 
 void AmsiRuleEngine::PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
@@ -555,37 +546,16 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
     // true代表 isBinary
     NormalizedScriptInput normalized = m_inputNormalizer.Normalize(sample, sampleLen);
     if (!normalized.normalized.empty()) {
-        ScriptSessionKey sessionKey;
-        sessionKey.pid = GetCurrentProcessId();
-        sessionKey.tid = GetCurrentThreadId();
-        sessionKey.amsiSession = 0;
-        sessionKey.contentNameHash = MakeSessionContentHash(contentNameUtf8);
-        sessionKey.confidence = sessionKey.contentNameHash.empty()
-            ? SessionKeyConfidence::Weak
-            : SessionKeyConfidence::Medium;
-
-        const auto now = std::chrono::steady_clock::now().time_since_epoch();
-        uint64_t nowMs = static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(now).count());
-        SessionContextView sessionView =
-            m_sessionCache.UpdateAndBuildView(sessionKey, normalized.normalized, nowMs);
-        const std::string& body = sessionView.body.empty()
-            ? normalized.normalized
-            : sessionView.body;
-
-        ctx.fields.push_back({"body", body, true});
+        ctx.fields.push_back({"body", normalized.normalized, true});
         char msg[256];
         snprintf(msg, sizeof(msg),
-                 "[RaspAmsi][normalizer] rawLen=%zu normalizedLen=%zu truncated=%d utf16=%d b64=%d nulls=%d sessionAggregated=%d sessionTruncated=%d sessionBypassed=%d\n",
+                 "[RaspAmsi][normalizer] rawLen=%zu normalizedLen=%zu truncated=%d utf16=%d b64=%d nulls=%d\n",
                  normalized.rawLen,
                  normalized.normalizedLen,
                  normalized.truncated ? 1 : 0,
                  normalized.decodedUtf16Le ? 1 : 0,
                  normalized.decodedBase64 ? 1 : 0,
-                 normalized.hadNullBytes ? 1 : 0,
-                 sessionView.aggregated ? 1 : 0,
-                 sessionView.truncated ? 1 : 0,
-                 sessionView.cacheBypassed ? 1 : 0);
+                 normalized.hadNullBytes ? 1 : 0);
         OutputDebugStringA(msg);
     }
 

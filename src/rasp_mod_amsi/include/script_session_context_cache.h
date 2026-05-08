@@ -1,5 +1,10 @@
 #pragma once
 
+// Dormant / experimental component.
+// Not wired into the production AMSI scan path in the current release.
+// Keep tests for future research; do not include this header from
+// amsi_rule_engine.h unless session aggregation is explicitly re-enabled.
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
