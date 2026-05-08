@@ -22,6 +22,8 @@
 
 #include "../include/amsi_rule_engine.h"
 #include "../include/engine_runtime.h"
+#include "../include/process_context_provider.h"
+#include "../include/scan_context.h"
 #include "rasp_scan_budget.h"
 
 #include <algorithm>
@@ -533,6 +535,16 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
         const wchar_t *appName,
         const char *sample,
         ULONG sampleLen) {
+    ScanContext scanContext;
+    return Evaluate(contentName, appName, sample, sampleLen, scanContext);
+}
+
+AmsiEvalResult AmsiRuleEngine::Evaluate(
+        const wchar_t *contentName,
+        const wchar_t *appName,
+        const char *sample,
+        ULONG sampleLen,
+        const ScanContext& scanContext) {
     AmsiEvalResult result;
     // windows宽字符转换为内部统一使用的utf-8字符串
     std::string contentNameUtf8 = WideToUtf8(contentName);
@@ -543,6 +555,13 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
             {"contentName", contentNameUtf8},
             {"appName",     appNameUtf8},
     };
+    if (scanContext.process) {
+        const ProcessContextSnapshot& process = *scanContext.process;
+        ctx.fields.push_back({"parentPid", std::to_string(process.parentPid)});
+        ctx.fields.push_back({"parentProcessName", process.parentProcessName});
+        ctx.fields.push_back({"processCaptureStatus", ProcessCaptureStatusToString(process.status)});
+        ctx.fields.push_back({"processRetryState", ProcessRetryStateToString(process.retryState)});
+    }
     // true代表 isBinary
     NormalizedScriptInput normalized = m_inputNormalizer.Normalize(sample, sampleLen);
     if (!normalized.normalized.empty()) {

@@ -7,6 +7,8 @@
 #include "../include/rasp_mod_amsi.h"
 #include "../include/amsi_rule_engine.h"
 #include "../include/engine_runtime.h"
+#include "../include/process_context_provider.h"
+#include "../include/scan_context.h"
 
 static void LogHostProcess(const char *event) {
     char path[MAX_PATH] = {};
@@ -166,7 +168,12 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
         OutputDebugStringA(dbgSize);
     }
 
-    AmsiEvalResult eval = engine->Evaluate(contentName, appName, evalSample, evalLen);
+    const ProcessContextSnapshot& process = GetProcessContextProvider().GetSnapshot();
+    ScanContext scanContext;
+    scanContext.process = &process;
+    scanContext.emitProcessPathFields = false;
+
+    AmsiEvalResult eval = engine->Evaluate(contentName, appName, evalSample, evalLen, scanContext);
     if (eval.ruleMatched)
         OutputDebugStringA("[AMSI:Scan] rule matched - event already sent by engine\n");
     if (eval.block)

@@ -16,6 +16,8 @@
 #include "rasp_sentry_base.h"
 #include "script_input_normalizer.h"
 
+struct ScanContext;
+
 struct AmsiRaspRuleConfig : public RaspRuleBase {};
 
 struct AmsiEvalResult
@@ -36,6 +38,12 @@ public:
         const wchar_t* appName,
         const char*    sample,
         ULONG          sampleLen);
+    AmsiEvalResult Evaluate(
+        const wchar_t* contentName,
+        const wchar_t* appName,
+        const char*    sample,
+        ULONG          sampleLen,
+        const ScanContext& scanContext);
 
     std::vector<RaspEvalResult> Evaluate(
         const std::string&    sensor,

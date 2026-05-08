@@ -1,5 +1,7 @@
 #include "../include/engine_runtime.h"
 #include "../include/amsi_rule_engine.h"
+#include "../include/process_context_provider.h"
+#include "../include/scan_context.h"
 
 #include <atomic>
 #include <chrono>
@@ -60,6 +62,13 @@ std::string OneRegexRuleJson(const char* id, const char* pattern)
     return std::string("{\"rules\":[{\"id\":\"") + id +
            "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"split_regex\",\"config\":{\"regexPatterns\":[\"" +
            pattern + "\"]}}]}";
+}
+
+std::string OneRawLuaRuleJson(const char* id, const char* scriptBase64)
+{
+    return std::string("{\"rules\":[{\"id\":\"") + id +
+           "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"ctx_rule\",\"scriptBodyBase64\":\"" +
+           scriptBase64 + "\"}]}";
 }
 
 } // namespace
@@ -258,6 +267,78 @@ int main()
         AmsiEvalResult second = engine.Evaluate(L"same-content", L"powershell.exe", "EX", 2);
         if (!Expect(!second.ruleMatched,
                     "production scan path does not aggregate split token chunks"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const char* parentRule =
+            "ZnVuY3Rpb24gcnVsZShzZW5zb3IsIGNvbnRleHQpIGlmIGNvbnRleHQucGFyZW50UHJvY2Vzc05hbWUgPT0gJ2NtZC5leGUnIGFuZCBjb250ZXh0LnBhcmVudFBpZCA9PSAnMTIzNCcgYW5kIGNvbnRleHQucHJvY2Vzc0NhcHR1cmVTdGF0dXMgPT0gJ3N1Y2Nlc3MnIGFuZCBjb250ZXh0LnByb2Nlc3NSZXRyeVN0YXRlID09ICdub25lJyB0aGVuIHJldHVybiB7IG1hdGNoID0gdHJ1ZSwgZGVzYyA9ICdwYXJlbnQtY3R4JywgcGF5bG9hZCA9IGNvbnRleHQucGFyZW50UHJvY2Vzc05hbWUgfSBlbmQgcmV0dXJuIHsgbWF0Y2ggPSBmYWxzZSB9IGVuZA==";
+        if (!Expect(engine.ParseAndSwap(OneRawLuaRuleJson("parent_ctx", parentRule), ""),
+                    "parent context Lua snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.parentPid = 1234;
+        process.parentProcessName = "cmd.exe";
+        process.status = ProcessCaptureStatus::Success;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "Write-Host test",
+                                                 15,
+                                                 scanContext);
+        if (!Expect(matched.ruleMatched && matched.payload == "cmd.exe",
+                    "Lua can read parent process fields from scan context"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("body_regex", "DownloadString"), ""),
+                    "body regex snapshot publishes"))
+            return 1;
+
+        ScanContext scanContext;
+        scanContext.process = nullptr;
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "DownloadString",
+                                                 14,
+                                                 scanContext);
+        if (!Expect(matched.ruleMatched && matched.payload == "DownloadString",
+                    "nullptr process context does not block body detection"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const char* invalidRule =
+            "ZnVuY3Rpb24gcnVsZShzZW5zb3IsIGNvbnRleHQpIGlmIGNvbnRleHQucHJvY2Vzc0NhcHR1cmVTdGF0dXMgPT0gJ250ZGxsLXVuYXZhaWxhYmxlJyBhbmQgY29udGV4dC5wcm9jZXNzUmV0cnlTdGF0ZSA9PSAncGVuZGluZycgYW5kIGNvbnRleHQucGFyZW50UHJvY2Vzc05hbWUgPT0gJycgYW5kIGNvbnRleHQuYm9keSA9PSAnV3JpdGVIb3N0JyB0aGVuIHJldHVybiB7IG1hdGNoID0gdHJ1ZSwgZGVzYyA9ICdpbnZhbGlkLXByb2Nlc3MnLCBwYXlsb2FkID0gY29udGV4dC5wcm9jZXNzQ2FwdHVyZVN0YXR1cyB9IGVuZCByZXR1cm4geyBtYXRjaCA9IGZhbHNlIH0gZW5k";
+        if (!Expect(engine.ParseAndSwap(OneRawLuaRuleJson("invalid_process_ctx", invalidRule), ""),
+                    "invalid process context rule snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = false;
+        process.parentResolved = false;
+        process.status = ProcessCaptureStatus::NtdllUnavailable;
+        process.retryState = ProcessRetryState::Pending;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "WriteHost",
+                                                 9,
+                                                 scanContext);
+        if (!Expect(matched.ruleMatched && matched.payload == "ntdll-unavailable",
+                    "invalid process snapshot exposes degradation fields and preserves body detection"))
             return 1;
     }
 

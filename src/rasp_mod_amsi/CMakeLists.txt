@@ -39,6 +39,7 @@ add_library(rasp_mod_amsi SHARED
     src/amsi_provider.cpp
     src/amsi_rule_engine.cpp
     src/engine_runtime.cpp
+    src/process_context_provider.cpp
     src/script_input_normalizer.cpp
     src/rasp_mod_amsi.def
 )
@@ -75,6 +76,7 @@ add_executable(engine_runtime_tests
     tests/engine_runtime_tests.cpp
     src/amsi_rule_engine.cpp
     src/engine_runtime.cpp
+    src/process_context_provider.cpp
     src/script_input_normalizer.cpp
 )
 
@@ -369,4 +371,24 @@ target_compile_definitions(session_context_cache_tests PRIVATE
 
 if(MSVC)
     target_compile_options(session_context_cache_tests PRIVATE /W3 /WX-)
+endif()
+
+add_executable(process_context_provider_tests
+    tests/process_context_provider_tests.cpp
+    src/process_context_provider.cpp
+)
+
+target_include_directories(process_context_provider_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(process_context_provider_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+)
+
+if(MSVC)
+    target_compile_options(process_context_provider_tests PRIVATE /W3 /WX-)
 endif()
