@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <cstddef>
 
@@ -37,6 +38,9 @@ struct EventJsonBuildInput {
     std::string ip;
     std::string ua;
     std::string payload;
+    // Batch 3: parent process summary (事件层摘要，不含路径)
+    uint32_t    parentPid = 0;
+    std::string parentProcessName;
 };
 
 struct EventJsonBuildResult {

@@ -2,6 +2,7 @@
 #include "../include/amsi_rule_engine.h"
 #include "../include/process_context_provider.h"
 #include "../include/scan_context.h"
+#include "../include/event_submit_client.h"
 
 #include <atomic>
 #include <chrono>
@@ -9,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <map>
 
 namespace {
 
@@ -339,6 +341,186 @@ int main()
                                                  scanContext);
         if (!Expect(matched.ruleMatched && matched.payload == "ntdll-unavailable",
                     "invalid process snapshot exposes degradation fields and preserves body detection"))
+            return 1;
+    }
+
+    // Batch 3: 事件提交通路测试 - 验证 RaspEvalResult -> EventJsonBuildInput -> JSON
+    {
+        RaspEvalResult result;
+        result.matched = true;
+        result.block = true;
+        result.ruleId = "rule-parent-path";
+        result.sensor = "AmsiProvider";
+        result.desc = "parent path test";
+        result.payload = "test payload";
+        result.severity = "High";
+        result.contentName = "test.ps1";
+        result.appName = "powershell.exe";
+        result.confidence = 70;
+        result.parentPid = 5678;
+        result.parentProcessName = "wscript.exe";
+
+        EventJsonBuildInput input;
+        input.eventId = "evt-test";
+        input.timestamp = "2026-05-09T00:00:00Z";
+        input.moduleName = "rasp_mod_amsi";
+        input.ruleId = result.ruleId;
+        input.sensor = result.sensor;
+        input.block = result.block;
+        input.severity = result.severity;
+        input.description = result.desc;
+        input.appName = result.appName;
+        input.contentName = result.contentName;
+        input.confidence = result.confidence;
+        input.payload = result.payload;
+        input.parentPid = result.parentPid;
+        input.parentProcessName = result.parentProcessName;
+
+        EventJsonBuilder builder;
+        EventJsonBuildResult built = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        size_t i = 0;
+        const std::string& json = built.compactJson;
+        auto skipWs = [&]() {
+            while (i < json.size() && (json[i] == ' ' || json[i] == '\t' || json[i] == '\r' || json[i] == '\n'))
+                ++i;
+        };
+        auto readString = [&](std::string& s) {
+            skipWs();
+            if (i >= json.size() || json[i] != '"')
+                return false;
+            ++i;
+            s.clear();
+            while (i < json.size() && json[i] != '"') {
+                if (json[i] == '\\') {
+                    ++i;
+                    if (i >= json.size())
+                        return false;
+                    switch (json[i]) {
+                    case '"': s.push_back('"'); break;
+                    case '\\': s.push_back('\\'); break;
+                    case 'n': s.push_back('\n'); break;
+                    case 'r': s.push_back('\r'); break;
+                    case 't': s.push_back('\t'); break;
+                    default: s.push_back(json[i]); break;
+                    }
+                    ++i;
+                } else {
+                    s.push_back(json[i++]);
+                }
+            }
+            if (i >= json.size() || json[i] != '"')
+                return false;
+            ++i;
+            return true;
+        };
+
+        skipWs();
+        if (i >= json.size() || json[i++] != '{')
+            return 1;
+        skipWs();
+        while (i < json.size() && json[i] != '}') {
+            std::string key, value;
+            if (!readString(key))
+                return 1;
+            skipWs();
+            if (i >= json.size() || json[i++] != ':')
+                return 1;
+            if (!readString(value))
+                return 1;
+            fields[key] = value;
+            skipWs();
+            if (i < json.size() && json[i] == ',')
+                ++i;
+            skipWs();
+        }
+
+        if (!Expect(fields["parentPid"] == "5678",
+                    "event submit path: parentPid 5678 reaches JSON"))
+            return 1;
+        if (!Expect(fields["parentProcessName"] == "wscript.exe",
+                    "event submit path: parentProcessName wscript.exe reaches JSON"))
+            return 1;
+    }
+
+    // Batch 3: 事件提交通路测试 - 空 parent 字段
+    {
+        RaspEvalResult result;
+        result.matched = true;
+        result.ruleId = "rule-empty-parent";
+        result.parentPid = 0;
+        result.parentProcessName.clear();
+
+        EventJsonBuildInput input;
+        input.parentPid = result.parentPid;
+        input.parentProcessName = result.parentProcessName;
+
+        EventJsonBuilder builder;
+        EventJsonBuildResult built = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        size_t i = 0;
+        const std::string& json = built.compactJson;
+        auto skipWs = [&]() {
+            while (i < json.size() && (json[i] == ' ' || json[i] == '\t' || json[i] == '\r' || json[i] == '\n'))
+                ++i;
+        };
+        auto readString = [&](std::string& s) {
+            skipWs();
+            if (i >= json.size() || json[i] != '"')
+                return false;
+            ++i;
+            s.clear();
+            while (i < json.size() && json[i] != '"') {
+                if (json[i] == '\\') {
+                    ++i;
+                    if (i >= json.size())
+                        return false;
+                    switch (json[i]) {
+                    case '"': s.push_back('"'); break;
+                    case '\\': s.push_back('\\'); break;
+                    case 'n': s.push_back('\n'); break;
+                    case 'r': s.push_back('\r'); break;
+                    case 't': s.push_back('\t'); break;
+                    default: s.push_back(json[i]); break;
+                    }
+                    ++i;
+                } else {
+                    s.push_back(json[i++]);
+                }
+            }
+            if (i >= json.size() || json[i] != '"')
+                return false;
+            ++i;
+            return true;
+        };
+
+        skipWs();
+        if (i >= json.size() || json[i++] != '{')
+            return 1;
+        skipWs();
+        while (i < json.size() && json[i] != '}') {
+            std::string key, value;
+            if (!readString(key))
+                return 1;
+            skipWs();
+            if (i >= json.size() || json[i++] != ':')
+                return 1;
+            if (!readString(value))
+                return 1;
+            fields[key] = value;
+            skipWs();
+            if (i < json.size() && json[i] == ',')
+                ++i;
+            skipWs();
+        }
+
+        if (!Expect(fields["parentPid"] == "0",
+                    "event submit path: empty parentPid is 0 in JSON"))
+            return 1;
+        if (!Expect(fields["parentProcessName"].empty(),
+                    "event submit path: empty parentProcessName is empty in JSON"))
             return 1;
     }
 

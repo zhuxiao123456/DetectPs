@@ -353,6 +353,9 @@ EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& resu
     input.ip = result.ip;
     input.ua = result.ua;
     input.payload = result.payload;
+    // Batch 3: parent process fields
+    input.parentPid = result.parentPid;
+    input.parentProcessName = result.parentProcessName;
 
     EventJsonBuildResult built = EventJsonBuilder().BuildDetection(input);
 

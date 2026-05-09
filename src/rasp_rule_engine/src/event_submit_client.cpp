@@ -120,7 +120,9 @@ EventJsonBuildResult EventJsonBuilder::BuildDetection(const EventJsonBuildInput&
         << "\"confidence\":\"" << JsonEscape(confidence) << "\","
         << "\"ip\":\"" << JsonEscape(input.ip) << "\","
         << "\"ua\":\"" << JsonEscape(input.ua) << "\","
-        << "\"pattern\":\"" << JsonEscape(result.payload) << "\"}";
+        << "\"pattern\":\"" << JsonEscape(result.payload) << "\","
+        << "\"parentPid\":\"" << input.parentPid << "\","
+        << "\"parentProcessName\":\"" << JsonEscape(input.parentProcessName) << "\"}";
     result.compactJson = oss.str();
     return result;
 }

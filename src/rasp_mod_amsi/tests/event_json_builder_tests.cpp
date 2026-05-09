@@ -119,7 +119,9 @@ int main()
             "\"confidence\":\"91\","
             "\"ip\":\"127.0.0.1\","
             "\"ua\":\"unit-test\","
-            "\"pattern\":\"IEX \\\"payload\\\"\\n中文\"}";
+            "\"pattern\":\"IEX \\\"payload\\\"\\n中文\","
+            "\"parentPid\":\"0\","
+            "\"parentProcessName\":\"\"}";
 
         if (!Expect(result.compactJson == expected, "raw JSON matches legacy field order and escaping"))
             return 1;
@@ -229,6 +231,72 @@ int main()
             return 1;
         if (!Expect(fields["pattern"].find("\xE4\xB8\xAD") == std::string::npos,
                     "truncated payload does not contain partial Chinese character"))
+            return 1;
+    }
+
+    // Batch 3: parentPid = 1234
+    {
+        EventJsonBuilder builder;
+        EventJsonBuildInput input = BaseInput();
+        input.parentPid = 1234;
+        input.parentProcessName = "cmd.exe";
+        EventJsonBuildResult result = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        if (!Expect(ParseFlatJsonObject(result.compactJson, fields), "parent JSON parses"))
+            return 1;
+        if (!Expect(fields["parentPid"] == "1234", "parentPid output as string"))
+            return 1;
+        if (!Expect(fields["parentProcessName"] == "cmd.exe", "parentProcessName output"))
+            return 1;
+    }
+
+    // Batch 3: parentPid = 0 (empty)
+    {
+        EventJsonBuilder builder;
+        EventJsonBuildInput input = BaseInput();
+        input.parentPid = 0;
+        input.parentProcessName.clear();
+        EventJsonBuildResult result = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        if (!Expect(ParseFlatJsonObject(result.compactJson, fields), "empty parent JSON parses"))
+            return 1;
+        if (!Expect(fields["parentPid"] == "0", "parentPid is 0 when empty"))
+            return 1;
+        if (!Expect(fields["parentProcessName"].empty(), "parentProcessName empty when not captured"))
+            return 1;
+    }
+
+    // Batch 3: parentPid = 4 (System sentinel)
+    {
+        EventJsonBuilder builder;
+        EventJsonBuildInput input = BaseInput();
+        input.parentPid = 4;
+        input.parentProcessName = "System";
+        EventJsonBuildResult result = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        if (!Expect(ParseFlatJsonObject(result.compactJson, fields), "System parent JSON parses"))
+            return 1;
+        if (!Expect(fields["parentPid"] == "4", "System parentPid is 4"))
+            return 1;
+        if (!Expect(fields["parentProcessName"] == "System", "System parent name is stable sentinel"))
+            return 1;
+    }
+
+    // Batch 3: special characters in parentProcessName
+    {
+        EventJsonBuilder builder;
+        EventJsonBuildInput input = BaseInput();
+        input.parentProcessName = "process with spaces & special chars \"test\"";
+        EventJsonBuildResult result = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        if (!Expect(ParseFlatJsonObject(result.compactJson, fields), "special chars JSON parses"))
+            return 1;
+        if (!Expect(fields["parentProcessName"] == "process with spaces & special chars \"test\"",
+                    "parentProcessName preserves special chars after escape roundtrip"))
             return 1;
     }
 

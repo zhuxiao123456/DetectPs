@@ -251,6 +251,11 @@ Check-NoPattern "src\rasp_rule_engine\include\diag_log_sink.h" @(
 ) "DiagLogSink boundary violation"
 
 Check-NoPattern "src\rasp_rule_engine\include\diag_ring_buffer.h" @(
+    "CreateThread",
+    "WaitForSingleObject",
+    "SetEvent",
+    "CreateEvent",
+    "CRITICAL_SECTION",
     "CreateFileW",
     "WriteFile",
     "WaitNamedPipe",
@@ -270,11 +275,17 @@ Check-NoPattern "src\rasp_rule_engine\include\diag_ring_buffer.h" @(
     "lua_State",
     "pcre2",
     "RaspLuaEngine",
+    "LegacyDiagJsonBuilder",
+    "LegacyDiagLogForwarder",
+    "LegacyDiagPipeWriter",
     "EventSubmitClient",
     "AsyncEventQueue"
 ) "DiagRingBuffer boundary violation"
 
 Check-NoPattern "src\rasp_rule_engine\include\diag_logger_runtime.h" @(
+    "LegacyDiagJsonBuilder",
+    "LegacyDiagLogForwarder",
+    "LegacyDiagPipeWriter",
     "CreateFileW",
     "WriteFile",
     "WaitNamedPipe",
@@ -297,6 +308,82 @@ Check-NoPattern "src\rasp_rule_engine\include\diag_logger_runtime.h" @(
     "AsyncEventQueue",
     "diag JSON"
 ) "DiagLoggerRuntime boundary violation"
+
+$diagLoggerRuntimeFiles = @(
+    "src\rasp_rule_engine\include\diag_logger_runtime.h",
+    "src\rasp_rule_engine\src\diag_logger_runtime.cpp"
+)
+
+foreach ($file in $diagLoggerRuntimeFiles) {
+    if (Test-Path $file) {
+        Check-NoStrongPattern $file @(
+            "LegacyDiagJsonBuilder",
+            "LegacyDiagLogForwarder",
+            "LegacyDiagPipeWriter",
+            "CreateFileW",
+            "WriteFile",
+            "WaitNamedPipe",
+            "WaitNamedPipeW",
+            "CreateNamedPipe",
+            "CreateNamedPipeW",
+            "ConnectNamedPipe",
+            "ConnectNamedPipeW",
+            "EventSubmitClient",
+            "AsyncEventQueue",
+            "RuleSnapshot",
+            "lua_State",
+            "pcre2",
+            "AMSI_RESULT",
+            "DetectionAction",
+            "ScanStatus",
+            "EDR",
+            "SQL",
+            "database",
+            "Log(",
+            "OutputDebugStringA"
+        ) "DiagLoggerRuntime must remain lifecycle-only"
+    }
+}
+
+$diagRingBufferFiles = @(
+    "src\rasp_rule_engine\include\diag_ring_buffer.h",
+    "src\rasp_rule_engine\src\diag_ring_buffer.cpp"
+)
+
+foreach ($file in $diagRingBufferFiles) {
+    if (Test-Path $file) {
+        Check-NoStrongPattern $file @(
+            "CreateThread",
+            "WaitForSingleObject",
+            "SetEvent",
+            "CreateEvent",
+            "HANDLE",
+            "CRITICAL_SECTION",
+            "CreateFileW",
+            "WriteFile",
+            "WaitNamedPipe",
+            "WaitNamedPipeW",
+            "CreateNamedPipe",
+            "CreateNamedPipeW",
+            "ConnectNamedPipe",
+            "ConnectNamedPipeW",
+            "LegacyDiagJsonBuilder",
+            "LegacyDiagLogForwarder",
+            "LegacyDiagPipeWriter",
+            "EventSubmitClient",
+            "AsyncEventQueue",
+            "RuleSnapshot",
+            "lua_State",
+            "pcre2",
+            "AMSI_RESULT",
+            "DetectionAction",
+            "ScanStatus",
+            "EDR",
+            "SQL",
+            "database"
+        ) "DiagRingBuffer must remain data-structure-only"
+    }
+}
 
 Check-NoPattern "src\rasp_rule_engine\include\legacy_diag_log_forwarder.h" @(
     "diag_log_sink",
@@ -693,5 +780,25 @@ Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
         "HANDLE hPipe",
         "DWORD written"
     ) "LogForwardThreadProc must use LegacyDiagJsonBuilder and LegacyDiagLogForwarder"
+
+Check-FunctionBlockNoPattern "src\rasp_rule_engine\src\rasp_sentry_base.cpp" `
+    "void RaspSentryBase::Shutdown" @(
+        "INFINITE",
+        "while (",
+        "for (;;",
+        "LegacyDiagJsonBuilder",
+        "LegacyDiagLogForwarder",
+        "LegacyDiagPipeWriter",
+        "EventSubmitClient",
+        "AsyncEventQueue",
+        "OutputDebugStringA",
+        "CreateThread",
+        "EDR",
+        "SQL",
+        "database",
+        "RuleSnapshot",
+        "lua_State",
+        "pcre2"
+    ) "Shutdown must not grow log-forwarder, event, product-log, or infinite-wait dependencies"
 
 Write-Host "[b0-boundary] passed"

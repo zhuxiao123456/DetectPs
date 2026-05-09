@@ -29,6 +29,19 @@
 #include <algorithm>
 #include <cstdarg>
 #define DEFAULT_CONFIDENCE 70
+
+namespace {
+
+uint32_t ParseUint32OrZero(const std::string& value)
+{
+    try {
+        return static_cast<uint32_t>(std::stoul(value));
+    } catch (...) {
+        return 0;
+    }
+}
+
+} // namespace
 // ── WideToUtf8 ────────────────────────────────────────────────────────────
 static std::string WideToUtf8(const wchar_t *w) {
     if (!w || w[0] == L'\0')
@@ -372,6 +385,17 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         return results;
     RaspLuaEngine& luaEngine = *snap->luaEngine;
 
+    // Batch 3: 一次性提取 parent 字段
+    uint32_t parentPid = 0;
+    std::string parentProcessName;
+    for (const auto &f: ctx.fields) {
+        if (f.name == "parentPid") {
+            parentPid = ParseUint32OrZero(f.value);
+        } else if (f.name == "parentProcessName") {
+            parentProcessName = f.value;
+        }
+    }
+
     // Extract context fields for result population
     std::string contentName;
     std::string appName;
@@ -504,6 +528,9 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         // url/method carry contentName/appName so SendDetectionEvent JSONL is complete
         r.contentName = contentName;
         r.appName = appName;
+        // Batch 3: parent process fields
+        r.parentPid = parentPid;
+        r.parentProcessName = parentProcessName;
         if (rule.confidence) {
             r.confidence = rule.confidence;
         } else {
@@ -511,8 +538,9 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
         }
         TrySubmitDetectionEvent(r);
         exec.matchedBeforeTimeout = true;
+        const bool shouldBlock = r.block;
         results.push_back(std::move(r));
-        if (r.block) {
+        if (shouldBlock) {
             break;  // 匹配到第一个阻断的才行
         }
     }
