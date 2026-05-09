@@ -524,5 +524,101 @@ int main()
             return 1;
     }
 
+    // Batch 4b: 采集失败时事件输出完整性 - NtdllUnavailable
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("fail_test_rule", "DownloadString"), ""),
+                    "fail_test_rule snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = false;
+        process.parentResolved = false;
+        process.parentPid = 0;
+        process.parentProcessName.clear();
+        process.status = ProcessCaptureStatus::NtdllUnavailable;
+        process.retryState = ProcessRetryState::Exhausted;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+
+        AmsiEvalResult matched = engine.Evaluate(L"fail_test.ps1",
+                                                 L"powershell.exe",
+                                                 "DownloadString",
+                                                 14,
+                                                 scanContext);
+
+        if (!Expect(matched.ruleMatched, "采集失败不阻塞规则匹配"))
+            return 1;
+        if (!Expect(matched.block, "采集失败不改变 block 决策"))
+            return 1;
+    }
+
+    // Batch 4b: ParentSystem 哨兵值事件输出
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("system_parent_rule", "Write-Host"), ""),
+                    "system_parent_rule snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.parentPid = 4;  // System 进程
+        process.parentProcessName = "System";
+        process.status = ProcessCaptureStatus::ParentSystem;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+
+        AmsiEvalResult matched = engine.Evaluate(L"system_test.ps1",
+                                                 L"powershell.exe",
+                                                 "Write-Host test",
+                                                 15,
+                                                 scanContext);
+
+        if (!Expect(matched.ruleMatched, "ParentSystem 不阻塞规则匹配"))
+            return 1;
+    }
+
+    // Batch 4c: 并发检测时 parent 字段传递一致性
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("concurrent_rule", "Get-Process"), ""),
+                    "concurrent_rule snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.parentPid = 9999;
+        process.parentProcessName = "test_parent.exe";
+        process.status = ProcessCaptureStatus::Success;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+
+        std::atomic<int> matchCount{0};
+        std::vector<std::thread> threads;
+        for (int i = 0; i < 8; ++i) {
+            threads.emplace_back([&]() {
+                AmsiEvalResult result = engine.Evaluate(L"concurrent.ps1",
+                                                        L"powershell.exe",
+                                                        "Get-Process",
+                                                        11,
+                                                        scanContext);
+                if (result.ruleMatched)
+                    matchCount.fetch_add(1);
+            });
+        }
+        for (auto& t : threads)
+            t.join();
+
+        if (!Expect(matchCount.load() == 8, "并发检测全部成功匹配"))
+            return 1;
+    }
+
     return 0;
 }

