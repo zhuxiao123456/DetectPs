@@ -183,7 +183,7 @@ void ConfigWatcher::WatchDirectory(const std::wstring& dir, const wchar_t* filte
 
 void ConfigWatcher::OnChanged()
 {
-    SentryLog_Info("ConfigWatcher", "File change detected — debouncing %lums", kDebounceMs);
+    SentryLog_Info("ConfigWatcher", "File change detected - debouncing %lums", kDebounceMs);
 
     EnterCriticalSection(&m_debounceLock);
     // Cancel any pending timer, then create a fresh one-shot timer.
@@ -206,7 +206,7 @@ VOID CALLBACK ConfigWatcher::DebounceCallback(PVOID param, BOOLEAN /*fired*/)
 
 void ConfigWatcher::FireDebounced()
 {
-    SentryLog_Info("ConfigWatcher", "Debounce expired — invalidating cache and broadcasting reload");
+    SentryLog_Info("ConfigWatcher", "Debounce expired - invalidating cache and broadcasting reload");
     if (m_ruleServer) m_ruleServer->InvalidateCache();
     BroadcastReload();
 }
@@ -254,5 +254,5 @@ void ConfigWatcher::BroadcastReload()
         CloseHandle(hPipe);
         ++reached;
     }
-    SentryLog_Info("ConfigWatcher", "Broadcast complete — reached %d listener(s)", reached);
+    SentryLog_Info("ConfigWatcher", "Broadcast complete - reached %d listener(s)", reached);
 }
