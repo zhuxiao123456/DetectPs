@@ -268,7 +268,7 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut, std::string& libSourceO
     }
     response.resize(bytesRead);
 
-    Log("[%s] ConnectSentry: received %lu bytes - parsing", ModuleName(), bytesRead);
+    Log("[%s] ConnectSentry: received %lu bytes 鈥?parsing", ModuleName(), bytesRead);
 
     jsonOut = response;
 
@@ -567,7 +567,7 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
 DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
 {
     auto* self = static_cast<RaspSentryBase*>(param);
-    self->Log("[%s] SentryRetryThread: started - polling every 5s", self->ModuleName());
+    self->Log("[%s] SentryRetryThread: started 鈥?polling every 5s", self->ModuleName());
 
     while (self->m_running.load())
     {
@@ -580,7 +580,7 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
         std::string json;
         std::string lib;
         if (self->ConnectSentry(json, lib) && self->ParseAndSwap(json, lib)) {
-            self->Log("[%s] SentryRetryThread: rules loaded - exiting", self->ModuleName());
+            self->Log("[%s] SentryRetryThread: rules loaded 鈥?exiting", self->ModuleName());
             break;
         }
 
@@ -615,7 +615,7 @@ void RaspSentryBase::Initialize()
     // (IIS7 and AMSI both set the proxy before calling base Initialize via
     //  the existing pattern 鈥?see their OnBeginInit hooks.)
 
-    Log("[%s] Initialize: starting - all config via rasp_sentry IPC", ModuleName());
+    Log("[%s] Initialize: starting 鈥?all config via rasp_sentry IPC", ModuleName());
 
     std::string json, lib;
     bool loaded = ConnectSentry(json, lib) && ParseAndSwap(json, lib);
@@ -626,7 +626,7 @@ void RaspSentryBase::Initialize()
     }
     else
     {
-        Log("[%s] Initialize: sentry unavailable - pass-through; starting retry thread",
+        Log("[%s] Initialize: sentry unavailable 鈥?pass-through; starting retry thread",
             ModuleName());
         m_retryThread = CreateThread(nullptr, 0, SentryRetryThreadProc, this, 0, nullptr);
     }

@@ -71,7 +71,7 @@ target_link_libraries(rasp_sentry PRIVATE
 
 # Static CRT — no MSVCRT*.dll / msvcp*.dll dependency on deployment host
 if(MSVC)
-    target_compile_options(rasp_sentry PRIVATE /W3 /WX- /MP /utf-8)
+    target_compile_options(rasp_sentry PRIVATE /W3 /WX- /MP)
     set_property(TARGET rasp_sentry PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
