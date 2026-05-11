@@ -90,18 +90,18 @@ int wmain(int argc, wchar_t **argv)
 
     // ── Start in dependency order (mirrors Program.cs) ────────────────────────
     collector.Start();
-    SentryLog_Info("Program", "EventCollector started — %d threads on rasp_sentry_events",
+    SentryLog_Info("Program", "EventCollector started - %d threads on rasp_sentry_events",
                    EventCollector::kThreadCount);
 
     ruleServer.Start();
-    SentryLog_Info("Program", "RuleServer started — %d threads on rasp_sentry_rules",
+    SentryLog_Info("Program", "RuleServer started - %d threads on rasp_sentry_rules",
                    RuleServer::kThreadCount);
 
     watcher.Start();
-    SentryLog_Info("Program", "ConfigWatcher started — watching %s", rulesPath.c_str());
+    SentryLog_Info("Program", "ConfigWatcher started - watching %s", rulesPath.c_str());
 
     stagingWatcher.Start();
-    SentryLog_Info("Program", "AmsiStagingWatcher started — staging: %s", stagingDir.c_str());
+    SentryLog_Info("Program", "AmsiStagingWatcher started - staging: %s", stagingDir.c_str());
 
     SentryLog_Info("Program", "rasp_sentry_native running. Press Ctrl+C to stop.");
 

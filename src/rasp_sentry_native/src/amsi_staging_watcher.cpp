@@ -160,7 +160,7 @@ void AmsiStagingWatcher::WatchLoop()
 
 void AmsiStagingWatcher::OnChanged()
 {
-    SentryLog_Info("AmsiStagingWatcher", "Staged DLL detected — debouncing %dms", kDebounceMs);
+    SentryLog_Info("AmsiStagingWatcher", "Staged DLL detected - debouncing %dms", kDebounceMs);
 
     EnterCriticalSection(&m_debounceLock);
     if (m_debounceTimer)
@@ -191,7 +191,7 @@ void AmsiStagingWatcher::TriggerUpdate()
     if (installedPath.empty())
     {
         SentryLog_Warn("AmsiStagingWatcher",
-                       "Cannot read installed DLL path from registry (CLSID %ls) — aborting update",
+                       "Cannot read installed DLL path from registry (CLSID %ls) - aborting update",
                        kAmsiClsid);
         return;
     }
@@ -214,7 +214,7 @@ void AmsiStagingWatcher::TriggerUpdate()
     if (!ackReceived)
     {
         SentryLog_Info("AmsiStagingWatcher",
-                       "Drain ACK not received in time — waiting %dms as fallback", kDrainWaitMs);
+                       "Drain ACK not received in time - waiting %dms as fallback", kDrainWaitMs);
         Sleep(kDrainWaitMs);
     }
 
@@ -222,13 +222,13 @@ void AmsiStagingWatcher::TriggerUpdate()
     if (TryShadowReplace(stagedPath, installedPath))
     {
         SentryLog_Info("AmsiStagingWatcher",
-                       "DLL replaced via shadow rename — next AMSI scan will load the new binary");
+                       "DLL replaced via shadow rename - next AMSI scan will load the new binary");
         return;
     }
 
     // Secondary: retry MoveFileEx(REPLACE_EXISTING) for up to kRetryTimeoutMs.
     SentryLog_Warn("AmsiStagingWatcher",
-                   "Shadow rename failed — retrying MoveFileEx for up to %ds",
+                   "Shadow rename failed - retrying MoveFileEx for up to %ds",
                    kRetryTimeoutMs / 1000);
     bool replaced = false;
     int  elapsed  = 0;

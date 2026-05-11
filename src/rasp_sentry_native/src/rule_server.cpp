@@ -62,7 +62,7 @@ void RuleServer::Stop()
 
 void RuleServer::InvalidateCache()
 {
-    SentryLog_Info("RuleServer", "Cache invalidated — next request will rebuild from disk");
+    SentryLog_Info("RuleServer", "Cache invalidated - next request will rebuild from disk");
     EnterCriticalSection(&m_cacheLock);
     m_cachedAssembled.clear();
     m_cachedAmsiRules.clear();
@@ -155,7 +155,7 @@ const std::string& RuleServer::GetAssembledJson()
     EnterCriticalSection(&m_cacheLock);
     if (m_cachedAssembled.empty())
     {
-        SentryLog_Info("RuleServer", "Cache miss — building assembled JSON");
+        SentryLog_Info("RuleServer", "Cache miss - building assembled JSON");
         m_cachedAssembled = BuildAssembledJson();
     }
     LeaveCriticalSection(&m_cacheLock);
@@ -172,7 +172,7 @@ const std::string& RuleServer::GetAmsiRulesJson()
     EnterCriticalSection(&m_cacheLock);
     if (m_cachedAmsiRules.empty())
     {
-        SentryLog_Info("RuleServer", "Cache miss — building AMSI-filtered JSON");
+        SentryLog_Info("RuleServer", "Cache miss - building AMSI-filtered JSON");
         m_cachedAmsiRules = FilterAmsiProviderRules(m_cachedAssembled);
     }
     LeaveCriticalSection(&m_cacheLock);
@@ -245,7 +245,7 @@ static void InlineScriptFiles(json& root, const std::string& rulesDir)
         std::ifstream fs(absPath, std::ios::binary);
         if (!fs.is_open())
         {
-            SentryLog_Warn("RuleServer", "Script not found: %s — rule gets empty scriptBodyBase64", absPath.c_str());
+            SentryLog_Warn("RuleServer", "Script not found: %s - rule gets empty scriptBodyBase64", absPath.c_str());
             rule["scriptBodyBase64"] = "";
             continue;
         }
