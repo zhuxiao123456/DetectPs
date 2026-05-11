@@ -220,16 +220,37 @@ void ConfigWatcher::BroadcastReload()
     for (int i = 0; i < kMaxListeners; i++)
     {
         if (!WaitNamedPipeW(kConfigPipeName, kBroadcastTimeout))
-            break;  // no more listeners
+        {
+            DWORD gle = GetLastError();
+            SentryLog_Info("ConfigWatcher",
+                           "WaitNamedPipeW stopped broadcast (GLE=%lu, reached=%d)",
+                           gle, reached);
+            break;  // no more listeners or access denied
+        }
 
         HANDLE hPipe = CreateFileW(kConfigPipeName,
                                    GENERIC_WRITE, 0, nullptr,
                                    OPEN_EXISTING, 0, nullptr);
-        if (hPipe == INVALID_HANDLE_VALUE) break;
+        if (hPipe == INVALID_HANDLE_VALUE)
+        {
+            DWORD gle = GetLastError();
+            SentryLog_Error("ConfigWatcher",
+                            "CreateFileW on rasp_sentry_config failed (GLE=%lu, reached=%d)",
+                            gle, reached);
+            break;
+        }
 
         BYTE   signal  = 0x01;
         DWORD  written = 0;
-        WriteFile(hPipe, &signal, 1, &written, nullptr);
+        if (!WriteFile(hPipe, &signal, 1, &written, nullptr) || written != 1)
+        {
+            DWORD gle = GetLastError();
+            SentryLog_Error("ConfigWatcher",
+                            "WriteFile on rasp_sentry_config failed (GLE=%lu, written=%lu, reached=%d)",
+                            gle, written, reached);
+            CloseHandle(hPipe);
+            break;
+        }
         CloseHandle(hPipe);
         ++reached;
     }

@@ -1,5 +1,5 @@
-// =========================================================================
-// rasp_sentry_base.cpp — Shared RASP infrastructure (log, IPC, threads).
+﻿// =========================================================================
+// rasp_sentry_base.cpp 鈥?Shared RASP infrastructure (log, IPC, threads).
 //
 // Extracted verbatim from iis7_rule_engine.cpp and amsi_rule_engine.cpp.
 // Contains all code that was duplicated between the two modules:
@@ -8,7 +8,7 @@
 //   - ConnectSentry() IPC handshake (GET_ALL_RULES)
 //   - ParseRulesJson()  (base-field recursive-descent parser)
 //   - SendDetectionEvent() (replaces amsi_event_sender::SendAmsiEvent)
-//   - LogForwardThreadProc  (ring-buffer drain → rasp_sentry_events)
+//   - LogForwardThreadProc  (ring-buffer drain 鈫?rasp_sentry_events)
 //   - ConfigPipeThreadProc  (reload signal server on rasp_sentry_config)
 //   - SentryRetryThreadProc (polls sentry every 5 s until first load)
 //   - Initialize() / Shutdown()
@@ -33,14 +33,59 @@
 #include "../include/rasp_sentry_base.h"
 
 // =========================================================================
-// 处理所有与 rasp_sentry（外部守护进程）的 IPC 通信、无锁环形日志队列、以及极轻量级的 JSON 解析
+// 澶勭悊鎵€鏈変笌 rasp_sentry锛堝閮ㄥ畧鎶よ繘绋嬶級鐨?IPC 閫氫俊銆佹棤閿佺幆褰㈡棩蹇楅槦鍒椼€佷互鍙婃瀬杞婚噺绾х殑 JSON 瑙ｆ瀽
 // =========================================================================
 static INIT_ONCE s_logCsOnce = INIT_ONCE_STATIC_INIT;
+
+static bool BuildCurrentUserConfigPipeSecurityAttributes(SECURITY_ATTRIBUTES& sa,
+                                                         PSECURITY_DESCRIPTOR& sd,
+                                                         std::wstring& sddlOut)
+{
+    sa = { sizeof(sa), nullptr, FALSE };
+    sd = nullptr;
+
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
+        return false;
+
+    DWORD bytes = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &bytes);
+    if (bytes == 0)
+    {
+        CloseHandle(token);
+        return false;
+    }
+
+    std::vector<BYTE> tokenBuffer(bytes);
+    if (!GetTokenInformation(token, TokenUser, tokenBuffer.data(), bytes, &bytes))
+    {
+        CloseHandle(token);
+        return false;
+    }
+    CloseHandle(token);
+
+    auto* tokenUser = reinterpret_cast<TOKEN_USER*>(tokenBuffer.data());
+    LPWSTR userSid = nullptr;
+    if (!ConvertSidToStringSidW(tokenUser->User.Sid, &userSid))
+        return false;
+
+    sddlOut = L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;";
+    sddlOut += userSid;
+    sddlOut += L")";
+    LocalFree(userSid);
+
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddlOut.c_str(), SDDL_REVISION_1, &sd, nullptr))
+        return false;
+
+    sa.lpSecurityDescriptor = sd;
+    return true;
+}
 
 static BOOL WINAPI LogCsInit(INIT_ONCE*, PVOID, PVOID*)
 {
     // NOTE: Each RaspSentryBase instance owns its own CRITICAL_SECTION (m_logCs)
-    // and HANDLE (m_logEvent) — this INIT_ONCE is just a one-time initializer flag
+    // and HANDLE (m_logEvent) 鈥?this INIT_ONCE is just a one-time initializer flag
     // per process. Actual per-instance init happens in EnsureLogCsInit().
     return TRUE;
 }
@@ -55,7 +100,7 @@ void RaspSentryBase::EnsureLogCsInit()
 }
 
 // =========================================================================
-// Log() — public; thread-safe; writes to OutputDebugString AND ring buffer.
+// Log() 鈥?public; thread-safe; writes to OutputDebugString AND ring buffer.
 // =========================================================================
 
 void RaspSentryBase::Log(const char* fmt, ...) const
@@ -81,14 +126,13 @@ void RaspSentryBase::Log(const char* fmt, ...) const
 
     OutputDebugStringA(buf);
 
-    // Cast away const — ring buffer mutation is logically non-observable to callers.
+    // Cast away const 鈥?ring buffer mutation is logically non-observable to callers.
     const_cast<RaspSentryBase*>(this)->EnqueueLog(buf);
 }
 /*
- * 功能：极低开销的无锁/自旋锁日志记录
- * 流程：Log 写入环形数组（如果满了就覆盖最老的）-> 触发 m_logEvent -> 后台线程 LogForwardThreadProc 醒来 ->
- * 拼装为 JSON -> 通过命名管道 \\.\pipe\rasp_sentry_events 发出
- * Mark: 日志限制长度(防止恶意日志填满缓冲区)
+ * 鍔熻兘锛氭瀬浣庡紑閿€鐨勬棤閿?鑷棆閿佹棩蹇楄褰? * 娴佺▼锛歀og 鍐欏叆鐜舰鏁扮粍锛堝鏋滄弧浜嗗氨瑕嗙洊鏈€鑰佺殑锛?> 瑙﹀彂 m_logEvent -> 鍚庡彴绾跨▼ LogForwardThreadProc 閱掓潵 ->
+ * 鎷艰涓?JSON -> 閫氳繃鍛藉悕绠￠亾 \\.\pipe\rasp_sentry_events 鍙戝嚭
+ * Mark: 鏃ュ織闄愬埗闀垮害(闃叉鎭舵剰鏃ュ織濉弧缂撳啿鍖?
  * */
 void RaspSentryBase::EnqueueLog(const char* text)
 {
@@ -110,8 +154,7 @@ void RaspSentryBase::EnqueueLog(const char* text)
 }
 
 // =========================================================================
-// Base64 decoder — 可以添加一个输入、输出长度限制（防止dos攻击）
-// =========================================================================
+// Base64 decoder 鈥?鍙互娣诲姞涓€涓緭鍏ャ€佽緭鍑洪暱搴﹂檺鍒讹紙闃叉dos鏀诲嚮锛?// =========================================================================
 bool RaspSentryBase::Base64Decode(const std::string& input, std::string& output)
 {
     static const char kDecodeTable[256] =
@@ -148,7 +191,7 @@ bool RaspSentryBase::Base64Decode(const std::string& input, std::string& output)
 }
 
 // =========================================================================
-// ConnectSentry — 在启动时，连接命名管道，发送 GET_ALL_RULES，阻塞读取并拉取完整的安全策略 JSON
+// ConnectSentry 鈥?鍦ㄥ惎鍔ㄦ椂锛岃繛鎺ュ懡鍚嶇閬擄紝鍙戦€?GET_ALL_RULES锛岄樆濉炶鍙栧苟鎷夊彇瀹屾暣鐨勫畨鍏ㄧ瓥鐣?JSON
 // =========================================================================
 
 bool RaspSentryBase::ConnectSentry(std::string& jsonOut, std::string& libSourceOut)
@@ -201,13 +244,13 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut, std::string& libSourceO
     }
     response.resize(bytesRead);
 
-    Log("[%s] ConnectSentry: received %lu bytes — parsing", ModuleName(), bytesRead);
+    Log("[%s] ConnectSentry: received %lu bytes 鈥?parsing", ModuleName(), bytesRead);
 
     jsonOut = response;
 
     // Pre-extract the lib source so callers (SentryRetryThreadProc, Initialize)
     // can pass it directly to ParseAndSwap. ParseAndSwap re-parses the JSON to
-    // build its typed snapshot — the double parse is acceptable at init/reload time.
+    // build its typed snapshot 鈥?the double parse is acceptable at init/reload time.
     libSourceOut.clear();
     std::vector<std::unique_ptr<RaspRuleBase>> dummy;
     ParseRulesJson(response, libSourceOut, dummy);
@@ -269,7 +312,7 @@ bool RaspSentryBase::Parser::read_string_array(std::vector<std::string>& out)
     return consume(']');
 }
 /*
- * 递归解析检查项数组
+ * 閫掑綊瑙ｆ瀽妫€鏌ラ」鏁扮粍
  * */
 bool RaspSentryBase::Parser::read_regex_check_array(std::vector<RegexCheck>& out)
 {
@@ -327,7 +370,7 @@ void RaspSentryBase::Parser::skip_object()
 }
 
 // =========================================================================
-// ParseRulesJson — base-field parser
+// ParseRulesJson 鈥?base-field parser
 // =========================================================================
 
 void RaspSentryBase::ParseRuleExtension(const std::string& /*key*/,
@@ -339,8 +382,7 @@ void RaspSentryBase::ParseRuleExtension(const std::string& /*key*/,
 }
 
 /*
- * 轻量级流式 JSON 解析器、避免引入巨大的第三方 JSON 库
- * */
+ * 杞婚噺绾ф祦寮?JSON 瑙ｆ瀽鍣ㄣ€侀伩鍏嶅紩鍏ュ法澶х殑绗笁鏂?JSON 搴? * */
 bool RaspSentryBase::ParseRulesJson(
     const std::string&                          json,
     std::string&                                libSourceOut,
@@ -404,7 +446,7 @@ bool RaspSentryBase::ParseRulesJson(
                     std::string rkey;
                     if (!p.read_string(rkey) || !p.consume(':')) break;
 
-                    // ── Base fields ──────────────────────────────────────
+                    // 鈹€鈹€ Base fields 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
                     if      (rkey == "id")               p.read_string(rule.id);
                     else if (rkey == "sensor")            p.read_string(rule.sensor);
                     else if (rkey == "enabled")           p.read_bool(rule.enabled);
@@ -428,7 +470,7 @@ bool RaspSentryBase::ParseRulesJson(
                         if (rule.scriptTimeoutInstructions <= 0)
                             rule.scriptTimeoutInstructions = 500000;
                     }
-                    // ── Module-specific fields ────────────────────────────
+                    // 鈹€鈹€ Module-specific fields 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
                     else
                     {
                         // Derived classes override ParseRuleExtension to handle
@@ -459,8 +501,8 @@ bool RaspSentryBase::ParseRulesJson(
 }
 
 // =========================================================================
-// SendDetectionEvent — fire-and-forget JSONL to rasp_sentry_events
-// Replaces amsi_event_sender::SendAmsiEvent(). Non-blocking — drops silently
+// SendDetectionEvent 鈥?fire-and-forget JSONL to rasp_sentry_events
+// Replaces amsi_event_sender::SendAmsiEvent(). Non-blocking 鈥?drops silently
 // if sentry not running (0 ms WaitNamedPipe timeout, CreateFile returns ASAP).
 // =========================================================================
 
@@ -509,10 +551,8 @@ static std::string SentryJsonEscape(const std::string& s)
 
 } // anonymous namespace
 /*
- * 隐患：发送告警时，使用了 CreateFileW 打开命名管道且 WaitNamedPipe 都没有用。
- * 如果后端 rasp_sentry 正在处理高并发，或者管道缓冲区满了，CreateFileW 或 WriteFile 会立刻失败，在产品中无法接受
- * 修复建议：应当为告警事件引入一个类似 EnqueueLog 的内存环形缓冲队列 (Event Queue)，由专门的后台线程负责保证投递的可靠性（重试机制）
- * */
+ * 闅愭偅锛氬彂閫佸憡璀︽椂锛屼娇鐢ㄤ簡 CreateFileW 鎵撳紑鍛藉悕绠￠亾涓?WaitNamedPipe 閮芥病鏈夌敤銆? * 濡傛灉鍚庣 rasp_sentry 姝ｅ湪澶勭悊楂樺苟鍙戯紝鎴栬€呯閬撶紦鍐插尯婊′簡锛孋reateFileW 鎴?WriteFile 浼氱珛鍒诲け璐ワ紝鍦ㄤ骇鍝佷腑鏃犳硶鎺ュ彈
+ * 淇寤鸿锛氬簲褰撲负鍛婅浜嬩欢寮曞叆涓€涓被浼?EnqueueLog 鐨勫唴瀛樼幆褰㈢紦鍐查槦鍒?(Event Queue)锛岀敱涓撻棬鐨勫悗鍙扮嚎绋嬭礋璐ｄ繚璇佹姇閫掔殑鍙潬鎬э紙閲嶈瘯鏈哄埗锛? * */
 void RaspSentryBase::SendDetectionEvent(const RaspEvalResult& result) const
 {
     std::string id  = SentryGenerateEventId();
@@ -545,7 +585,7 @@ void RaspSentryBase::SendDetectionEvent(const RaspEvalResult& result) const
     HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_events",
                                GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (hPipe == INVALID_HANDLE_VALUE)
-        return; // sentry not running — silently drop
+        return; // sentry not running 鈥?silently drop
 
     DWORD written = 0;
     WriteFile(hPipe, line.c_str(), (DWORD)line.size(), &written, nullptr);
@@ -553,7 +593,7 @@ void RaspSentryBase::SendDetectionEvent(const RaspEvalResult& result) const
 }
 
 // =========================================================================
-// LogForwardThreadProc — drains ring buffer to rasp_sentry_events as diag events
+// LogForwardThreadProc 鈥?drains ring buffer to rasp_sentry_events as diag events
 // =========================================================================
 
 DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
@@ -642,7 +682,7 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
 }
 
 // =========================================================================
-// ConfigPipeThreadProc — server on \\.\pipe\rasp_sentry_config
+// ConfigPipeThreadProc 鈥?server on \\.\pipe\rasp_sentry_config
 // Dark period of 600ms after handling prevents BroadcastReload reconnect loop.
 // (See AMSI ConfigPipeThread comments for full explanation.)
 // =========================================================================
@@ -653,47 +693,44 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
 
     self->Log("[%s] ConfigPipeThread: started", self->ModuleName());
 
-    // **任何人（哪怕是 Guest 权限的恶意进程）**都可以连接你的 \\.\pipe\rasp_sentry_config 管道，并向里面发送 0x01 (重新加载) 或 0x02 (卸载) 指令。
-    // 攻击者可以疯狂向这个管道发送 0x01 触发引擎无限重载，导致服务器 CPU 100%
-    // 建议: 绝不能用 NULL DACL。必须通过 SDDL 字符串（如 D:(A;;GA;;;SY)(A;;GA;;;BA)）严格限制，只有 SYSTEM 权限和 Local Administrators 才能访问该管道
     SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, FALSE };
-    LPCWSTR sddl = L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;CO)";
-    // SY: SYSTEM
-    // BA: Built-in Administrators
-    // CO: Creator Owner (确保进程自己永远能连接自己创建的管道，防止 Shutdown 唤醒失败)
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-        sddl, SDDL_REVISION_1, &sa.lpSecurityDescriptor, nullptr)) {
-        self->Log("[%s] ConfigPipeThread: Fatal - failed to create secure SD", self->ModuleName());
-        return 0;  // 权限创建失败，拒绝裸奔，直接退出
+    PSECURITY_DESCRIPTOR configSd = nullptr;
+    std::wstring configPipeSddl;
+    if (!BuildCurrentUserConfigPipeSecurityAttributes(sa, configSd, configPipeSddl)) {
+        self->Log("[%s] ConfigPipeThread: Fatal - failed to build secure SD GLE=%lu",
+                  self->ModuleName(), GetLastError());
+        return 0;
     }
+    self->Log("[%s] ConfigPipeThread: using SDDL %ls",
+              self->ModuleName(), configPipeSddl.c_str());
+
     auto CreateConfigPipe = [&sa]() -> HANDLE {
         return CreateNamedPipeW(
             L"\\\\.\\pipe\\rasp_sentry_config",
             PIPE_ACCESS_INBOUND,
             PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
             PIPE_UNLIMITED_INSTANCES,
-            0, 1, 0, &sa);  // 传入受限的安全属性
+            0, 1, 0, &sa);
     };
 
     while (self->m_running.load()) {
         HANDLE hPipe = CreateConfigPipe();
         if (hPipe == INVALID_HANDLE_VALUE) {
-            self->Log("[%s] ConfigPipeThread: CreateNamedPipeW failed GLE=%lu — retrying in 1s",
+            self->Log("[%s] ConfigPipeThread: CreateNamedPipeW failed GLE=%lu - retrying in 1s",
                       self->ModuleName(), GetLastError());
             Sleep(1000);
             continue;
         }
-        // 同步阻塞：等待客户端连接 (注: Shutdown() 中需要有一个 Dummy 连接来唤醒此处)
-        BOOL  connected   = ConnectNamedPipe(hPipe, nullptr);
-        DWORD connectErr  = connected ? 0 : GetLastError();
-        // 唤醒后立刻检查是否在关机
+
+        BOOL connected = ConnectNamedPipe(hPipe, nullptr);
+        DWORD connectErr = connected ? 0 : GetLastError();
         if (!self->m_running.load())
         {
             DisconnectNamedPipe(hPipe);
             CloseHandle(hPipe);
             break;
         }
-        // 处理假连接或错误
+
         if (!connected && connectErr != ERROR_PIPE_CONNECTED)
         {
             self->Log("[%s] ConfigPipeThread: ConnectNamedPipe failed GLE=%lu",
@@ -702,39 +739,36 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
             continue;
         }
 
-        BYTE  signal    = 0;
+        BYTE signal = 0;
         DWORD readBytes = 0;
-        // 读取指令字节
         ReadFile(hPipe, &signal, 1, &readBytes, nullptr);
         DisconnectNamedPipe(hPipe);
         CloseHandle(hPipe);
 
         self->Log("[%s] ConfigPipeThread: signal=0x%02X (readBytes=%lu)",
-                  self->ModuleName(), (unsigned)signal, readBytes);
+                  self->ModuleName(), static_cast<unsigned>(signal), readBytes);
 
         if (signal == 0x01 && self->m_running.load()) {
-            self->Log("[%s] ConfigPipeThread: reload signal — pulling updated rules",
+            self->Log("[%s] ConfigPipeThread: reload signal - pulling updated rules",
                       self->ModuleName());
             self->OnReloadSignal();
 
-            // Dark period: must exceed BroadcastReload's Connect timeout (500ms)
             if (self->m_running.load())
                 Sleep(600);
         } else if (signal == 0x02) {
-            self->Log("[%s] ConfigPipeThread: unload signal — calling OnUnloadSignal()",
+            self->Log("[%s] ConfigPipeThread: unload signal - calling OnUnloadSignal()",
                       self->ModuleName());
             self->OnUnloadSignal();
-            // OnUnloadSignal() spawns an unload thread that calls Shutdown()
-            // (sets m_running=false). Loop exits on next iteration check.
         }
     }
-    LocalFree(sa.lpSecurityDescriptor);  // 申请内存必须释放
+
+    LocalFree(configSd);
     self->Log("[%s] ConfigPipeThread: exiting", self->ModuleName());
     return 0;
 }
 
 // =========================================================================
-// SentryRetryThreadProc — polls ConnectSentry+ParseAndSwap every 5 s.
+// SentryRetryThreadProc 鈥?polls ConnectSentry+ParseAndSwap every 5 s.
 // Exits after first successful load. Enabled unconditionally for all modules
 // (AMSI processes can start before rasp_sentry and would never receive a
 // reload signal because they were not alive when sentry broadcast it).
@@ -743,7 +777,7 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
 DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
 {
     auto* self = static_cast<RaspSentryBase*>(param);
-    self->Log("[%s] SentryRetryThread: started — polling every 5s", self->ModuleName());
+    self->Log("[%s] SentryRetryThread: started 鈥?polling every 5s", self->ModuleName());
 
     while (self->m_running.load())
     {
@@ -756,7 +790,7 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
         std::string json;
         std::string lib;
         if (self->ConnectSentry(json, lib) && self->ParseAndSwap(json, lib)) {
-            self->Log("[%s] SentryRetryThread: rules loaded — exiting", self->ModuleName());
+            self->Log("[%s] SentryRetryThread: rules loaded 鈥?exiting", self->ModuleName());
             break;
         }
 
@@ -786,9 +820,9 @@ void RaspSentryBase::Initialize()
     // Initialize() override if needed. Here we set a default no-op proxy that
     // derived classes replace in their own Initialize before calling base.
     // (IIS7 and AMSI both set the proxy before calling base Initialize via
-    //  the existing pattern — see their OnBeginInit hooks.)
+    //  the existing pattern 鈥?see their OnBeginInit hooks.)
 
-    Log("[%s] Initialize: starting — all config via rasp_sentry IPC", ModuleName());
+    Log("[%s] Initialize: starting 鈥?all config via rasp_sentry IPC", ModuleName());
 
     std::string json, lib;
     bool loaded = ConnectSentry(json, lib) && ParseAndSwap(json, lib);
@@ -799,7 +833,7 @@ void RaspSentryBase::Initialize()
     }
     else
     {
-        Log("[%s] Initialize: sentry unavailable — pass-through; starting retry thread",
+        Log("[%s] Initialize: sentry unavailable 鈥?pass-through; starting retry thread",
             ModuleName());
         m_retryThread = CreateThread(nullptr, 0, SentryRetryThreadProc, this, 0, nullptr);
     }
