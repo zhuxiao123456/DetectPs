@@ -15,7 +15,7 @@ class RuleServer;   // forward — avoid circular include
 class ConfigWatcher
 {
 public:
-    static constexpr const wchar_t* kConfigPipeName  = L"rasp_sentry_config";
+    static constexpr const wchar_t* kConfigPipeName  = L"\\\\.\\pipe\\rasp_sentry_config";
     static constexpr int            kMaxListeners     = 32;
     static constexpr DWORD          kDebounceMs       = 1000;
     static constexpr DWORD          kBroadcastTimeout = 500;
