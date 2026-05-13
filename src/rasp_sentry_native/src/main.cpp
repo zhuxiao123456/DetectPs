@@ -7,6 +7,7 @@
 
 #include "sentry_log.h"
 #include "event_collector.h"
+#include "control_status_collector.h"
 #include "rule_server.h"
 #include "config_watcher.h"
 #include "amsi_staging_watcher.h"
@@ -84,6 +85,7 @@ int wmain(int argc, wchar_t **argv)
 
     // ── Instantiate services ──────────────────────────────────────────────────
     EventCollector collector(logDir);
+    ControlStatusCollector controlStatusCollector(logDir);
     RuleServer ruleServer(rulesPath);
     ConfigWatcher watcher(rulesPath, &ruleServer);
     AmsiStagingWatcher stagingWatcher(stagingDir, collector.GetDrainQueue());
@@ -92,6 +94,10 @@ int wmain(int argc, wchar_t **argv)
     collector.Start();
     SentryLog_Info("Program", "EventCollector started — %d threads on rasp_sentry_events",
                    EventCollector::kThreadCount);
+
+    controlStatusCollector.Start();
+    SentryLog_Info("Program", "ControlStatusCollector started - %d threads on amsi_detect_control_status",
+                   ControlStatusCollector::kThreadCount);
 
     ruleServer.Start();
     SentryLog_Info("Program", "RuleServer started — %d threads on rasp_sentry_rules",
@@ -114,6 +120,7 @@ int wmain(int argc, wchar_t **argv)
     stagingWatcher.Stop();
     watcher.Stop();
     ruleServer.Stop();
+    controlStatusCollector.Stop();
     collector.Stop();
 
     SentryLog_Info("Program", "rasp_sentry_native stopped.");

@@ -124,6 +124,8 @@ int main()
             return 1;
         if (!Expect(result.libSource == "lib-one\nlib-two\n", "globalLibrariesBase64 decodes in order"))
             return 1;
+        if (!Expect(result.version.empty() && result.hash.empty(), "legacy rules response has empty metadata"))
+            return 1;
         if (!Expect(result.rules.size() == 2, "empty id rule is skipped"))
             return 1;
 
@@ -169,6 +171,50 @@ int main()
             return 1;
         if (!Expect(second.regexCondition == RegexCondition::Any,
                     "non-all regex condition falls back to any"))
+            return 1;
+    }
+
+    {
+        const char* json = R"json({
+            "version": "rules-v42",
+            "hash": "sha256:abc123",
+            "globalLibrariesBase64": "bGliLWVudmVsb3Bl",
+            "bundle": {
+                "rules": [
+                    {
+                        "id": "enveloped-rule",
+                        "sensor": "AmsiProvider",
+                        "mode": "block",
+                        "config": {
+                            "regexField": "body",
+                            "regexPatterns": ["FromEnvelope"]
+                        }
+                    }
+                ],
+                "ignoredBundleField": {"nested": true}
+            }
+        })json";
+
+        auto result = Parse(json);
+        if (!Expect(result.ok, "envelope bundle rules parse"))
+            return 1;
+        if (!Expect(result.version == "rules-v42", "envelope version is passed through"))
+            return 1;
+        if (!Expect(result.hash == "sha256:abc123", "envelope hash is passed through"))
+            return 1;
+        if (!Expect(result.libSource == "lib-envelope", "envelope global library decodes"))
+            return 1;
+        if (!Expect(result.rules.size() == 1 && result.rules[0]->id == "enveloped-rule",
+                    "bundle.rules populates rules"))
+            return 1;
+    }
+
+    {
+        auto result = Parse(R"json({"version":"rules-v43","bundle":{"rules":[{"id":"r"}]}})json");
+        if (!Expect(result.ok, "envelope without hash still parses"))
+            return 1;
+        if (!Expect(result.version == "rules-v43" && result.hash.empty(),
+                    "missing metadata fields stay empty"))
             return 1;
     }
 

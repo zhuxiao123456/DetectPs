@@ -42,6 +42,139 @@ bool Base64Decode(const std::string& input, std::string& output)
     return true;
 }
 
+void ParseGlobalLibraries(RuleJsonParser::Parser& p, RuleParseResult& result)
+{
+    p.skip_ws();
+    if (p.peek('[')) {
+        std::vector<std::string> items;
+        p.read_string_array(items);
+        for (const auto& b64 : items) {
+            std::string decoded;
+            if (Base64Decode(b64, decoded))
+                result.libSource += decoded + "\n";
+        }
+        return;
+    }
+
+    std::string b64;
+    p.read_string(b64);
+    std::string decoded;
+    if (!b64.empty() && Base64Decode(b64, decoded))
+        result.libSource = decoded;
+}
+
+bool ParseRulesArray(RuleJsonParser::Parser& p,
+                     RuleParseResult& result,
+                     const IRuleObjectFactory& factory,
+                     IRuleExtensionParser& extensionParser)
+{
+    if (!p.consume('[')) {
+        p.skip_value();
+        return true;
+    }
+
+    while (!p.peek(']') && p.ok()) {
+        if (!p.peek('{')) {
+            p.skip_value();
+            p.consume(',');
+            continue;
+        }
+
+        std::unique_ptr<RaspRuleBase> rulePtr(factory.CreateRule());
+        if (!rulePtr) {
+            result.error = "factory_returned_null";
+            return false;
+        }
+        RaspRuleBase& rule = *rulePtr;
+
+        if (!p.consume('{')) {
+            p.consume(',');
+            continue;
+        }
+
+        while (!p.peek('}') && p.ok()) {
+            std::string rkey;
+            if (!p.read_string(rkey) || !p.consume(':'))
+                break;
+
+            if (rkey == "id")
+                p.read_string(rule.id);
+            else if (rkey == "sensor")
+                p.read_string(rule.sensor);
+            else if (rkey == "enabled")
+                p.read_bool(rule.enabled);
+            else if (rkey == "description")
+                p.read_string(rule.description);
+            else if (rkey == "severity")
+                p.read_string(rule.severity);
+            else if (rkey == "scriptBodyBase64")
+                p.read_string(rule.scriptBodyBase64);
+            else if (rkey == "scriptEval")
+                p.read_string(rule.scriptEval);
+            else if (rkey == "confidence")
+                p.read_int(rule.confidence);
+            else if (rkey == "mode") {
+                std::string m;
+                p.read_string(m);
+                if (m == "block")
+                    rule.mode = RaspRuleMode::Block;
+                else if (m == "off")
+                    rule.mode = RaspRuleMode::Off;
+                else
+                    rule.mode = RaspRuleMode::Audit;
+            } else if (rkey == "scriptTimeoutMs") {
+                int ms = 0;
+                p.read_int(ms);
+                rule.scriptTimeoutInstructions = ms * 50000;
+                if (rule.scriptTimeoutInstructions <= 0)
+                    rule.scriptTimeoutInstructions = 500000;
+            } else {
+                extensionParser.ParseRuleExtension(rkey, &p, rule);
+            }
+
+            p.consume(',');
+        }
+        p.consume('}');
+
+        if (!rule.id.empty())
+            result.rules.push_back(std::move(rulePtr));
+
+        p.consume(',');
+    }
+    p.consume(']');
+    return true;
+}
+
+bool ParseBundleObject(RuleJsonParser::Parser& p,
+                       RuleParseResult& result,
+                       const IRuleObjectFactory& factory,
+                       IRuleExtensionParser& extensionParser)
+{
+    if (!p.consume('{')) {
+        p.skip_value();
+        return true;
+    }
+
+    while (!p.peek('}') && p.ok()) {
+        std::string key;
+        if (!p.read_string(key) || !p.consume(':')) {
+            result.error = "invalid_bundle_field";
+            break;
+        }
+
+        if (key == "rules") {
+            if (!ParseRulesArray(p, result, factory, extensionParser))
+                return false;
+        } else {
+            p.skip_value();
+        }
+
+        p.consume(',');
+    }
+    p.consume('}');
+    return true;
+}
+
 } // namespace
 
 void RuleJsonParser::Parser::skip_ws()
@@ -241,99 +374,20 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
             break;
         }
 
-        if (key == "globalLibrariesBase64" || key == "globalLibraries") {
-            p.skip_ws();
-            if (p.peek('[')) {
-                std::vector<std::string> items;
-                p.read_string_array(items);
-                for (const auto& b64 : items) {
-                    std::string decoded;
-                    if (Base64Decode(b64, decoded))
-                        result.libSource += decoded + "\n";
-                }
-            } else {
-                std::string b64;
-                p.read_string(b64);
-                std::string decoded;
-                if (!b64.empty() && Base64Decode(b64, decoded))
-                    result.libSource = decoded;
-            }
-        } else if (key == "rules") {
-            if (!p.consume('[')) {
+        if (key == "version") {
+            if (!p.read_string(result.version))
                 p.skip_value();
-                p.consume(',');
-                continue;
-            }
-
-            while (!p.peek(']') && p.ok()) {
-                if (!p.peek('{')) {
-                    p.skip_value();
-                    p.consume(',');
-                    continue;
-                }
-
-                std::unique_ptr<RaspRuleBase> rulePtr(factory.CreateRule());
-                if (!rulePtr) {
-                    result.error = "factory_returned_null";
-                    return result;
-                }
-                RaspRuleBase& rule = *rulePtr;
-
-                if (!p.consume('{')) {
-                    p.consume(',');
-                    continue;
-                }
-
-                while (!p.peek('}') && p.ok()) {
-                    std::string rkey;
-                    if (!p.read_string(rkey) || !p.consume(':'))
-                        break;
-
-                    if (rkey == "id")
-                        p.read_string(rule.id);
-                    else if (rkey == "sensor")
-                        p.read_string(rule.sensor);
-                    else if (rkey == "enabled")
-                        p.read_bool(rule.enabled);
-                    else if (rkey == "description")
-                        p.read_string(rule.description);
-                    else if (rkey == "severity")
-                        p.read_string(rule.severity);
-                    else if (rkey == "scriptBodyBase64")
-                        p.read_string(rule.scriptBodyBase64);
-                    else if (rkey == "scriptEval")
-                        p.read_string(rule.scriptEval);
-                    else if (rkey == "confidence")
-                        p.read_int(rule.confidence);
-                    else if (rkey == "mode") {
-                        std::string m;
-                        p.read_string(m);
-                        if (m == "block")
-                            rule.mode = RaspRuleMode::Block;
-                        else if (m == "off")
-                            rule.mode = RaspRuleMode::Off;
-                        else
-                            rule.mode = RaspRuleMode::Audit;
-                    } else if (rkey == "scriptTimeoutMs") {
-                        int ms = 0;
-                        p.read_int(ms);
-                        rule.scriptTimeoutInstructions = ms * 50000;
-                        if (rule.scriptTimeoutInstructions <= 0)
-                            rule.scriptTimeoutInstructions = 500000;
-                    } else {
-                        extensionParser.ParseRuleExtension(rkey, &p, rule);
-                    }
-
-                    p.consume(',');
-                }
-                p.consume('}');
-
-                if (!rule.id.empty())
-                    result.rules.push_back(std::move(rulePtr));
-
-                p.consume(',');
-            }
-            p.consume(']');
+        } else if (key == "hash") {
+            if (!p.read_string(result.hash))
+                p.skip_value();
+        } else if (key == "globalLibrariesBase64" || key == "globalLibraries") {
+            ParseGlobalLibraries(p, result);
+        } else if (key == "rules") {
+            if (!ParseRulesArray(p, result, factory, extensionParser))
+                return result;
+        } else if (key == "bundle") {
+            if (!ParseBundleObject(p, result, factory, extensionParser))
+                return result;
         } else {
             p.skip_value();
         }

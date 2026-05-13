@@ -63,6 +63,7 @@ protected:
 
     const char* ModuleName()      const override { return "rasp_mod_amsi"; }
     const char* LogEventPattern() const override { return "amsi-log"; }
+    size_t ActiveRuleCountForStatus() const override;
 
 protected:
     struct RuleSnapshot {

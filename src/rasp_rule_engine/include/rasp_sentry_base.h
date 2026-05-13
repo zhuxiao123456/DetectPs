@@ -33,6 +33,7 @@
 #include <vector>
 #include <memory>
 #include <atomic>
+#include <mutex>
 
 #include "rasp_lua_engine.h"
 #include "rasp_rule_base.h"
@@ -63,6 +64,12 @@ struct RaspEvalResult
     std::string parentProcessName;
 };
 
+struct RuleBundleMetadata
+{
+    std::string version;
+    std::string hash;
+};
+
 // ── RaspSentryBase ────────────────────────────────────────────────────────
 class RaspSentryBase
 {
@@ -91,6 +98,9 @@ protected:
     // On success: jsonOut contains raw response; libSourceOut contains decoded
     // globalLibrariesBase64 (rasp_lib.lua source, '\n'-joined).
     bool ConnectSentry(std::string& jsonOut, std::string& libSourceOut);
+    bool ConnectSentry(std::string& jsonOut,
+                       std::string& libSourceOut,
+                       RuleBundleMetadata& metadataOut);
 
     static bool Base64Decode(const std::string& b64, std::string& out);
 
@@ -107,7 +117,8 @@ protected:
     bool ParseRulesJson(
         const std::string&                           json,
         std::string&                                 libSourceOut,
-        std::vector<std::unique_ptr<RaspRuleBase>>&  rulesOut);
+        std::vector<std::unique_ptr<RaspRuleBase>>&  rulesOut,
+        RuleBundleMetadata*                          metadataOut = nullptr);
 
     // Virtual factory — override to return module-specific derived type.
     // Default returns new RaspRuleBase().
@@ -133,6 +144,18 @@ protected:
     // Worker-only. Must never be called from Scan hot path.
     bool SendDetectionEventSyncWorkerOnly(const AsyncEvent& event) const;
 
+    // Best-effort load status report to amsi_detect_control_status.
+    // Failure to send must not affect scanning, reload, or snapshot state.
+    void SendRuleLoadResult(bool success,
+                            int errorCode,
+                            const std::string& errorMessage) const;
+    void SendRuleLoadResult(bool success,
+                            int errorCode,
+                            const std::string& errorMessage,
+                            const RuleBundleMetadata& requestedMetadata) const;
+    void SetActiveRuleMetadataForStatus(const RuleBundleMetadata& metadata);
+    RuleBundleMetadata ActiveRuleMetadataForStatus() const;
+
     // Called after ConnectSentry() succeeds — module parses JSON into its typed
     // snapshot, precompiles Lua scripts, and swaps atomically.
     // Returns false if JSON is unparseable (snapshot left unchanged).
@@ -150,6 +173,7 @@ protected:
 
     virtual const char* ModuleName()      const = 0; // e.g. "rasp_mod_iis7"
     virtual const char* LogEventPattern() const = 0; // e.g. "iis7-log"
+    virtual size_t ActiveRuleCountForStatus() const { return 0; }
 
 private:
     // ── Ring buffer (diagnostic log) ──────────────────────────────────────
@@ -179,6 +203,8 @@ private:
     // that start before rasp_sentry (passive reload signal would never reach them).
     HANDLE m_retryThread  = INVALID_HANDLE_VALUE;
     mutable AsyncEventSink m_eventSink;
+    mutable std::mutex m_ruleMetadataMutex;
+    RuleBundleMetadata m_activeRuleMetadata;
 
     static DWORD WINAPI LogForwardThreadProc(LPVOID param);
     static DWORD WINAPI ConfigPipeThreadProc(LPVOID param);

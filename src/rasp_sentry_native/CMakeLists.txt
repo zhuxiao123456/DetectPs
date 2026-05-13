@@ -45,6 +45,7 @@ add_executable(rasp_sentry
     src/sentry_log.cpp
     src/pipe_security.cpp
     src/event_collector.cpp
+    src/control_status_collector.cpp
     src/rule_server.cpp
     src/config_watcher.cpp
     src/amsi_staging_watcher.cpp

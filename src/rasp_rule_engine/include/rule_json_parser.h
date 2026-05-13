@@ -11,6 +11,8 @@ struct RuleParseResult {
     bool ok = false;
     std::vector<std::unique_ptr<RaspRuleBase>> rules;
     std::string libSource;
+    std::string version;
+    std::string hash;
     std::string error;
 };
 

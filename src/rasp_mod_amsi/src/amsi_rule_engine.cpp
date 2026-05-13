@@ -234,6 +234,11 @@ bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &li
 #endif
 }
 
+size_t AmsiRuleEngine::ActiveRuleCountForStatus() const {
+    auto snap = std::atomic_load(&m_snapshot);
+    return snap ? snap->rules.size() : 0u;
+}
+
 /*
 - **功能**：守护进程，处理配置重载信号（0x01）
 - **重试策略**：最多3次，每次间隔1秒
@@ -244,17 +249,23 @@ void AmsiRuleEngine::OnReloadSignal() {
     EngineRuntime& runtime = GetAmsiEngineRuntime();
     if (!runtime.CanAttemptReload()) {
         runtime.EmitTelemetry("reload_rejected", "state_not_reloadable");
+        SendRuleLoadResult(false, 4, "reload rejected: state not reloadable");
         return;
     }
 
     bool buildOk = false;
+    bool connectedOnce = false;
+    RuleBundleMetadata requestedMetadata;
     std::shared_ptr<const RuleSnapshot> next;
     std::string effectiveLib;
     for (int attempt = 0; attempt < 3 && !buildOk; attempt++) {
         if (attempt > 0)
             Sleep(1000);
         std::string json, lib;
-        if (ConnectSentry(json, lib)) {
+        RuleBundleMetadata attemptMetadata;
+        if (ConnectSentry(json, lib, attemptMetadata)) {
+            connectedOnce = true;
+            requestedMetadata = attemptMetadata;
             next = BuildNextSnapshot(json, lib, effectiveLib);
             buildOk = (next != nullptr);
         }
@@ -262,6 +273,10 @@ void AmsiRuleEngine::OnReloadSignal() {
 
     if (!buildOk) {
         runtime.EmitTelemetry("reload_failed", "build_snapshot_failed");
+        SendRuleLoadResult(false,
+                           connectedOnce ? 3 : 1,
+                           connectedOnce ? "reload build snapshot failed" : "reload rules pipe unavailable",
+                           requestedMetadata);
         Log("[RaspAmsi] OnReloadSignal: sentry unavailable after 3 attempts - keeping snapshot");
         return;
     }
@@ -269,11 +284,14 @@ void AmsiRuleEngine::OnReloadSignal() {
     auto guard = runtime.TryEnterReload("reload_signal");
     if (!guard.IsActive()) {
         runtime.EmitTelemetry("reload_rejected", "shutdown_or_state_changed");
+        SendRuleLoadResult(false, 4, "reload rejected: shutdown or state changed", requestedMetadata);
         return;
     }
 
     PublishSnapshot(next, effectiveLib);
+    SetActiveRuleMetadataForStatus(requestedMetadata);
     guard.Complete(true, "published");
+    SendRuleLoadResult(true, 0, "", requestedMetadata);
     return;
 
 #if 0

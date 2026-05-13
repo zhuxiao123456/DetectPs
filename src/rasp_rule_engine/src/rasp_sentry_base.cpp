@@ -220,7 +220,16 @@ bool RaspSentryBase::Base64Decode(const std::string& input, std::string& output)
 
 bool RaspSentryBase::ConnectSentry(std::string& jsonOut, std::string& libSourceOut)
 {
+    RuleBundleMetadata ignored;
+    return ConnectSentry(jsonOut, libSourceOut, ignored);
+}
+
+bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
+                                   std::string& libSourceOut,
+                                   RuleBundleMetadata& metadataOut)
+{
     Log("[%s] ConnectSentry: connecting to rasp_sentry_rules", ModuleName());
+    metadataOut = RuleBundleMetadata{};
 
     if (!WaitNamedPipeW(L"\\\\.\\pipe\\rasp_sentry_rules", 100))
     {
@@ -277,10 +286,10 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut, std::string& libSourceO
     // build its typed snapshot — the double parse is acceptable at init/reload time.
     libSourceOut.clear();
     std::vector<std::unique_ptr<RaspRuleBase>> dummy;
-    ParseRulesJson(response, libSourceOut, dummy);
+    ParseRulesJson(response, libSourceOut, dummy, &metadataOut);
 
-    Log("[%s] ConnectSentry: %zu rule(s) found, lib=%zu bytes",
-        ModuleName(), dummy.size(), libSourceOut.size());
+    Log("[%s] ConnectSentry: %zu rule(s) found, lib=%zu bytes, version=%zu bytes, hash=%zu bytes",
+        ModuleName(), dummy.size(), libSourceOut.size(), metadataOut.version.size(), metadataOut.hash.size());
     return true;
 }
 
@@ -305,7 +314,8 @@ void RaspSentryBase::ParseRuleExtension(const std::string& /*key*/,
 bool RaspSentryBase::ParseRulesJson(
     const std::string&                          json,
     std::string&                                libSourceOut,
-    std::vector<std::unique_ptr<RaspRuleBase>>& rulesOut)
+    std::vector<std::unique_ptr<RaspRuleBase>>& rulesOut,
+    RuleBundleMetadata*                         metadataOut)
 {
     class FactoryAdapter final : public IRuleObjectFactory {
     public:
@@ -333,6 +343,10 @@ bool RaspSentryBase::ParseRulesJson(
     RuleJsonParser parser;
     RuleParseResult result = parser.Parse(json, factory, extensionParser);
 
+    if (metadataOut) {
+        metadataOut->version = result.version;
+        metadataOut->hash = result.hash;
+    }
     libSourceOut = std::move(result.libSource);
     rulesOut = std::move(result.rules);
     return result.ok;
@@ -368,6 +382,38 @@ static std::string SentryUtcTimestamp()
              st.wYear, st.wMonth, st.wDay,
              st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
     return std::string(buf);
+}
+
+static std::string ControlStatusJsonEscape(const std::string& value)
+{
+    std::string out;
+    out.reserve(value.size() + 8);
+    for (unsigned char c : value)
+    {
+        switch (c)
+        {
+        case '"': out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\b': out += "\\b"; break;
+        case '\f': out += "\\f"; break;
+        case '\n': out += "\\n"; break;
+        case '\r': out += "\\r"; break;
+        case '\t': out += "\\t"; break;
+        default:
+            if (c < 0x20)
+            {
+                char esc[7];
+                snprintf(esc, sizeof(esc), "\\u%04x", static_cast<unsigned>(c));
+                out += esc;
+            }
+            else
+            {
+                out.push_back(static_cast<char>(c));
+            }
+            break;
+        }
+    }
+    return out;
 }
 
 } // anonymous namespace
@@ -425,6 +471,86 @@ bool RaspSentryBase::SendDetectionEventSyncWorkerOnly(const AsyncEvent& event) c
     // Worker-only. Must never be called from Scan hot path.
     LegacyPipeEventTransport transport;
     return SendAsyncEventWorkerOnly(event, transport, 0);
+}
+
+void RaspSentryBase::SendRuleLoadResult(bool success,
+                                        int errorCode,
+                                        const std::string& errorMessage) const
+{
+    SendRuleLoadResult(success, errorCode, errorMessage, RuleBundleMetadata{});
+}
+
+void RaspSentryBase::SendRuleLoadResult(bool success,
+                                        int errorCode,
+                                        const std::string& errorMessage,
+                                        const RuleBundleMetadata& requestedMetadata) const
+{
+    const DWORD pid = GetCurrentProcessId();
+    char pidBuf[32];
+    snprintf(pidBuf, sizeof(pidBuf), "%lu", static_cast<unsigned long>(pid));
+
+    const std::string pidText(pidBuf);
+    const std::string dllInstanceId = std::string("amsi_detect_") + pidText;
+    const size_t ruleCount = ActiveRuleCountForStatus();
+    const RuleBundleMetadata activeMetadata = ActiveRuleMetadataForStatus();
+
+    char json[2048];
+    _snprintf_s(json, sizeof(json), _TRUNCATE,
+                "{\"msgType\":\"RULE_LOAD_RESULT\","
+                "\"module\":\"amsi_detect\","
+                "\"dllInstanceId\":\"%s\","
+                "\"pid\":%s,"
+                "\"timestamp\":\"%s\","
+                "\"requestedVersion\":\"%s\","
+                "\"requestedHash\":\"%s\","
+                "\"activeVersion\":\"%s\","
+                "\"activeHash\":\"%s\","
+                "\"success\":%s,"
+                "\"ruleCount\":%zu,"
+                "\"errorCode\":%d,"
+                "\"errorMessage\":\"%s\"}",
+                ControlStatusJsonEscape(dllInstanceId).c_str(),
+                pidText.c_str(),
+                ControlStatusJsonEscape(SentryUtcTimestamp()).c_str(),
+                ControlStatusJsonEscape(requestedMetadata.version).c_str(),
+                ControlStatusJsonEscape(requestedMetadata.hash).c_str(),
+                ControlStatusJsonEscape(activeMetadata.version).c_str(),
+                ControlStatusJsonEscape(activeMetadata.hash).c_str(),
+                success ? "true" : "false",
+                ruleCount,
+                errorCode,
+                ControlStatusJsonEscape(errorMessage).c_str());
+
+    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_control_status",
+                               GENERIC_WRITE, 0, nullptr,
+                               OPEN_EXISTING, 0, nullptr);
+    if (hPipe == INVALID_HANDLE_VALUE)
+    {
+        Log("[%s] SendRuleLoadResult: control status pipe unavailable GLE=%lu",
+            ModuleName(), GetLastError());
+        return;
+    }
+
+    DWORD written = 0;
+    const DWORD expected = static_cast<DWORD>(strlen(json));
+    if (!WriteFile(hPipe, json, expected, &written, nullptr) || written != expected)
+    {
+        Log("[%s] SendRuleLoadResult: WriteFile failed GLE=%lu written=%lu expected=%lu",
+            ModuleName(), GetLastError(), written, expected);
+    }
+    CloseHandle(hPipe);
+}
+
+void RaspSentryBase::SetActiveRuleMetadataForStatus(const RuleBundleMetadata& metadata)
+{
+    std::lock_guard<std::mutex> lock(m_ruleMetadataMutex);
+    m_activeRuleMetadata = metadata;
+}
+
+RuleBundleMetadata RaspSentryBase::ActiveRuleMetadataForStatus() const
+{
+    std::lock_guard<std::mutex> lock(m_ruleMetadataMutex);
+    return m_activeRuleMetadata;
 }
 
 // =========================================================================
@@ -577,8 +703,11 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
 
         std::string json;
         std::string lib;
-        if (self->ConnectSentry(json, lib) && self->ParseAndSwap(json, lib)) {
+        RuleBundleMetadata requestedMetadata;
+        if (self->ConnectSentry(json, lib, requestedMetadata) && self->ParseAndSwap(json, lib)) {
+            self->SetActiveRuleMetadataForStatus(requestedMetadata);
             self->Log("[%s] SentryRetryThread: rules loaded - exiting", self->ModuleName());
+            self->SendRuleLoadResult(true, 0, "", requestedMetadata);
             break;
         }
 
@@ -616,14 +745,22 @@ void RaspSentryBase::Initialize()
     Log("[%s] Initialize: starting - all config via rasp_sentry IPC", ModuleName());
 
     std::string json, lib;
-    bool loaded = ConnectSentry(json, lib) && ParseAndSwap(json, lib);
+    RuleBundleMetadata requestedMetadata;
+    bool connected = ConnectSentry(json, lib, requestedMetadata);
+    bool loaded = connected && ParseAndSwap(json, lib);
 
     if (loaded)
     {
+        SetActiveRuleMetadataForStatus(requestedMetadata);
         Log("[%s] Initialize: rules loaded from sentry", ModuleName());
+        SendRuleLoadResult(true, 0, "", requestedMetadata);
     }
     else
     {
+        SendRuleLoadResult(false,
+                           connected ? 3 : 1,
+                           connected ? "initial rule load failed" : "rules pipe unavailable",
+                           requestedMetadata);
         Log("[%s] Initialize: sentry unavailable - pass-through; starting retry thread",
             ModuleName());
         m_retryThread = CreateThread(nullptr, 0, SentryRetryThreadProc, this, 0, nullptr);
