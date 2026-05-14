@@ -66,7 +66,7 @@ void EventCollector::Stop()
     // Unblock each waiting ConnectNamedPipe by making a dummy client connection.
     for (int i = 0; i < kThreadCount; i++)
     {
-        HANDLE h = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_events",
+        HANDLE h = CreateFileW(L"\\\\.\\pipe\\amsi_detect_events",
                                GENERIC_WRITE, 0, nullptr,
                                OPEN_EXISTING, 0, nullptr);
         if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
@@ -101,7 +101,7 @@ void EventCollector::ServerLoop()
     while (m_running.load())
     {
         HANDLE hPipe = CreateNamedPipeW(
-            L"\\\\.\\pipe\\rasp_sentry_events",
+            L"\\\\.\\pipe\\amsi_detect_events",
             PIPE_ACCESS_INBOUND,
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
             kThreadCount,

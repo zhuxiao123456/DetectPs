@@ -8,8 +8,8 @@
 //   - ConnectSentry() IPC handshake (GET_ALL_RULES)
 //   - ParseRulesJson()  (base-field recursive-descent parser)
 //   - SendDetectionEvent() (replaces amsi_event_sender::SendAmsiEvent)
-//   - LogForwardThreadProc  (ring-buffer drain → rasp_sentry_events)
-//   - ConfigPipeThreadProc  (reload signal server on rasp_sentry_config)
+//   - LogForwardThreadProc  (ring-buffer drain -> amsi_detect_events)
+//   - ConfigPipeThreadProc  (reload signal server on amsi_detect_config)
 //   - SentryRetryThreadProc (polls sentry every 5 s until first load)
 //   - Initialize() / Shutdown()
 // =========================================================================
@@ -137,7 +137,7 @@ void RaspSentryBase::Log(const char* fmt, ...) const
 /*
  * 功能：极低开销的无锁/自旋锁日志记录
  * 流程：Log 写入环形数组（如果满了就覆盖最老的）-> 触发 m_logEvent -> 后台线程 LogForwardThreadProc 醒来 ->
- * 拼装为 JSON -> 通过命名管道 \\.\pipe\rasp_sentry_events 发出
+ * 拼装为 JSON -> 通过命名管道 \\.\pipe\amsi_detect_events 发出
  * Mark: 日志限制长度(防止恶意日志填满缓冲区)
 */
 void RaspSentryBase::EnqueueLog(const char* text)
@@ -228,16 +228,16 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
                                    std::string& libSourceOut,
                                    RuleBundleMetadata& metadataOut)
 {
-    Log("[%s] ConnectSentry: connecting to rasp_sentry_rules", ModuleName());
+    Log("[%s] ConnectSentry: connecting to amsi_detect_rules", ModuleName());
     metadataOut = RuleBundleMetadata{};
 
-    if (!WaitNamedPipeW(L"\\\\.\\pipe\\rasp_sentry_rules", 100))
+    if (!WaitNamedPipeW(L"\\\\.\\pipe\\amsi_detect_rules", 100))
     {
         Log("[%s] ConnectSentry: pipe not available", ModuleName());
         return false;
     }
 
-    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_rules",
+    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_rules",
                                GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                                OPEN_EXISTING, 0, nullptr);
     if (hPipe == INVALID_HANDLE_VALUE)
@@ -554,7 +554,7 @@ RuleBundleMetadata RaspSentryBase::ActiveRuleMetadataForStatus() const
 }
 
 // =========================================================================
-// LogForwardThreadProc — drains ring buffer to rasp_sentry_events as diag events
+// LogForwardThreadProc - drains ring buffer to amsi_detect_events as diag events
 // =========================================================================
 
 DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
@@ -599,7 +599,7 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
 }
 
 // =========================================================================
-// ConfigPipeThreadProc - server on \\.\pipe\rasp_sentry_config
+// ConfigPipeThreadProc - server on \\.\pipe\amsi_detect_config
 // Dark period of 600ms after handling prevents BroadcastReload reconnect loop.
 // (See AMSI ConfigPipeThread comments for full explanation.)
 // =========================================================================
@@ -623,7 +623,7 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
 
     auto CreateConfigPipe = [&sa]() -> HANDLE {
         return CreateNamedPipeW(
-            L"\\\\.\\pipe\\rasp_sentry_config",
+            L"\\\\.\\pipe\\amsi_detect_config",
             PIPE_ACCESS_INBOUND,
             PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
             PIPE_UNLIMITED_INSTANCES,
@@ -731,7 +731,7 @@ void RaspSentryBase::Initialize()
     });
 
     // Wire Lua print() to this engine's Log so dbg() in rule scripts routes
-    // through the ring buffer and appears in DebugView + rasp_sentry_events.
+    // through the ring buffer and appears in DebugView + amsi_detect_events.
     // Use a lambda that captures 'this'; stored in a static to give it a
     // function-pointer-compatible type via a module-global trampoline approach.
     // Because each module has exactly one engine instance, a module-scope
@@ -798,7 +798,7 @@ void RaspSentryBase::Shutdown()
     // 3. Unblock ConnectNamedPipe with a dummy client, then wait
     if (m_configThread != INVALID_HANDLE_VALUE)
     {
-        HANDLE hDummy = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_config",
+        HANDLE hDummy = CreateFileW(L"\\\\.\\pipe\\amsi_detect_config",
                                     GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
         if (hDummy != INVALID_HANDLE_VALUE) CloseHandle(hDummy);
 

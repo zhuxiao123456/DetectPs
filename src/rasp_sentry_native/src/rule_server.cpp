@@ -40,7 +40,7 @@ void RuleServer::Stop()
     // Unblock each waiting ConnectNamedPipe with a dummy client connection.
     for (int i = 0; i < kThreadCount; i++)
     {
-        HANDLE h = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_rules",
+        HANDLE h = CreateFileW(L"\\\\.\\pipe\\amsi_detect_rules",
                                GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                                OPEN_EXISTING, 0, nullptr);
         if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
@@ -84,7 +84,7 @@ void RuleServer::ServerLoop()
     while (m_running.load())
     {
         HANDLE hPipe = CreateNamedPipeW(
-            L"\\\\.\\pipe\\rasp_sentry_rules",
+            L"\\\\.\\pipe\\amsi_detect_rules",
             PIPE_ACCESS_DUPLEX,
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
             kThreadCount,

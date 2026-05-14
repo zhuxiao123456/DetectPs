@@ -9,7 +9,7 @@
 //   1. Extracts content (script text, app name, content name) from IAmsiStream.
 //   2. Evaluates AmsiProvider sensor rules in-process via amsi_rule_engine.
 //   3. Returns AMSI_RESULT_DETECTED to block, AMSI_RESULT_NOT_DETECTED to allow.
-//   4. Sends a fire-and-forget RaspEvent JSON line to rasp_sentry_events pipe.
+//   4. Sends a fire-and-forget RaspEvent JSON line to amsi_detect_events pipe.
 //
 // CLSID:  {C0FFEE02-0000-0000-0000-000000000002}
 //

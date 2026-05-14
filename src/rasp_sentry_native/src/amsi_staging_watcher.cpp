@@ -279,7 +279,7 @@ std::wstring AmsiStagingWatcher::ReadInstalledPath()
 int AmsiStagingWatcher::BroadcastUnload()
 {
     SentryLog_Info("AmsiStagingWatcher",
-                   "Broadcasting 0x02 unload signal on pipe rasp_sentry_config");
+                   "Broadcasting 0x02 unload signal on pipe amsi_detect_config");
     int reached = 0;
     for (int i = 0; i < kMaxListeners; i++)
     {

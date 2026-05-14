@@ -11,7 +11,7 @@
 //     A new module adds zero changes to this header.
 //   Log injection: each module supplies its own RaspLuaLogFn backend.
 //     IIS7 → OutputDebugStringA wrapper.
-//     AMSI → RaspLog wrapper (ring buffer → rasp_sentry_events IPC).
+//     AMSI -> RaspLog wrapper (ring buffer -> amsi_detect_events IPC).
 //   Per-request lua_State: no shared VM state, no lock contention.
 //   Precompile cache: scripts are syntax-checked and cached by ruleId at
 //     rulebook load time. Run() reads from cache — no re-parse per call.

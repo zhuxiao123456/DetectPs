@@ -1,7 +1,7 @@
 #pragma once
 // config_watcher.h — Watches rasp_rules.json and rules/*.lua for changes.
 // On change: 1-second debounce → invalidate RuleServer cache →
-// broadcast 0x01 reload byte to \\.\pipe\rasp_sentry_config.
+// broadcast 0x01 reload byte to \\.\pipe\amsi_detect_config.
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -15,7 +15,7 @@ class RuleServer;   // forward — avoid circular include
 class ConfigWatcher
 {
 public:
-    static constexpr const wchar_t* kConfigPipeName  = L"\\\\.\\pipe\\rasp_sentry_config";
+    static constexpr const wchar_t* kConfigPipeName  = L"\\\\.\\pipe\\amsi_detect_config";
     static constexpr int            kMaxListeners     = 32;
     static constexpr DWORD          kDebounceMs       = 1000;
     static constexpr DWORD          kBroadcastTimeout = 500;

@@ -1,5 +1,5 @@
 #pragma once
-// rule_server.h — 8-thread named pipe server on \\.\pipe\rasp_sentry_rules.
+// rule_server.h - 8-thread named pipe server on \\.\pipe\amsi_detect_rules.
 // Responds to GET_RULES and GET_ALL_RULES commands with assembled JSON.
 // Replaces all custom C# JSON methods with nlohmann/json DOM operations.
 // nlohmann/json is only included in rule_server.cpp — not exposed here.
@@ -14,7 +14,7 @@
 class RuleServer
 {
 public:
-    static constexpr const wchar_t* kPipeName   = L"rasp_sentry_rules";
+    static constexpr const wchar_t* kPipeName   = L"amsi_detect_rules";
     static constexpr int            kThreadCount = 8;
 
     explicit RuleServer(std::string rulesPath);

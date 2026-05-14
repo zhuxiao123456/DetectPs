@@ -92,7 +92,7 @@ int wmain(int argc, wchar_t **argv)
 
     // ── Start in dependency order (mirrors Program.cs) ────────────────────────
     collector.Start();
-    SentryLog_Info("Program", "EventCollector started — %d threads on rasp_sentry_events",
+    SentryLog_Info("Program", "EventCollector started - %d threads on amsi_detect_events",
                    EventCollector::kThreadCount);
 
     controlStatusCollector.Start();
@@ -100,7 +100,7 @@ int wmain(int argc, wchar_t **argv)
                    ControlStatusCollector::kThreadCount);
 
     ruleServer.Start();
-    SentryLog_Info("Program", "RuleServer started — %d threads on rasp_sentry_rules",
+    SentryLog_Info("Program", "RuleServer started - %d threads on amsi_detect_rules",
                    RuleServer::kThreadCount);
 
     watcher.Start();

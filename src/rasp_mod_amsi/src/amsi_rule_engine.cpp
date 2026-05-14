@@ -361,7 +361,7 @@ DWORD WINAPI AmsiRuleEngine::UnloadThreadProc(LPVOID)
     snprintf(ackLine, sizeof(ackLine),
              "{\"cat\":\"drain-ack\",\"mod\":\"rasp_mod_amsi\",\"pid\":%s}", pid);
 
-    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_events",
+    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_events",
                                GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (hPipe != INVALID_HANDLE_VALUE) {
         DWORD written = 0;

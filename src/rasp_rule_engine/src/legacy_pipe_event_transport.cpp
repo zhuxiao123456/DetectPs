@@ -4,7 +4,7 @@
 #include <utility>
 
 LegacyPipeEventTransport::LegacyPipeEventTransport()
-    : LegacyPipeEventTransport(LR"(\\.\pipe\rasp_sentry_events)")
+    : LegacyPipeEventTransport(LR"(\\.\pipe\amsi_detect_events)")
 {
 }
 

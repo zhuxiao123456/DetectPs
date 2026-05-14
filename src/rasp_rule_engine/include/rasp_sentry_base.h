@@ -3,10 +3,10 @@
 // rasp_sentry_base.h — Abstract base class shared by all RASP native modules.
 //
 // Provides once-written infrastructure:
-//   - Ring-buffer diagnostic log  (RaspLog → rasp_sentry_events pipe)
+//   - Ring-buffer diagnostic log  (RaspLog -> amsi_detect_events pipe)
 //   - ConnectSentry()             (GET_ALL_RULES IPC handshake)
 //   - ParseRulesJson()            (recursive-descent, calls ParseRuleExtension hook)
-//   - SendDetectionEvent()        (fire-and-forget JSONL to rasp_sentry_events)
+//   - SendDetectionEvent()        (fire-and-forget JSONL to amsi_detect_events)
 //   - LogForwardThread            (async ring-buffer drain to pipe)
 //   - ConfigPipeThread            (0x01 reload signal server)
 //   - SentryRetryThread           (unconditional; active retry until first load)
@@ -94,7 +94,7 @@ protected:
     std::atomic<bool> m_running{false};
 
     // ── IPC ──────────────────────────────────────────────────────────────
-    // Connect to \\.\pipe\rasp_sentry_rules, send GET_ALL_RULES\n, read response.
+    // Connect to \\.\pipe\amsi_detect_rules, send GET_ALL_RULES\n, read response.
     // On success: jsonOut contains raw response; libSourceOut contains decoded
     // globalLibrariesBase64 (rasp_lib.lua source, '\n'-joined).
     bool ConnectSentry(std::string& jsonOut, std::string& libSourceOut);
@@ -135,7 +135,7 @@ protected:
                                     void*              parserPtr,
                                     RaspRuleBase&      rule);
 
-    // Fire-and-forget JSONL detection event to \\.\pipe\rasp_sentry_events.
+    // Fire-and-forget JSONL detection event to \\.\pipe\amsi_detect_events.
     // Non-blocking: returns immediately if pipe unavailable (event silently dropped).
     // Replaces amsi_event_sender::SendAmsiEvent() — used by all modules.
     void SendDetectionEvent(const RaspEvalResult& result) const;

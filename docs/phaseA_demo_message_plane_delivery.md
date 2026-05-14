@@ -32,9 +32,9 @@
 
 当前 demo 已经具备三条可运行的 IPC 通道原型：
 
-1. 规则拉取：`rasp_sentry_rules`
-2. 控制广播：`rasp_sentry_config`
-3. 事件上报：`rasp_sentry_events`
+1. 规则拉取：`amsi_detect_rules`
+2. 控制广播：`amsi_detect_config`
+3. 事件上报：`amsi_detect_events`
 
 对应代码：
 
@@ -88,10 +88,10 @@
 
 | 当前实现 | 目标名称 | 当前代码 |
 |---|---|---|
-| `\\.\pipe\rasp_sentry_rules` | `\\.\pipe\amsi_detect_rules` | `RuleServer` / `ConnectSentry()` |
-| `\\.\pipe\rasp_sentry_config` | `\\.\pipe\amsi_detect_config` | `ConfigWatcher` / `ConfigPipeThreadProc()` |
+| `\\.\pipe\amsi_detect_rules` | `\\.\pipe\amsi_detect_rules` | `RuleServer` / `ConnectSentry()` |
+| `\\.\pipe\amsi_detect_config` | `\\.\pipe\amsi_detect_config` | `ConfigWatcher` / `ConfigPipeThreadProc()` |
 | 无 | `\\.\pipe\amsi_detect_control_status` | 需要新增 |
-| `\\.\pipe\rasp_sentry_events` | `\\.\pipe\amsi_detect_events` | `EventCollector` / `SendDetectionEvent()` / `LogForwardThreadProc()` |
+| `\\.\pipe\amsi_detect_events` | `\\.\pipe\amsi_detect_events` | `EventCollector` / `SendDetectionEvent()` / `LogForwardThreadProc()` |
 
 ### 3.3 当前推荐兼容策略
 
@@ -509,7 +509,7 @@ sequenceDiagram
 
 建议改动：
 
-1. `ConnectSentry()` 优先连接 `amsi_detect_rules`
+1. `ConnectSentry()` 只连接 `amsi_detect_rules`
 2. 兼容新 envelope 与旧规则 JSON
 3. `ConfigPipeThreadProc()` 监听 `amsi_detect_config`
 4. `SendDetectionEvent()` / `LogForwardThreadProc()` 发往 `amsi_detect_events`

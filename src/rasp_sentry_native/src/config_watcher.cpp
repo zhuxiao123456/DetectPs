@@ -215,7 +215,7 @@ void ConfigWatcher::FireDebounced()
 
 void ConfigWatcher::BroadcastReload()
 {
-    SentryLog_Info("ConfigWatcher", "Broadcasting 0x01 on rasp_sentry_config");
+    SentryLog_Info("ConfigWatcher", "Broadcasting 0x01 on amsi_detect_config");
     int reached = 0;
     for (int i = 0; i < kMaxListeners; i++)
     {
@@ -235,7 +235,7 @@ void ConfigWatcher::BroadcastReload()
         {
             DWORD gle = GetLastError();
             SentryLog_Error("ConfigWatcher",
-                            "CreateFileW on rasp_sentry_config failed (GLE=%lu, reached=%d)",
+                            "CreateFileW on amsi_detect_config failed (GLE=%lu, reached=%d)",
                             gle, reached);
             break;
         }
@@ -246,7 +246,7 @@ void ConfigWatcher::BroadcastReload()
         {
             DWORD gle = GetLastError();
             SentryLog_Error("ConfigWatcher",
-                            "WriteFile on rasp_sentry_config failed (GLE=%lu, written=%lu, reached=%d)",
+                            "WriteFile on amsi_detect_config failed (GLE=%lu, written=%lu, reached=%d)",
                             gle, written, reached);
             CloseHandle(hPipe);
             break;

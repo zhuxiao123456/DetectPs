@@ -1,5 +1,5 @@
 #pragma once
-// event_collector.h — 16-thread named pipe server on \\.\pipe\rasp_sentry_events.
+// event_collector.h - 16-thread named pipe server on \\.\pipe\amsi_detect_events.
 // Receives JSONL lines from all RASP modules and appends them to daily log files.
 // Also detects "drain-ack" events and enqueues them for AmsiStagingWatcher.
 
@@ -14,7 +14,7 @@
 class EventCollector
 {
 public:
-    static constexpr const wchar_t* kPipeName   = L"rasp_sentry_events";
+    static constexpr const wchar_t* kPipeName   = L"amsi_detect_events";
     static constexpr int            kThreadCount = 16;
 
     // Thread-safe MPSC queue shared with AmsiStagingWatcher.
