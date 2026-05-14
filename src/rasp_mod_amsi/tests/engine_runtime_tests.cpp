@@ -60,6 +60,64 @@ public:
         RaspLuaResult result = snapshot->luaEngine->Run(ruleId, "AmsiProvider", RaspLuaContext{});
         return result.matched && result.desc == expectedDesc;
     }
+
+    bool BuildRegexSnapshotsHaveIndependentCaches(const std::string& firstJson,
+                                                  const std::string& secondJson)
+    {
+#ifdef RASP_PCRE2_AVAILABLE
+        std::string firstLib;
+        auto first = BuildNextSnapshot(firstJson, "", firstLib);
+        std::string secondLib;
+        auto second = BuildNextSnapshot(secondJson, "", secondLib);
+        if (!first || !second || !first->luaEngine || !second->luaEngine ||
+            first->rules.empty() || second->rules.empty())
+            return false;
+
+        if (first->luaEngine.get() == second->luaEngine.get())
+            return false;
+        if (first->luaEngine->RegexCacheSizeForTesting() != 0 ||
+            second->luaEngine->RegexCacheSizeForTesting() != 0)
+            return false;
+
+        ScanExecutionContext firstExec;
+        firstExec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(firstExec.budget.totalBudgetMs));
+        std::string matched;
+        if (!first->luaEngine->MatchesAnyRegex(first->rules[0].regexPatterns,
+                                               "Invoke IEX",
+                                               matched,
+                                               &firstExec))
+            return false;
+        if (first->luaEngine->RegexCacheSizeForTesting() != 1 ||
+            second->luaEngine->RegexCacheSizeForTesting() != 0)
+            return false;
+
+        ScanExecutionContext secondExec;
+        secondExec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(secondExec.budget.totalBudgetMs));
+        matched.clear();
+        if (!second->luaEngine->MatchesAnyRegex(second->rules[0].regexPatterns,
+                                                "DownloadString",
+                                                matched,
+                                                &secondExec))
+            return false;
+        if (first->luaEngine->RegexCacheSizeForTesting() != 1 ||
+            second->luaEngine->RegexCacheSizeForTesting() != 1)
+            return false;
+
+        ScanExecutionContext oldScanAfterSecondBuild;
+        oldScanAfterSecondBuild.deadline = ScanDeadline::FromNow(
+            std::chrono::milliseconds(oldScanAfterSecondBuild.budget.totalBudgetMs));
+        matched.clear();
+        return first->luaEngine->MatchesAnyRegex(first->rules[0].regexPatterns,
+                                                 "IEX remains available",
+                                                 matched,
+                                                 &oldScanAfterSecondBuild) &&
+               first->luaEngine->RegexCacheSizeForTesting() == 1;
+#else
+        (void)firstJson;
+        (void)secondJson;
+        return true;
+#endif
+    }
 };
 
 struct LuaBytecodeWriter
@@ -371,6 +429,17 @@ int main()
                     "PrecompileAll loads bytecode without prepending libSource"))
             return 1;
     }
+
+#ifdef RASP_PCRE2_AVAILABLE
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.BuildRegexSnapshotsHaveIndependentCaches(
+                        OneRegexRuleJson("regex_old_snapshot", "IEX"),
+                        OneRegexRuleJson("regex_new_snapshot", "DownloadString")),
+                    "regex compiled cache is isolated per snapshot-local Lua engine"))
+            return 1;
+    }
+#endif
 
     {
         TestAmsiRuleEngine engine;

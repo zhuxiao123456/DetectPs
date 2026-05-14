@@ -127,6 +127,10 @@ public:
     // (which retrieve the engine pointer via the Lua registry) can call it directly.
     // Returns nullptr if the pattern is invalid (error already logged).
     pcre2_real_code_8* GetOrCompilePcre2(const std::string& pattern) const;
+
+    // Test/diagnostic seam for verifying the snapshot-local compiled regex cache.
+    // Does not compile, evict, or otherwise mutate cache entries.
+    size_t RegexCacheSizeForTesting() const;
 #endif // RASP_PCRE2_AVAILABLE
 
     // Called by LuaPrint (a static free function in rasp_lua_engine.cpp that reads the
@@ -139,9 +143,10 @@ private:
     RaspLuaLogFn                                 m_logFn = nullptr;
 
 #ifdef RASP_PCRE2_AVAILABLE
-    // PCRE2 compiled-pattern cache.  Populated lazily by GetOrCompilePcre2().
-    // Keys are raw pattern strings.  Values are owned by this engine instance
-    // and freed in the destructor.
+    // Snapshot-local PCRE2 compiled-pattern cache. AMSI RuleSnapshot owns one
+    // RaspLuaEngine instance, so compiled pcre2_code objects never cross reload
+    // snapshot boundaries. GetOrCompilePcre2() attempts best-effort JIT during
+    // compile; Layer A only reuses pcre2_code, not per-scan match context/data.
     mutable std::mutex                                           m_regexMutex;
     mutable std::unordered_map<std::string, pcre2_real_code_8*> m_regexCache;
 #endif // RASP_PCRE2_AVAILABLE

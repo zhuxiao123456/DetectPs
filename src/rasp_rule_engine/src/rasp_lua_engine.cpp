@@ -181,6 +181,12 @@ pcre2_real_code_8 *RaspLuaEngine::GetOrCompilePcre2(const std::string &pattern) 
     return re;
 }
 
+size_t RaspLuaEngine::RegexCacheSizeForTesting() const
+{
+    std::lock_guard<std::mutex> lk(m_regexMutex);
+    return m_regexCache.size();
+}
+
 // ── MatchesAnyRegex ───────────────────────────────────────────────────────────
 
 bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,

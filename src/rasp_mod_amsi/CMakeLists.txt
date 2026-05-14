@@ -125,6 +125,29 @@ if(MSVC)
     target_compile_options(scan_budget_tests PRIVATE /W3 /WX-)
 endif()
 
+add_executable(pcre2_cache_benchmark
+    tests/pcre2_cache_benchmark.cpp
+)
+
+target_include_directories(pcre2_cache_benchmark PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(pcre2_cache_benchmark PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    _WIN32_WINNT=0x0A00
+)
+
+target_link_libraries(pcre2_cache_benchmark PRIVATE
+    rasp_rule_engine
+)
+
+if(MSVC)
+    target_compile_options(pcre2_cache_benchmark PRIVATE /W3 /WX-)
+endif()
+
 add_executable(rule_json_parser_tests
     tests/rule_json_parser_tests.cpp
 )

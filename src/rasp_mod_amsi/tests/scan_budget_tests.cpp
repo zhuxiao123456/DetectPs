@@ -156,6 +156,54 @@ int main()
         if (!Expect(exec.regexLimitHit, "PCRE2 match/depth/heap limit hit is recorded"))
             return 1;
     }
+
+    {
+        RaspLuaEngine engine;
+        engine.SetLogFn(SilentLog);
+        if (!Expect(engine.RegexCacheSizeForTesting() == 0, "new engine starts with empty regex cache"))
+            return 1;
+
+        ScanExecutionContext exec;
+        exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
+        std::string matched;
+        bool ok = engine.MatchesAnyRegex({"IEX"}, "Invoke IEX test", matched, &exec);
+        if (!Expect(ok && matched == "IEX", "C++ regex path compiles and matches first pattern"))
+            return 1;
+        if (!Expect(engine.RegexCacheSizeForTesting() == 1, "first pattern is cached"))
+            return 1;
+
+        ScanExecutionContext exec2;
+        exec2.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec2.budget.totalBudgetMs));
+        matched.clear();
+        ok = engine.MatchesAnyRegex({"IEX"}, "Invoke IEX again", matched, &exec2);
+        if (!Expect(ok && matched == "IEX", "cached C++ regex pattern still matches"))
+            return 1;
+        if (!Expect(engine.RegexCacheSizeForTesting() == 1, "reusing same C++ pattern does not grow cache"))
+            return 1;
+
+        ScanExecutionContext exec3;
+        exec3.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec3.budget.totalBudgetMs));
+        matched.clear();
+        ok = engine.MatchesAnyRegex({"("}, "invalid", matched, &exec3);
+        if (!Expect(!ok, "invalid C++ regex pattern is skipped"))
+            return 1;
+        if (!Expect(engine.RegexCacheSizeForTesting() == 1, "invalid C++ pattern is not cached"))
+            return 1;
+
+        ScanExecutionContext exec4;
+        exec4.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec4.budget.totalBudgetMs));
+        matched.clear();
+        ok = engine.MatchesAnyRegex({"AMSI"}, "AMSI context", matched, &exec4);
+        if (!Expect(ok && matched == "AMSI", "different C++ regex pattern matches"))
+            return 1;
+        if (!Expect(engine.RegexCacheSizeForTesting() == 2, "different C++ pattern gets its own cache entry"))
+            return 1;
+
+        RaspLuaEngine otherEngine;
+        otherEngine.SetLogFn(SilentLog);
+        if (!Expect(otherEngine.RegexCacheSizeForTesting() == 0, "separate engine has independent regex cache"))
+            return 1;
+    }
 #endif
 
     {
