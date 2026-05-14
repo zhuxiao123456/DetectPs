@@ -54,6 +54,7 @@ struct RaspRuleBase {
     std::string description;
     std::string severity;                        // "Low" / "Medium" / "High" / "Critical"
     std::string scriptBodyBase64;                // cleared after Precompile
+    std::string scriptEncoding;                  // "" / "source" (default) / "bytecode"
     std::string scriptEval;                      // "exclusive" | "additional"
     int confidence;  // 设置置信度
     int scriptTimeoutInstructions = 500000; // scriptTimeoutMs * 50000; min 500000

@@ -89,7 +89,9 @@ public:
     // Syntax-check combinedSrc (libSource + "\n" + ruleScript) and cache under ruleId.
     // On syntax error: logs via m_logFn and does NOT cache.
     // IsLoaded returns false → module falls back to C++ checks.
-    void Precompile(const std::string& ruleId, const std::string& combinedSrc);
+    void Precompile(const std::string& ruleId,
+                    const std::string& payload,
+                    bool isBytecode = false);
 
     // Returns true if Precompile succeeded for ruleId.
     bool IsLoaded(const std::string& ruleId) const;
@@ -133,7 +135,7 @@ public:
 
 private:
     mutable std::mutex                           m_mutex;
-    std::unordered_map<std::string, std::string> m_sources; // ruleId → combined src
+    std::unordered_map<std::string, std::string> m_sources; // ruleId -> source or bytecode payload
     RaspLuaLogFn                                 m_logFn = nullptr;
 
 #ifdef RASP_PCRE2_AVAILABLE

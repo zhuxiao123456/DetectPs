@@ -6,11 +6,18 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <thread>
 #include <map>
+#include <vector>
+
+extern "C" {
+#include "lua.h"
+#include "lauxlib.h"
+}
 
 namespace {
 
@@ -39,7 +46,90 @@ class TestAmsiRuleEngine : public AmsiRuleEngine
 public:
     using AmsiRuleEngine::BuildNextSnapshot;
     using AmsiRuleEngine::ParseAndSwap;
+
+    bool BuildSnapshotLuaMatches(const std::string& json,
+                                 const std::string& libSource,
+                                 const std::string& ruleId,
+                                 const std::string& expectedDesc)
+    {
+        std::string effectiveLib;
+        auto snapshot = BuildNextSnapshot(json, libSource, effectiveLib);
+        if (!snapshot || !snapshot->luaEngine || snapshot->rules.empty())
+            return false;
+
+        RaspLuaResult result = snapshot->luaEngine->Run(ruleId, "AmsiProvider", RaspLuaContext{});
+        return result.matched && result.desc == expectedDesc;
+    }
 };
+
+struct LuaBytecodeWriter
+{
+    std::string bytes;
+};
+
+int WriteLuaBytecode(lua_State*, const void* data, size_t size, void* userData)
+{
+    auto* writer = static_cast<LuaBytecodeWriter*>(userData);
+    writer->bytes.append(static_cast<const char*>(data), size);
+    return 0;
+}
+
+std::string CompileLuaBytecode(const char* source, const char* chunkName)
+{
+    lua_State* L = luaL_newstate();
+    if (!L)
+        return {};
+
+    if (luaL_loadbuffer(L, source, std::strlen(source), chunkName) != LUA_OK) {
+        lua_close(L);
+        return {};
+    }
+
+    LuaBytecodeWriter writer;
+    if (lua_dump(L, WriteLuaBytecode, &writer, 0) != 0) {
+        lua_close(L);
+        return {};
+    }
+
+    lua_close(L);
+    return writer.bytes;
+}
+
+std::string Base64Encode(const std::string& input)
+{
+    static const char kAlphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string output;
+    output.reserve(((input.size() + 2) / 3) * 4);
+
+    size_t i = 0;
+    while (i + 3 <= input.size()) {
+        const unsigned char a = static_cast<unsigned char>(input[i++]);
+        const unsigned char b = static_cast<unsigned char>(input[i++]);
+        const unsigned char c = static_cast<unsigned char>(input[i++]);
+        output.push_back(kAlphabet[a >> 2]);
+        output.push_back(kAlphabet[((a & 0x03) << 4) | (b >> 4)]);
+        output.push_back(kAlphabet[((b & 0x0f) << 2) | (c >> 6)]);
+        output.push_back(kAlphabet[c & 0x3f]);
+    }
+
+    if (i < input.size()) {
+        const unsigned char a = static_cast<unsigned char>(input[i++]);
+        output.push_back(kAlphabet[a >> 2]);
+        if (i < input.size()) {
+            const unsigned char b = static_cast<unsigned char>(input[i++]);
+            output.push_back(kAlphabet[((a & 0x03) << 4) | (b >> 4)]);
+            output.push_back(kAlphabet[(b & 0x0f) << 2]);
+            output.push_back('=');
+        } else {
+            output.push_back(kAlphabet[(a & 0x03) << 4]);
+            output.push_back('=');
+            output.push_back('=');
+        }
+    }
+
+    return output;
+}
 
 std::string LuaBase64(const char* script)
 {
@@ -71,6 +161,15 @@ std::string OneRawLuaRuleJson(const char* id, const char* scriptBase64)
     return std::string("{\"rules\":[{\"id\":\"") + id +
            "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"ctx_rule\",\"scriptBodyBase64\":\"" +
            scriptBase64 + "\"}]}";
+}
+
+std::string OneEncodedLuaRuleJson(const char* id,
+                                  const char* scriptBase64,
+                                  const char* scriptEncoding)
+{
+    return std::string("{\"rules\":[{\"id\":\"") + id +
+           "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"encoded_rule\",\"scriptBodyBase64\":\"" +
+           scriptBase64 + "\",\"scriptEncoding\":\"" + scriptEncoding + "\"}]}";
 }
 
 } // namespace
@@ -253,6 +352,23 @@ int main()
         auto duringBuild = engine.Evaluate("AmsiProvider", ctx);
         if (!Expect(!duringBuild.empty() && duringBuild[0].ruleId == "old_rule",
                     "building next snapshot does not clear old snapshot Lua engine"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const char* bytecodeSource =
+            "function rule(sensor, context) return { match = true, desc = 'bytecode-snapshot' } end";
+        std::string bytecode = CompileLuaBytecode(bytecodeSource, "=bytecode_snapshot");
+        if (!Expect(!bytecode.empty(), "snapshot test compiles Lua bytecode"))
+            return 1;
+
+        std::string json = OneEncodedLuaRuleJson("bytecode_snapshot",
+                                                 Base64Encode(bytecode).c_str(),
+                                                 "bytecode");
+        const std::string libSource = "function lib_marker() return 'lib' end";
+        if (!Expect(engine.BuildSnapshotLuaMatches(json, libSource, "bytecode_snapshot", "bytecode-snapshot"),
+                    "PrecompileAll loads bytecode without prepending libSource"))
             return 1;
     }
 

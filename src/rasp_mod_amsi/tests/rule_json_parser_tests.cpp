@@ -87,6 +87,7 @@ int main()
                     "description": "desc",
                     "severity": "High",
                     "scriptBodyBase64": "c2NyaXB0",
+                    "scriptEncoding": "bytecode",
                     "scriptEval": "exclusive",
                     "confidence": 87,
                     "mode": "block",
@@ -142,6 +143,8 @@ int main()
             return 1;
         if (!Expect(first.scriptBodyBase64 == "c2NyaXB0", "script body base64 parsed"))
             return 1;
+        if (!Expect(first.scriptEncoding == "bytecode", "script encoding parsed"))
+            return 1;
         if (!Expect(first.scriptEval == "exclusive", "script eval parsed"))
             return 1;
         if (!Expect(first.confidence == 87, "confidence parsed"))
@@ -165,6 +168,8 @@ int main()
         if (!Expect(second.id == "rule-2", "second rule id parsed"))
             return 1;
         if (!Expect(second.mode == RaspRuleMode::Audit, "unknown mode falls back to audit"))
+            return 1;
+        if (!Expect(second.scriptEncoding.empty(), "missing scriptEncoding remains empty"))
             return 1;
         if (!Expect(second.scriptTimeoutInstructions == 500000,
                     "non-positive script timeout falls back to default"))

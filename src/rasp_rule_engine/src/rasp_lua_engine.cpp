@@ -29,6 +29,33 @@ namespace {
 constexpr uint32_t kLuaHookInstructionStep = 1000;
 constexpr const char* kLuaBudgetRegistryKey = "rasp_scan_budget";
 
+bool IsLua54BytecodePayload(const std::string& payload)
+{
+    static const unsigned char kLua54Magic[] = {0x1b, 'L', 'u', 'a', 0x54};
+    return payload.size() >= sizeof(kLua54Magic) &&
+           std::memcmp(payload.data(), kLua54Magic, sizeof(kLua54Magic)) == 0;
+}
+
+struct LuaBytecodeReader
+{
+    const char* data = nullptr;
+    size_t size = 0;
+    bool consumed = false;
+};
+
+const char* ReadLuaBytecode(lua_State*, void* userData, size_t* size)
+{
+    auto* reader = static_cast<LuaBytecodeReader*>(userData);
+    if (!reader || reader->consumed) {
+        *size = 0;
+        return nullptr;
+    }
+
+    reader->consumed = true;
+    *size = reader->size;
+    return reader->data;
+}
+
 } // namespace
 
 // ── Destructor ────────────────────────────────────────────────────────────────
@@ -415,10 +442,33 @@ static int LuaPrint(lua_State *L)
 // 功能：在收到规则配置时，提前进行语法检查。
 // 流程：创建临时 Lua State -> luaL_loadbuffer 检查语法 -> 如果 OK，将源码存入 m_sources。
 void RaspLuaEngine::Precompile(const std::string &ruleId,
-                               const std::string &combinedSrc)
+                               const std::string &payload,
+                               bool isBytecode)
 {
-    if (ruleId.empty() || combinedSrc.empty())
+    if (ruleId.empty() || payload.empty())
         return;
+
+    if (isBytecode) {
+        if (!IsLua54BytecodePayload(payload)) {
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "[RaspLuaEngine] Precompile: rule=%s bytecode header invalid\n",
+                     ruleId.c_str());
+            Log(msg);
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(m_mutex);
+            m_sources[ruleId] = payload;
+        }
+
+        char msg[256];
+        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Precompile: rule=%s bytecode cached (%zu bytes)\n",
+                 ruleId.c_str(), payload.size());
+        Log(msg);
+        return;
+    }
 
     // 性能问题: 每次执行一条 Lua 规则，代码都会 luaL_newstate() 创建一个全新的虚拟机，加载标准库，然后再销毁它，lua太多会导致cpu损耗
     lua_State *L = luaL_newstate();
@@ -431,7 +481,7 @@ void RaspLuaEngine::Precompile(const std::string &ruleId,
         return;
     }
 
-    if (luaL_loadbuffer(L, combinedSrc.c_str(), combinedSrc.size(),
+    if (luaL_loadbuffer(L, payload.data(), payload.size(),
                         ruleId.c_str()) != LUA_OK)
     {
         const char *err = lua_tostring(L, -1);
@@ -448,12 +498,12 @@ void RaspLuaEngine::Precompile(const std::string &ruleId,
     // Cache the combined source text
     {
         std::lock_guard<std::mutex> lk(m_mutex);
-        m_sources[ruleId] = combinedSrc;
+        m_sources[ruleId] = payload;
     }
 
     char msg[256];
     snprintf(msg, sizeof(msg), "[RaspLuaEngine] Precompile: rule=%s cached (%zu bytes)\n",
-             ruleId.c_str(), combinedSrc.size());
+             ruleId.c_str(), payload.size());
     Log(msg);
 }
 
@@ -486,13 +536,13 @@ RaspLuaResult RaspLuaEngine::Run(
     RaspLuaResult result;
 
     // 获取规则源码
-    std::string src;
+    std::string payload;
     {
         std::lock_guard<std::mutex> lk(m_mutex);
         auto it = m_sources.find(ruleId);
         if (it == m_sources.end())
             return result;
-        src = it->second;
+        payload = it->second;
     }
 
     // ── Phase 0: 创建全新虚拟机 ─────────────────────────────────────────────────
@@ -546,12 +596,24 @@ RaspLuaResult RaspLuaEngine::Run(
     }
 
     // ── Phase 5: luaL_loadbuffer + lua_pcall 编译并执行外层包裹，注册 rule 函数 ──────────────
-    if (luaL_loadbuffer(L, src.c_str(), src.size(), ruleId.c_str()) != LUA_OK)
+    const bool isBytecode = IsLua54BytecodePayload(payload);
+    int loadStatus = LUA_ERRSYNTAX;
+    if (isBytecode)
+    {
+        LuaBytecodeReader reader{payload.data(), payload.size(), false};
+        loadStatus = lua_load(L, ReadLuaBytecode, &reader, ruleId.c_str(), "b");
+    }
+    else
+    {
+        loadStatus = luaL_loadbuffer(L, payload.data(), payload.size(), ruleId.c_str());
+    }
+
+    if (loadStatus != LUA_OK)
     {
         const char *err = lua_tostring(L, -1);
         char msg[512];
-        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s loadbuffer: %s\n",
-                 ruleId.c_str(), err ? err : "(null)");
+        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s load(%s): %s\n",
+                 ruleId.c_str(), isBytecode ? "bytecode" : "source", err ? err : "(null)");
         Log(msg);
         ClearLuaBudgetHook(L);
         lua_close(L);

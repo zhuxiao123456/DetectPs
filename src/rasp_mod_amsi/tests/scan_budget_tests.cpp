@@ -2,10 +2,16 @@
 #include "rasp_scan_budget.h"
 
 #include <chrono>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <thread>
 #include <vector>
+
+extern "C" {
+#include "lua.h"
+#include "lauxlib.h"
+}
 
 namespace {
 
@@ -18,6 +24,39 @@ bool Expect(bool condition, const char* message)
 
 void SilentLog(const char*)
 {
+}
+
+struct LuaBytecodeWriter
+{
+    std::string bytes;
+};
+
+int WriteLuaBytecode(lua_State*, const void* data, size_t size, void* userData)
+{
+    auto* writer = static_cast<LuaBytecodeWriter*>(userData);
+    writer->bytes.append(static_cast<const char*>(data), size);
+    return 0;
+}
+
+std::string CompileLuaBytecode(const char* source, const char* chunkName)
+{
+    lua_State* L = luaL_newstate();
+    if (!L)
+        return {};
+
+    if (luaL_loadbuffer(L, source, std::strlen(source), chunkName) != LUA_OK) {
+        lua_close(L);
+        return {};
+    }
+
+    LuaBytecodeWriter writer;
+    if (lua_dump(L, WriteLuaBytecode, &writer, 0) != 0) {
+        lua_close(L);
+        return {};
+    }
+
+    lua_close(L);
+    return writer.bytes;
 }
 
 } // namespace
@@ -129,6 +168,73 @@ int main()
         if (!Expect(exec.timedOut, "maxRules exhaustion marks execution context"))
             return 1;
         if (!Expect(exec.timeoutReason == "rule_budget_exceeded", "maxRules reason is recorded"))
+            return 1;
+    }
+
+    {
+        RaspLuaEngine engine;
+        engine.SetLogFn(SilentLog);
+        const char* source = "function rule(sensor, context) return { match = true, desc = 'source-ok' } end";
+        engine.Precompile("explicit_source", source, false);
+
+        ScanExecutionContext exec;
+        exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
+        RaspLuaResult result = engine.Run("explicit_source", "AmsiProvider", RaspLuaContext{}, 500000, {}, &exec);
+        if (!Expect(result.matched && result.desc == "source-ok", "explicit source Precompile still runs"))
+            return 1;
+    }
+
+    {
+        RaspLuaEngine engine;
+        engine.SetLogFn(SilentLog);
+        const char* source = "function rule(sensor, context) return { match = true, desc = 'not-bytecode' } end";
+        engine.Precompile("invalid_bytecode", source, true);
+        if (!Expect(!engine.IsLoaded("invalid_bytecode"), "invalid bytecode payload is not cached"))
+            return 1;
+    }
+
+    {
+        RaspLuaEngine engine;
+        engine.SetLogFn(SilentLog);
+        std::string bytecode = CompileLuaBytecode(
+            "function rule(sensor, context) return { match = true, desc = 'bytecode-ok', payload = context.body } end",
+            "=bytecode_ok");
+        if (!Expect(!bytecode.empty(), "test fixture compiles Lua bytecode"))
+            return 1;
+
+        engine.Precompile("bytecode_ok", bytecode, true);
+        if (!Expect(engine.IsLoaded("bytecode_ok"), "valid bytecode payload is cached"))
+            return 1;
+
+        RaspLuaContext ctx;
+        ctx.fields.push_back({"body", "payload-from-bytecode", true});
+        ScanExecutionContext exec;
+        exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
+        RaspLuaResult result = engine.Run("bytecode_ok", "AmsiProvider", ctx, 500000, {}, &exec);
+        if (!Expect(result.matched && result.desc == "bytecode-ok" && result.payload == "payload-from-bytecode",
+                    "valid bytecode runs and receives context"))
+            return 1;
+    }
+
+    {
+        RaspLuaEngine engine;
+        engine.SetLogFn(SilentLog);
+        std::string bytecode = CompileLuaBytecode(
+            "function rule(sensor, context) while true do end end",
+            "=bytecode_timeout");
+        if (!Expect(!bytecode.empty(), "test fixture compiles timeout bytecode"))
+            return 1;
+
+        engine.Precompile("bytecode_timeout", bytecode, true);
+        ScanExecutionContext exec;
+        exec.budget.luaBudgetMs = 1000;
+        exec.budget.maxLuaInstructionCount = 1000;
+        exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
+        RaspLuaResult result = engine.Run("bytecode_timeout", "AmsiProvider", RaspLuaContext{}, 500000, {}, &exec);
+        if (!Expect(!result.matched, "timed out bytecode script does not match"))
+            return 1;
+        if (!Expect(result.timedOut && exec.timedOut && exec.timeoutReason == "lua_timeout",
+                    "bytecode path remains governed by Lua budget hook"))
             return 1;
     }
 

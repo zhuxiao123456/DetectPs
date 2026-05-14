@@ -109,6 +109,8 @@ bool ParseRulesArray(RuleJsonParser::Parser& p,
                 p.read_string(rule.severity);
             else if (rkey == "scriptBodyBase64")
                 p.read_string(rule.scriptBodyBase64);
+            else if (rkey == "scriptEncoding")
+                p.read_string(rule.scriptEncoding);
             else if (rkey == "scriptEval")
                 p.read_string(rule.scriptEval);
             else if (rkey == "confidence")

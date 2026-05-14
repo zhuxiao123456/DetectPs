@@ -108,6 +108,10 @@ static void RaspLog(const char *fmt, ...) {
     GetAmsiEngineRuntime().Log("%s", buf);
 }
 
+static void RaspLuaLog(const char* msg) {
+    GetAmsiEngineRuntime().Log("%s", msg ? msg : "");
+}
+
 // =========================================================================
 // ParseAndSwap — 接收从 rasp_sentry（守护进程）传来的 JSON 配置，解析并热替换当前内存中的安全策略
 //
@@ -140,6 +144,7 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     }
 
     auto luaEngine = std::make_shared<RaspLuaEngine>();
+    luaEngine->SetLogFn(RaspLuaLog);
     PrecompileAll(configs, effectiveLib, *luaEngine);
     return std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(configs), std::move(luaEngine)});
 }
@@ -321,10 +326,23 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
 
         std::string decoded;
         if (Base64Decode(rule.scriptBodyBase64, decoded)) {
+            const bool isBytecode = (rule.scriptEncoding == "bytecode");
+            if (isBytecode) {
+                Log("[RaspAmsi] PrecompileAll: rule=%s scriptEncoding=bytecode accepted",
+                    rule.id.c_str());
+                luaEngine.Precompile(rule.id, decoded, true);
+                continue;
+            }
+
+            if (!rule.scriptEncoding.empty() && rule.scriptEncoding != "source") {
+                Log("[RaspAmsi] PrecompileAll: unknown scriptEncoding=%s rule=%s, treating as source",
+                    rule.scriptEncoding.c_str(), rule.id.c_str());
+            }
+
             std::string combined = libSource.empty()
                                    ? decoded
                                    : libSource + "\n" + decoded;
-            luaEngine.Precompile(rule.id, combined);
+            luaEngine.Precompile(rule.id, combined, false);
         } else {
             Log("[RaspAmsi] PrecompileAll: base64 decode failed rule=%s", rule.id.c_str());
         }
