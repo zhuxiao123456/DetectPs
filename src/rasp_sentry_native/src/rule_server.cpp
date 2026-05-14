@@ -6,6 +6,12 @@
 #include <fstream>
 #include <algorithm>
 #include <string>
+#include <vector>
+
+extern "C" {
+#include "lua.h"
+#include "lauxlib.h"
+}
 
 // ── RuleServer ────────────────────────────────────────────────────────────────
 
@@ -281,9 +287,56 @@ static std::string ExtractGlobalLibPrefix(const json& root)
 }
 
 // Transformation 5 — replaces regex PrependLibToRuleScript() in C# RuleServer.
+struct LuaBytecodeWriter
+{
+    std::vector<uint8_t> bytes;
+};
+
+static int LuaDumpWriter(lua_State*, const void* data, size_t size, void* userData)
+{
+    auto* writer = static_cast<LuaBytecodeWriter*>(userData);
+    const auto* chunk = static_cast<const uint8_t*>(data);
+    writer->bytes.insert(writer->bytes.end(), chunk, chunk + size);
+    return 0;
+}
+
+static std::vector<uint8_t> CompileToBytecode(const std::string& combinedSource,
+                                              const char* chunkName)
+{
+    lua_State* L = luaL_newstate();
+    if (!L)
+        return {};
+
+    int rc = luaL_loadbuffer(L, combinedSource.data(), combinedSource.size(), chunkName);
+    if (rc != LUA_OK)
+    {
+        const char* err = lua_tostring(L, -1);
+        SentryLog_Error("RuleServer",
+                        "CompileToBytecode: luaL_loadbuffer failed for %s: %s",
+                        chunkName,
+                        err ? err : "(nil)");
+        lua_close(L);
+        return {};
+    }
+
+    LuaBytecodeWriter writer;
+    rc = lua_dump(L, LuaDumpWriter, &writer, 0);
+    lua_close(L);
+
+    if (rc != 0 || writer.bytes.empty())
+    {
+        SentryLog_Error("RuleServer",
+                        "CompileToBytecode: lua_dump failed for %s (rc=%d)",
+                        chunkName,
+                        rc);
+        return {};
+    }
+
+    return writer.bytes;
+}
+
 static void PrependLibToRuleScript(json& rule, const std::string& libPrefix)
 {
-    if (libPrefix.empty()) return;
     if (!rule.contains("scriptBodyBase64")) return;
     if (!rule["scriptBodyBase64"].is_string()) return;
 
@@ -295,7 +348,65 @@ static void PrependLibToRuleScript(json& rule, const std::string& libPrefix)
         if (ruleScript.empty()) return;  // corrupt base64 — leave unchanged
     }
 
-    rule["scriptBodyBase64"] = base64_encode(libPrefix + ruleScript);
+    const std::string combined = libPrefix.empty() ? ruleScript : libPrefix + "\n" + ruleScript;
+    std::string chunkName = "=rasp_rule";
+    if (rule.contains("id") && rule["id"].is_string())
+        chunkName = "=" + rule["id"].get<std::string>();
+
+    std::vector<uint8_t> bytecode = CompileToBytecode(combined, chunkName.c_str());
+    if (!bytecode.empty())
+    {
+        rule["scriptBodyBase64"] = base64_encode(bytecode.data(), bytecode.size());
+        rule["scriptEncoding"] = "bytecode";
+        SentryLog_Info("RuleServer",
+                       "Compiled %s to bytecode (%zu bytes)",
+                       chunkName.c_str(),
+                       bytecode.size());
+    }
+    else
+    {
+        SentryLog_Warn("RuleServer",
+                       "Bytecode compilation failed for %s - falling back to source text",
+                       chunkName.c_str());
+        rule["scriptBodyBase64"] = base64_encode(combined);
+        rule.erase("scriptEncoding");
+    }
+}
+
+static void CompileAllRulesToBytecode(json& root)
+{
+    if (!root.contains("rules") || !root["rules"].is_array()) return;
+
+    std::string libPrefix = ExtractGlobalLibPrefix(root);
+    int compiled = 0;
+    int skipped = 0;
+
+    for (auto& rule : root["rules"])
+    {
+        if (!rule.is_object()) continue;
+        if (rule.contains("scriptEncoding") &&
+            rule["scriptEncoding"].is_string() &&
+            rule["scriptEncoding"].get<std::string>() == "bytecode")
+        {
+            ++skipped;
+            continue;
+        }
+
+        const bool hadScript = rule.contains("scriptBodyBase64") && rule["scriptBodyBase64"].is_string();
+        PrependLibToRuleScript(rule, libPrefix);
+        if (hadScript &&
+            rule.contains("scriptEncoding") &&
+            rule["scriptEncoding"].is_string() &&
+            rule["scriptEncoding"].get<std::string>() == "bytecode")
+        {
+            ++compiled;
+        }
+    }
+
+    SentryLog_Info("RuleServer",
+                   "CompileAllRulesToBytecode: compiled=%d skipped=%d",
+                   compiled,
+                   skipped);
 }
 
 // ── RuleServer JSON methods ───────────────────────────────────────────────────
@@ -318,6 +429,7 @@ std::string RuleServer::BuildAssembledJson()
         std::string rulesDir = DirOf(m_rulesPath);
         ::InlineGlobalLibraries(root, rulesDir);
         ::InlineScriptFiles(root, rulesDir);
+        ::CompileAllRulesToBytecode(root);
 
         return root.dump();
     }
@@ -346,7 +458,11 @@ std::string RuleServer::FilterAmsiProviderRules(const std::string& assembledJson
             if (!rule.contains("sensor") || !rule["sensor"].is_string()) continue;
             if (rule["sensor"].get<std::string>() != "AmsiProvider") continue;
 
-            ::PrependLibToRuleScript(rule, libPrefix);
+            bool alreadyBytecode = rule.contains("scriptEncoding") &&
+                                   rule["scriptEncoding"].is_string() &&
+                                   rule["scriptEncoding"].get<std::string>() == "bytecode";
+            if (!alreadyBytecode)
+                ::PrependLibToRuleScript(rule, libPrefix);
             result.push_back(std::move(rule));
         }
 
