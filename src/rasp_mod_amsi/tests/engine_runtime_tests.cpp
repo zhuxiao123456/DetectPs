@@ -214,6 +214,34 @@ std::string OneRegexRuleJson(const char* id, const char* pattern)
            pattern + "\"]}}]}";
 }
 
+std::string ParentPathGatedRegexRuleJson(const char* id,
+                                         const char* pattern,
+                                         const char* allowContains,
+                                         const char* blockContains)
+{
+    std::string config = std::string("\"regexPatterns\":[\"") + pattern + "\"]";
+    std::string topLevelFields;
+    if (allowContains)
+        topLevelFields += std::string(",\"parentPathAllowContains\":[\"") + allowContains + "\"]";
+    if (blockContains)
+        topLevelFields += std::string(",\"parentPathBlockContains\":[\"") + blockContains + "\"]";
+
+    return std::string("{\"rules\":[{\"id\":\"") + id +
+           "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"parent_gate\",\"config\":{" +
+           config + "}" + topLevelFields + "}]}";
+}
+
+std::string FirstRuleGatedSecondRuleFallbackJson()
+{
+    return "{\"rules\":["
+           "{\"id\":\"gated_first\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+           "\"description\":\"gated_first\",\"config\":{\"regexPatterns\":[\"amsiinitfailed\"]},"
+           "\"parentPathBlockContains\":[\"/not-present/\"]},"
+           "{\"id\":\"fallback_second\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+           "\"description\":\"fallback_second\",\"config\":{\"regexPatterns\":[\"amsiinitfailed\"]}}"
+           "]}";
+}
+
 std::string OneRawLuaRuleJson(const char* id, const char* scriptBase64)
 {
     return std::string("{\"rules\":[{\"id\":\"") + id +
@@ -500,6 +528,161 @@ int main()
                                                  scanContext);
         if (!Expect(matched.ruleMatched && matched.payload == "DownloadString",
                     "nullptr process context does not block body detection"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ParentPathGatedRegexRuleJson("parent_gate_block_miss",
+                                                     "amsiinitfailed",
+                                                     nullptr,
+                                                     "\\\\asp businesee one\\\\"),
+                        ""),
+                    "parent gate block miss rule snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.parentPid = 4321;
+        process.parentProcessName = "cmd.exe";
+        process.parentProcessPath = "C:\\Windows\\System32\\cmd.exe";
+        process.status = ProcessCaptureStatus::Success;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "amsiinitfailed",
+                                                 14,
+                                                 scanContext);
+        if (!Expect(!matched.ruleMatched,
+                    "parentPathBlockContains miss skips current rule even when regex matches"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ParentPathGatedRegexRuleJson("parent_gate_block_hit",
+                                                     "amsiinitfailed",
+                                                     nullptr,
+                                                     "/asp businesee one/"),
+                        ""),
+                    "parent gate block hit rule snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.parentPid = 4321;
+        process.parentProcessName = "a.exe";
+        process.parentProcessPath = "C:\\A\\B\\ASP BUSINESEE ONE\\a.exe";
+        process.status = ProcessCaptureStatus::Success;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "amsiinitfailed",
+                                                 14,
+                                                 scanContext);
+        if (!Expect(matched.ruleMatched && matched.ruleId == "parent_gate_block_hit",
+                    "parentPathBlockContains is case-insensitive and slash-normalized gate"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ParentPathGatedRegexRuleJson("parent_gate_allow_hit",
+                                                     "amsiinitfailed",
+                                                     "trusted launcher.exe",
+                                                     "\\\\asp businesee one\\\\"),
+                        ""),
+                    "parent gate allow hit rule snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.parentPid = 4321;
+        process.parentProcessName = "trusted launcher.exe";
+        process.parentProcessPath = "C:\\Tools\\trusted launcher.exe";
+        process.status = ProcessCaptureStatus::Success;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "amsiinitfailed",
+                                                 14,
+                                                 scanContext);
+        if (!Expect(!matched.ruleMatched,
+                    "parentPathAllowContains skips current rule even when regex matches"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ParentPathGatedRegexRuleJson("parent_gate_missing_path",
+                                                     "amsiinitfailed",
+                                                     nullptr,
+                                                     "\\\\asp businesee one\\\\"),
+                        ""),
+                    "parent gate missing path rule snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = false;
+        process.parentResolved = false;
+        process.parentPid = 0;
+        process.parentProcessName.clear();
+        process.parentProcessPath.clear();
+        process.status = ProcessCaptureStatus::ParentPathQueryFailed;
+        process.retryState = ProcessRetryState::Exhausted;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "amsiinitfailed",
+                                                 14,
+                                                 scanContext);
+        if (!Expect(!matched.ruleMatched,
+                    "configured parent path gate skips current rule when parent path is unavailable"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(FirstRuleGatedSecondRuleFallbackJson(), ""),
+                    "parent gate current-rule skip snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.parentPid = 4321;
+        process.parentProcessName = "cmd.exe";
+        process.parentProcessPath = "C:\\Windows\\System32\\cmd.exe";
+        process.status = ProcessCaptureStatus::Success;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "amsiinitfailed",
+                                                 14,
+                                                 scanContext);
+        if (!Expect(matched.ruleMatched && matched.ruleId == "fallback_second",
+                    "parent path gate skips only current rule and later rules still evaluate"))
             return 1;
     }
 

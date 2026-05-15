@@ -18,7 +18,10 @@
 
 struct ScanContext;
 
-struct AmsiRaspRuleConfig : public RaspRuleBase {};
+struct AmsiRaspRuleConfig : public RaspRuleBase {
+    std::vector<std::string> parentPathAllowContains;
+    std::vector<std::string> parentPathBlockContains;
+};
 
 struct AmsiEvalResult
 {
@@ -87,6 +90,10 @@ private:
                        const std::string& libSource,
                        RaspLuaEngine& luaEngine);
     void SwapRules(std::vector<AmsiRaspRuleConfig>&& rules);
+    std::vector<RaspEvalResult> EvaluateWithScanContext(
+        const std::string& sensor,
+        const RaspLuaContext& ctx,
+        const ScanContext* scanContext);
 
     static DWORD WINAPI UnloadThreadProc(LPVOID);
 };

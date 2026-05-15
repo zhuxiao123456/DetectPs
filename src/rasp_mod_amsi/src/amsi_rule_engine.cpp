@@ -27,7 +27,9 @@
 #include "rasp_scan_budget.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdarg>
+#include <string_view>
 #define DEFAULT_CONFIDENCE 70
 
 namespace {
@@ -40,6 +42,87 @@ uint32_t ParseUint32OrZero(const std::string& value)
         return 0;
     }
 }
+
+std::string NormalizePathForContains(std::string_view value)
+{
+    std::string normalized(value);
+    std::replace(normalized.begin(), normalized.end(), '/', '\\');
+    return normalized;
+}
+
+char LowerAscii(char ch)
+{
+    return static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+}
+
+bool ContainsIgnoreCase(std::string_view haystack, std::string_view needle)
+{
+    if (needle.empty())
+        return false;
+    if (needle.size() > haystack.size())
+        return false;
+
+    return std::search(
+               haystack.begin(),
+               haystack.end(),
+               needle.begin(),
+               needle.end(),
+               [](char lhs, char rhs) {
+                   return LowerAscii(lhs) == LowerAscii(rhs);
+               }) != haystack.end();
+}
+
+bool ContainsAnyIgnoreCaseNormalized(std::string_view normalizedHaystack,
+                                     const std::vector<std::string>& needles)
+{
+    for (const std::string& rawNeedle : needles) {
+        if (rawNeedle.empty())
+            continue;
+        std::string needle = NormalizePathForContains(rawNeedle);
+        if (ContainsIgnoreCase(normalizedHaystack, needle))
+            return true;
+    }
+    return false;
+}
+
+bool ParentPathGatePasses(const AmsiRaspRuleConfig& rule, const ScanContext* scanContext)
+{
+    const bool hasAllow = !rule.parentPathAllowContains.empty();
+    const bool hasBlock = !rule.parentPathBlockContains.empty();
+    if (!hasAllow && !hasBlock)
+        return true;
+
+    if (!scanContext || !scanContext->process || scanContext->process->parentProcessPath.empty())
+        return false;
+
+    const std::string parentPath = NormalizePathForContains(scanContext->process->parentProcessPath);
+    if (ContainsAnyIgnoreCaseNormalized(parentPath, rule.parentPathAllowContains))
+        return false;
+
+    if (hasBlock)
+        return ContainsAnyIgnoreCaseNormalized(parentPath, rule.parentPathBlockContains);
+
+    return true;
+}
+
+thread_local const ScanContext* g_activeScanContext = nullptr;
+
+class ScopedScanContext {
+public:
+    explicit ScopedScanContext(const ScanContext& scanContext)
+        : previous_(g_activeScanContext)
+    {
+        g_activeScanContext = &scanContext;
+    }
+
+    ~ScopedScanContext()
+    {
+        g_activeScanContext = previous_;
+    }
+
+private:
+    const ScanContext* previous_;
+};
 
 } // namespace
 // ── WideToUtf8 ────────────────────────────────────────────────────────────
@@ -63,8 +146,13 @@ void AmsiRuleEngine::ParseRuleExtension(const std::string &key,
                                         void *parserPtr,
                                         RaspRuleBase &rule) {
     auto *p = static_cast<Parser *>(parserPtr);
+    auto& amsiRule = static_cast<AmsiRaspRuleConfig&>(rule);
 
-    if (key == "config") {
+    if (key == "parentPathAllowContains") {
+        p->read_string_array(amsiRule.parentPathAllowContains);
+    } else if (key == "parentPathBlockContains") {
+        p->read_string_array(amsiRule.parentPathBlockContains);
+    } else if (key == "config") {
         if (!p->consume('{')) {
             return;
         }
@@ -411,7 +499,16 @@ void AmsiRuleEngine::OnUnloadSignal() {
 //   "appName"     — calling host process (UTF-8)
 //   "body"        — scanned bytes (binary-safe, isBinary=true)
 // =========================================================================
-std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor, const RaspLuaContext &ctx)
+std::vector<RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string& sensor,
+                                                     const RaspLuaContext& ctx)
+{
+    return EvaluateWithScanContext(sensor, ctx, g_activeScanContext);
+}
+
+std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
+    const std::string &sensor,
+    const RaspLuaContext &ctx,
+    const ScanContext* scanContext)
 {
     std::vector <RaspEvalResult> results;
     ScanExecutionContext exec;
@@ -447,6 +544,11 @@ std::vector <RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string &sensor,
             break;
 
         if (!rule.enabled || rule.IsOff())
+            continue;
+
+        // Parent path gate is rule-local: skip only this rule and keep
+        // evaluating later rules in the same scan.
+        if (!ParentPathGatePasses(rule, scanContext))
             continue;
 
         bool matched = false;
@@ -610,6 +712,7 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
         ULONG sampleLen,
         const ScanContext& scanContext) {
     AmsiEvalResult result;
+    ScopedScanContext scopedScanContext(scanContext);
     // windows宽字符转换为内部统一使用的utf-8字符串
     std::string contentNameUtf8 = WideToUtf8(contentName);
     std::string appNameUtf8 = WideToUtf8(appName);
