@@ -1,4 +1,5 @@
 #include "amsi_staging_watcher.h"
+#include "amsi_config_broadcaster.h"
 #include "sentry_log.h"
 #include <string>
 
@@ -280,26 +281,13 @@ int AmsiStagingWatcher::BroadcastUnload()
 {
     SentryLog_Info("AmsiStagingWatcher",
                    "Broadcasting 0x02 unload signal on pipe amsi_detect_config");
-    int reached = 0;
-    for (int i = 0; i < kMaxListeners; i++)
-    {
-        if (!WaitNamedPipeW(kConfigPipeName, kBroadcastTimeout))
-            break;
-
-        HANDLE hPipe = CreateFileW(kConfigPipeName,
-                                   GENERIC_WRITE, 0, nullptr,
-                                   OPEN_EXISTING, 0, nullptr);
-        if (hPipe == INVALID_HANDLE_VALUE) break;
-
-        BYTE  signal  = 0x02;
-        DWORD written = 0;
-        WriteFile(hPipe, &signal, 1, &written, nullptr);
-        CloseHandle(hPipe);
-        ++reached;
-    }
+    const amsi_ipc::AmsiConfigBroadcaster broadcaster(kConfigPipeName);
+    const auto result = broadcaster.Broadcast(amsi_ipc::AmsiControlSignal::Unload,
+                                              kMaxListeners,
+                                              kBroadcastTimeout);
     SentryLog_Info("AmsiStagingWatcher",
-                   "Unload broadcast complete — reached %d provider(s)", reached);
-    return reached;
+                   "Unload broadcast complete — reached %d provider(s)", result.reached);
+    return result.reached;
 }
 
 // ── Drain ACK wait ────────────────────────────────────────────────────────────

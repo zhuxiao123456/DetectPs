@@ -9,13 +9,14 @@
 #include <windows.h>
 #include <atomic>
 #include <string>
+#include "amsi_pipe_names.h"
 
 class RuleServer;   // forward — avoid circular include
 
 class ConfigWatcher
 {
 public:
-    static constexpr const wchar_t* kConfigPipeName  = L"\\\\.\\pipe\\amsi_detect_config";
+    static constexpr const wchar_t* kConfigPipeName  = amsi_ipc::kConfigPipeName;
     static constexpr int            kMaxListeners     = 32;
     static constexpr DWORD          kDebounceMs       = 1000;
     static constexpr DWORD          kBroadcastTimeout = 500;

@@ -1,6 +1,6 @@
 #pragma once
 // rule_server.h - 8-thread named pipe server on \\.\pipe\amsi_detect_rules.
-// Responds to GET_RULES and GET_ALL_RULES commands with assembled JSON.
+// Responds to GET_RULES with AMSI-filtered JSON and GET_ALL_RULES with assembled JSON.
 // Replaces all custom C# JSON methods with nlohmann/json DOM operations.
 // nlohmann/json is only included in rule_server.cpp — not exposed here.
 
@@ -8,10 +8,14 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <atomic>
 #include <string>
 
-class RuleServer
+#include "amsi_pipe_names.h"
+#include "amsi_rule_channel.h"
+#include "amsi_rule_provider.h"
+#include "named_pipe_server_pool.h"
+
+class RuleServer : public amsi_ipc::IAmsiRuleProvider
 {
 public:
     static constexpr const wchar_t* kPipeName   = L"amsi_detect_rules";
@@ -23,17 +27,21 @@ public:
     void Start();
     void Stop();
     void InvalidateCache();     // called by ConfigWatcher on file change
+    void InvalidateRuleCache() override;
+
+    bool BuildRulesResponse(const std::string& command,
+                            amsi_ipc::AmsiRuleResponse& out,
+                            std::string& error) override;
 
 private:
     std::string       m_rulesPath;
-    std::atomic<bool> m_running{false};
-    HANDLE            m_threads[kThreadCount];
+    bool              m_started = false;
     CRITICAL_SECTION  m_cacheLock;
     std::string       m_cachedAssembled;    // "" = cache miss
     std::string       m_cachedAmsiRules;    // "" = cache miss
 
-    static DWORD WINAPI ThreadProc(LPVOID param);
-    void ServerLoop();
+    amsi_ipc::AmsiRuleChannel m_ruleChannel;
+    amsi_ipc::NamedPipeServerPool m_rulePipePool;
 
     const std::string& GetAssembledJson();
     const std::string& GetAmsiRulesJson();

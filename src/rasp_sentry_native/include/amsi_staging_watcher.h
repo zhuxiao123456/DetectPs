@@ -9,6 +9,7 @@
 #include <windows.h>
 #include <atomic>
 #include <string>
+#include "amsi_pipe_names.h"
 #include "event_collector.h"  // for DrainAckQueue
 
 class AmsiStagingWatcher
@@ -16,7 +17,7 @@ class AmsiStagingWatcher
 public:
     // CLSID must match DEFINE_GUID in rasp_mod_amsi.h
     static constexpr const wchar_t* kAmsiClsid       = L"{C0FFEE02-0000-0000-0000-000000000002}";
-    static constexpr const wchar_t* kConfigPipeName  = L"\\\\.\\pipe\\amsi_detect_config";
+    static constexpr const wchar_t* kConfigPipeName  = amsi_ipc::kConfigPipeName;
     static constexpr const char*    kWatchFileName    = "rasp_mod_amsi.dll";
     static constexpr DWORD          kDebounceMs       = 500;
     static constexpr int            kDrainWaitMs      = 1000;

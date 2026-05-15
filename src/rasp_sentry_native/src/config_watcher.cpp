@@ -1,4 +1,5 @@
 #include "config_watcher.h"
+#include "amsi_config_broadcaster.h"
 #include "rule_server.h"
 #include "sentry_log.h"
 #include <shlwapi.h>
@@ -216,43 +217,15 @@ void ConfigWatcher::FireDebounced()
 void ConfigWatcher::BroadcastReload()
 {
     SentryLog_Info("ConfigWatcher", "Broadcasting 0x01 on amsi_detect_config");
-    int reached = 0;
-    for (int i = 0; i < kMaxListeners; i++)
-    {
-        if (!WaitNamedPipeW(kConfigPipeName, kBroadcastTimeout))
-        {
-            DWORD gle = GetLastError();
-            SentryLog_Info("ConfigWatcher",
-                           "WaitNamedPipeW stopped broadcast (GLE=%lu, reached=%d)",
-                           gle, reached);
-            break;  // no more listeners or access denied
-        }
-
-        HANDLE hPipe = CreateFileW(kConfigPipeName,
-                                   GENERIC_WRITE, 0, nullptr,
-                                   OPEN_EXISTING, 0, nullptr);
-        if (hPipe == INVALID_HANDLE_VALUE)
-        {
-            DWORD gle = GetLastError();
-            SentryLog_Error("ConfigWatcher",
-                            "CreateFileW on amsi_detect_config failed (GLE=%lu, reached=%d)",
-                            gle, reached);
-            break;
-        }
-
-        BYTE   signal  = 0x01;
-        DWORD  written = 0;
-        if (!WriteFile(hPipe, &signal, 1, &written, nullptr) || written != 1)
-        {
-            DWORD gle = GetLastError();
-            SentryLog_Error("ConfigWatcher",
-                            "WriteFile on amsi_detect_config failed (GLE=%lu, written=%lu, reached=%d)",
-                            gle, written, reached);
-            CloseHandle(hPipe);
-            break;
-        }
-        CloseHandle(hPipe);
-        ++reached;
+    const amsi_ipc::AmsiConfigBroadcaster broadcaster(kConfigPipeName);
+    const auto result = broadcaster.Broadcast(amsi_ipc::AmsiControlSignal::Reload,
+                                              kMaxListeners,
+                                              kBroadcastTimeout);
+    if (result.lastError != ERROR_SUCCESS) {
+        SentryLog_Info("ConfigWatcher",
+                       "Broadcast stopped (GLE=%lu, reached=%d)",
+                       static_cast<DWORD>(result.lastError),
+                       result.reached);
     }
-    SentryLog_Info("ConfigWatcher", "Broadcast complete — reached %d listener(s)", reached);
+    SentryLog_Info("ConfigWatcher", "Broadcast complete — reached %d listener(s)", result.reached);
 }

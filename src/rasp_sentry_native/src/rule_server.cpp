@@ -1,5 +1,4 @@
 #include "rule_server.h"
-#include "pipe_security.h"
 #include "sentry_log.h"
 #include "base64.h"
 #include "nlohmann/json.hpp"
@@ -16,57 +15,45 @@ extern "C" {
 // ── RuleServer ────────────────────────────────────────────────────────────────
 
 RuleServer::RuleServer(std::string rulesPath)
-    : m_rulesPath(std::move(rulesPath))
+    : m_rulesPath(std::move(rulesPath)),
+      m_ruleChannel(*this),
+      m_rulePipePool(amsi_ipc::kRulesPipeName, kThreadCount, m_ruleChannel)
 {
-    for (auto& h : m_threads) h = INVALID_HANDLE_VALUE;
 }
 
 RuleServer::~RuleServer()
 {
-    if (m_running.load()) Stop();
+    Stop();
 }
 
 void RuleServer::Start()
 {
+    if (m_started) {
+        return;
+    }
     InitializeCriticalSection(&m_cacheLock);
-    m_running.store(true);
-    for (int i = 0; i < kThreadCount; i++)
-    {
-        DWORD tid = 0;
-        m_threads[i] = CreateThread(nullptr, 0, ThreadProc, this, 0, &tid);
-        if (m_threads[i] == nullptr || m_threads[i] == INVALID_HANDLE_VALUE)
-            SentryLog_Error("RuleServer", "Failed to create thread %d (GLE=%lu)", i, GetLastError());
+    m_started = true;
+    if (!m_rulePipePool.Start()) {
+        SentryLog_Error("RuleServer", "Failed to start one or more rule pipe worker thread(s)");
     }
 }
 
 void RuleServer::Stop()
 {
-    m_running.store(false);
-
-    // Unblock each waiting ConnectNamedPipe with a dummy client connection.
-    for (int i = 0; i < kThreadCount; i++)
-    {
-        HANDLE h = CreateFileW(L"\\\\.\\pipe\\amsi_detect_rules",
-                               GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                               OPEN_EXISTING, 0, nullptr);
-        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    if (!m_started) {
+        return;
     }
-
-    HANDLE valid[kThreadCount];
-    int    count = 0;
-    for (auto& h : m_threads)
-        if (h != INVALID_HANDLE_VALUE) valid[count++] = h;
-    if (count > 0)
-        WaitForMultipleObjects(count, valid, TRUE, 3000);
-    for (auto& h : m_threads)
-    {
-        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
-        h = INVALID_HANDLE_VALUE;
-    }
+    m_rulePipePool.Stop();
     DeleteCriticalSection(&m_cacheLock);
+    m_started = false;
 }
 
 void RuleServer::InvalidateCache()
+{
+    InvalidateRuleCache();
+}
+
+void RuleServer::InvalidateRuleCache()
 {
     SentryLog_Info("RuleServer", "Cache invalidated — next request will rebuild from disk");
     EnterCriticalSection(&m_cacheLock);
@@ -75,80 +62,22 @@ void RuleServer::InvalidateCache()
     LeaveCriticalSection(&m_cacheLock);
 }
 
-DWORD WINAPI RuleServer::ThreadProc(LPVOID param)
+bool RuleServer::BuildRulesResponse(const std::string& command,
+                                    amsi_ipc::AmsiRuleResponse& out,
+                                    std::string& error)
 {
-    static_cast<RuleServer*>(param)->ServerLoop();
-    return 0;
-}
-
-void RuleServer::ServerLoop()
-{
-    SECURITY_ATTRIBUTES sa = {};
-    PACL acl = nullptr;
-    bool haveSa = MakeAuthenticatedUsersSecurity(&sa, &acl);
-
-    while (m_running.load())
-    {
-        HANDLE hPipe = CreateNamedPipeW(
-            L"\\\\.\\pipe\\amsi_detect_rules",
-            PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            kThreadCount,
-            65536,  // outBufSize
-            256,    // inBufSize (command is short)
-            0,
-            haveSa ? &sa : nullptr);
-
-        if (hPipe == INVALID_HANDLE_VALUE)
-        {
-            SentryLog_Error("RuleServer", "CreateNamedPipeW failed (GLE=%lu)", GetLastError());
-            Sleep(100);
-            continue;
-        }
-
-        BOOL connected = ConnectNamedPipe(hPipe, nullptr);
-        if (!m_running.load())
-        {
-            DisconnectNamedPipe(hPipe);
-            CloseHandle(hPipe);
-            break;
-        }
-        if (!connected && GetLastError() != ERROR_PIPE_CONNECTED)
-        {
-            CloseHandle(hPipe);
-            continue;
-        }
-
-        // Read the command line (GET_RULES or GET_ALL_RULES)
-        char reqBuf[64] = {};
-        DWORD bytesRead = 0;
-        ReadFile(hPipe, reqBuf, static_cast<DWORD>(sizeof(reqBuf) - 1), &bytesRead, nullptr);
-        reqBuf[bytesRead] = '\0';
-        std::string req(reqBuf, bytesRead);
-        while (!req.empty() && (req.back() == '\n' || req.back() == '\r' || req.back() == ' '))
-            req.pop_back();
-
-        const std::string* response = nullptr;
-        if (_stricmp(req.c_str(), "GET_ALL_RULES") == 0)
-            response = &GetAssembledJson();
-        else if (_stricmp(req.c_str(), "GET_RULES") == 0)
-            response = &GetAmsiRulesJson();
-        else
-            SentryLog_Warn("RuleServer", "Unknown command: '%s'", req.c_str());
-
-        if (response && !response->empty())
-        {
-            std::string resp = *response + "\n";
-            DWORD written = 0;
-            WriteFile(hPipe, resp.c_str(), static_cast<DWORD>(resp.size()), &written, nullptr);
-            FlushFileBuffers(hPipe);
-        }
-
-        DisconnectNamedPipe(hPipe);
-        CloseHandle(hPipe);
+    if (_stricmp(command.c_str(), "GET_ALL_RULES") == 0) {
+        out.json = GetAssembledJson();
+        return true;
+    }
+    if (_stricmp(command.c_str(), "GET_RULES") == 0) {
+        out.json = GetAmsiRulesJson();
+        return true;
     }
 
-    if (haveSa) FreePipeSecurity(&sa, acl);
+    error = "unknown command: " + command;
+    SentryLog_Warn("RuleServer", "Unknown command: '%s'", command.c_str());
+    return false;
 }
 
 // ── Cache management ──────────────────────────────────────────────────────────
