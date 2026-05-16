@@ -80,6 +80,7 @@ add_executable(rasp_sentry
     ../amsi_ipc_host/src/amsi_config_broadcaster.cpp
     ../amsi_ipc_host/src/named_pipe_server_pool.cpp
     ../amsi_ipc_host/src/amsi_rule_channel.cpp
+    ../amsi_ipc_host/src/amsi_event_channel.cpp
     src/event_collector.cpp
     src/control_status_collector.cpp
     src/rule_server.cpp
@@ -168,5 +169,32 @@ target_link_libraries(amsi_rule_channel_tests PRIVATE
 if(MSVC)
     target_compile_options(amsi_rule_channel_tests PRIVATE /W3 /WX- /MP)
     set_property(TARGET amsi_rule_channel_tests PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
+add_executable(amsi_event_channel_tests
+    ../amsi_ipc_host/tests/amsi_event_channel_tests.cpp
+    ../amsi_ipc_host/src/amsi_event_channel.cpp
+)
+
+target_include_directories(amsi_event_channel_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../amsi_ipc_host/include"
+)
+
+target_compile_definitions(amsi_event_channel_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    NOMINMAX
+    _WIN32_WINNT=0x0601
+)
+
+target_link_libraries(amsi_event_channel_tests PRIVATE
+    kernel32
+)
+
+if(MSVC)
+    target_compile_options(amsi_event_channel_tests PRIVATE /W3 /WX- /MP)
+    set_property(TARGET amsi_event_channel_tests PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()

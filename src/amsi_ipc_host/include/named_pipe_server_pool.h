@@ -23,7 +23,9 @@ public:
                         int threadCount,
                         INamedPipeClientHandler& handler,
                         DWORD outBufferBytes = 65536,
-                        DWORD inBufferBytes = 256);
+                        DWORD inBufferBytes = 256,
+                        DWORD openMode = PIPE_ACCESS_DUPLEX,
+                        DWORD dummyClientAccess = GENERIC_READ | GENERIC_WRITE);
     ~NamedPipeServerPool();
 
     NamedPipeServerPool(const NamedPipeServerPool&) = delete;
@@ -41,6 +43,8 @@ private:
     INamedPipeClientHandler& handler_;
     DWORD outBufferBytes_ = 0;
     DWORD inBufferBytes_ = 0;
+    DWORD openMode_ = PIPE_ACCESS_DUPLEX;
+    DWORD dummyClientAccess_ = GENERIC_READ | GENERIC_WRITE;
     std::atomic<bool> running_{false};
     std::vector<HANDLE> threads_;
 };

@@ -748,6 +748,207 @@ src/amsi_ipc_host/src/amsi_event_channel.cpp
 - DiagLog 仍写入。
 - drain-ack 仍能唤醒 `AmsiStagingWatcher`。
 
+#### Batch 3 详细设计
+
+Batch 3 只拆 `amsi_detect_events` 通信通道，不改变事件 JSON schema、不改变 JSONL 落盘、不改变 drain-ack 语义。
+
+##### 3.1 目标边界
+
+本批目标：
+
+- 将 `EventCollector::ServerLoop()` 中的 pipe worker 主循环迁入通用 `NamedPipeServerPool`。
+- 将单连接 payload 读取迁入 `AmsiEventChannel`。
+- 让 `EventCollector` 实现 `IAmsiEventSink`，继续负责 JSONL 落盘与 drain-ack 提取。
+- 保持 `EventCollector::kThreadCount == 16`。
+- 保持 `amsi_detect_events` pipe name 不变。
+- 保持 `DrainAckQueue` owner 不变，继续由 `AmsiStagingWatcher` 使用。
+
+本批非目标：
+
+- 不改 DetectionEvent schema。
+- 不改 DiagLog schema。
+- 不改 drain-ack JSON 识别逻辑。
+- 不拆分 detection 与 diag 两条通道。
+- 不接 HostGuard event bus。
+- 不改 DLL 侧 `LegacyPipeEventTransport`。
+- 不改 DLL 侧 `LegacyDiagPipeWriter`。
+- 不改 DLL unload drain-ack 发送路径。
+
+##### 3.2 EventChannel 职责
+
+`AmsiEventChannel` 只负责 transport 层的读取与透传：
+
+```cpp
+class IAmsiEventSink {
+public:
+    virtual ~IAmsiEventSink() = default;
+    virtual void OnEventLine(const AmsiEventLine& event) = 0;
+};
+
+class AmsiEventChannel : public INamedPipeClientHandler {
+public:
+    explicit AmsiEventChannel(IAmsiEventSink& sink);
+    void HandleClient(HANDLE pipe) override;
+};
+```
+
+职责：
+
+- 从 pipe 中读取一段 payload。
+- 将 payload 包装为 `AmsiEventLine`。
+- 调用 `IAmsiEventSink::OnEventLine()`。
+
+命名说明：
+
+- `AmsiEventLine` 中的 `Line` 只是兼容当前 JSONL 命名习惯。
+- Batch 3 不实现流式逐行解析器。
+- 当前兼容语义是：单个 pipe 连接读取一段 payload，原样透传给 sink，然后断开连接。
+- 不支持单连接多消息 framing；本批不得新增 while-read + split-line 逻辑。
+
+禁止：
+
+- 不解析 JSON。
+- 不识别 `cat`。
+- 不区分 DetectionEvent / DiagLog。
+- 不识别 drain-ack。
+- 不 include `event_collector.h`。
+- 不访问 `DrainAckQueue`。
+- 不写 JSONL 文件。
+- 不调用 `AmsiStagingWatcher`。
+- 不接 HostGuard SDK。
+
+##### 3.3 EventCollector 改造形态
+
+改造后 `EventCollector` 保留现有业务职责：
+
+```cpp
+class EventCollector : public IAmsiEventSink {
+public:
+    static constexpr const wchar_t* kPipeName = L"amsi_detect_events";
+    static constexpr int kThreadCount = 16;
+
+    explicit EventCollector(std::string logDir);
+    ~EventCollector();
+
+    void Start();
+    void Stop();
+
+    DrainAckQueue* GetDrainQueue();
+
+    void OnEventLine(const AmsiEventLine& event) override;
+
+private:
+    void AppendLine(const std::string& jsonLine);
+
+    AmsiEventChannel eventChannel_;
+    NamedPipeServerPool eventPipePool_;
+};
+```
+
+实现说明：
+
+- `Start()` 只启动 `eventPipePool_`。
+- `Stop()` 只停止 `eventPipePool_`。
+- `OnEventLine()` 调用现有 `AppendLine(event.jsonLine)`。
+- `AppendLine()` 保持现有行为：
+  - 追加写入 `rasp-events-YYYY-MM-DD.jsonl`。
+  - 识别 drain-ack。
+  - drain-ack 入 `DrainAckQueue`。
+- `DrainAckQueue` 类型和生命周期保持不变。
+- Batch 3 不改变 `DrainAckQueue` 的锁、队列和等待语义。
+- `OnEventLine()` 必须通过原 `AppendLine()` 路径完成 drain-ack 入队，不能绕过现有同步路径。
+
+生命周期约束：
+
+- `eventChannel_` 必须先于 `eventPipePool_` 构造完成。
+- `eventPipePool_` 只能持有已存在的 handler 引用。
+- `Stop()` 必须先停止 `eventPipePool_`，再允许 `EventCollector` 析构 sink / queue / file lock。
+- 不允许 `NamedPipeServerPool` 后台线程在 `EventCollector` 析构后继续访问 `eventChannel_` 或 `DrainAckQueue`。
+
+##### 3.4 wire 行为
+
+当前 `EventCollector::ServerLoop()` 行为：
+
+- 读取 pipe payload。
+- 如果 read 成功且 `bytesRead > 0`，构造 `std::string(buf, bytesRead)`。
+- 去除尾部 `\n` / `\r` / space。
+- trim 后非空才调用 `AppendLine()`。
+- 断开 pipe。
+
+Batch 3 必须保持：
+
+- channel 读取到的 payload 先交给 sink。
+- `EventCollector::OnEventLine()` 必须保留旧 trim 逻辑：去除尾部 `\n` / `\r` / space。
+- trim 后为空时不调用 `AppendLine()`。
+- 不裁剪 JSON。
+- 不重写 encoding。
+- 不做 canonical JSON。
+- empty payload 固定为兼容丢弃：`ReadFile()` 失败或 `bytesRead == 0` 时 channel 不调用 sink，不写入 JSONL。
+- 单连接只处理一个 payload，然后断开；不支持一个连接内连续多条事件。
+- sink 调用保持同步：`HandleClient()` 内直接调用 `OnEventLine()`，本批不引入额外队列、worker、retry 或 backoff。
+- `NamedPipeServerPool` 用于 events 时必须保持当前 `EventCollector` 等价 buffer 行为；实现前应以当前 `ServerLoop()` 的 `buf` 大小为准，不得顺手扩大或缩小单次读取上限。
+- `NamedPipeServerPool` 用于 events 时必须保持旧 `PIPE_ACCESS_INBOUND` 语义；停止线程的 dummy client 只需要 `GENERIC_WRITE`。
+
+##### 3.5 测试计划
+
+新增测试目标：
+
+```text
+amsi_event_channel_tests
+```
+
+测试覆盖：
+
+- 普通 JSON line 原样透传到 fake sink。
+- channel 不追加 `\n`。
+- channel 不裁剪 payload 中间已有的 `\n`。
+- `EventCollector::OnEventLine()` 的集成行为必须验证尾部 `\n` / `\r` / space 仍被 trim。
+- payload 为非 JSON 字符串时仍原样透传，channel 不解析 JSON。
+- payload 包含反斜杠、引号、中文/UTF-8 字节时原样透传。
+- payload 不被 JSON escape / unescape。
+- empty payload 不调用 sink。
+- 单连接多消息不支持，测试不应要求 channel split line。
+- 多次调用 `HandleClient()` 时 fake sink 收到多条独立事件。
+
+如果真实 pipe 单测不稳定，可复用 Batch 2 的 local named pipe 测试方式，但不引入 HostGuard SDK 或事件 JSON 解析依赖。
+
+##### 3.6 回归验证
+
+必须验证：
+
+- `rasp_sentry.exe` Release build 通过。
+- `amsi_event_channel_tests.exe` 通过。
+- Batch 1/2 测试继续通过：
+  - `amsi_config_broadcaster_tests.exe`
+  - `amsi_rule_channel_tests.exe`
+- DetectionEvent 仍写入 `rasp-events-YYYY-MM-DD.jsonl`。
+- DiagLog 仍写入同一 JSONL。
+- drain-ack 仍能被 `AmsiStagingWatcher::WaitForDrainAck()` 消费。
+- DLL unload / staging replace 流程不回退。
+
+##### 3.7 风险
+
+| 风险 | 说明 | 缓解 |
+|---|---|---|
+| drain-ack 丢失 | `EventCollector::AppendLine()` 同时负责落盘和 drain-ack 提取 | `OnEventLine()` 必须复用原 `AppendLine()` |
+| payload 变形 | channel 若追加换行或解析 JSON 会改变事件原文 | 测试原样透传 |
+| Stop 挂死 | 原 events pipe worker 同样依赖 dummy client 解阻塞 | 复用 `NamedPipeServerPool::Stop()` |
+| 事件落盘锁语义变化 | `m_fileLock` 保护 JSONL 写入 | 不改 `AppendLine()` 内部锁 |
+| 过早接 HostGuard | 可能将 event bus 语义混进 transport | 本批只抽 channel，不接 SDK |
+
+##### 3.8 静态门禁
+
+Batch 3 完成后建议检查：
+
+- `EventCollector` 不再直接调用 `CreateNamedPipeW`。
+- `EventCollector` 不再直接调用 `ConnectNamedPipe`。
+- `EventCollector` 不再直接管理 `HANDLE m_threads[kThreadCount]`。
+- `AmsiEventChannel` 不 include `event_collector.h`。
+- `AmsiEventChannel` 不出现 `DrainAckQueue`。
+- `AmsiEventChannel` 不出现 `rasp-events` 文件名。
+- `AmsiEventChannel` 不 include HostGuard SDK。
+- `NamedPipeServerPool` 不出现 DetectionEvent / DiagLog / drain-ack 字符串。
+
 ### Batch 4：抽 `AmsiControlStatusChannel`
 
 目标：

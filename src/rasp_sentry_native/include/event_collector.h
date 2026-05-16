@@ -7,14 +7,18 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#include <atomic>
 #include <deque>
 #include <string>
 
-class EventCollector
+#include "amsi_event_channel.h"
+#include "amsi_event_sink.h"
+#include "amsi_pipe_names.h"
+#include "named_pipe_server_pool.h"
+
+class EventCollector : public amsi_ipc::IAmsiEventSink
 {
 public:
-    static constexpr const wchar_t* kPipeName   = L"amsi_detect_events";
+    static constexpr const wchar_t* kPipeName   = amsi_ipc::kEventsPipeName;
     static constexpr int            kThreadCount = 16;
 
     // Thread-safe MPSC queue shared with AmsiStagingWatcher.
@@ -34,17 +38,17 @@ public:
 
     void Start();
     void Stop();
+    void OnEventLine(const amsi_ipc::AmsiEventLine& event) override;
 
     DrainAckQueue* GetDrainQueue() { return &m_drainQueue; }
 
 private:
     std::string       m_logDir;
-    std::atomic<bool> m_running{false};
-    HANDLE            m_threads[kThreadCount];
+    bool              m_started = false;
     CRITICAL_SECTION  m_fileLock;
     DrainAckQueue     m_drainQueue;
+    amsi_ipc::AmsiEventChannel m_eventChannel;
+    amsi_ipc::NamedPipeServerPool m_eventPipePool;
 
-    static DWORD WINAPI ThreadProc(LPVOID param);
-    void  ServerLoop();
     void  AppendLine(const std::string& jsonLine);
 };

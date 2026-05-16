@@ -10,12 +10,16 @@ NamedPipeServerPool::NamedPipeServerPool(std::wstring pipeName,
                                          int threadCount,
                                          INamedPipeClientHandler& handler,
                                          DWORD outBufferBytes,
-                                         DWORD inBufferBytes)
+                                         DWORD inBufferBytes,
+                                         DWORD openMode,
+                                         DWORD dummyClientAccess)
     : pipeName_(std::move(pipeName)),
       threadCount_(threadCount),
       handler_(handler),
       outBufferBytes_(outBufferBytes),
-      inBufferBytes_(inBufferBytes)
+      inBufferBytes_(inBufferBytes),
+      openMode_(openMode),
+      dummyClientAccess_(dummyClientAccess)
 {
 }
 
@@ -52,7 +56,7 @@ void NamedPipeServerPool::Stop()
 
     for (int i = 0; i < threadCount_; ++i) {
         HANDLE dummy = CreateFileW(pipeName_.c_str(),
-                                   GENERIC_READ | GENERIC_WRITE,
+                                   dummyClientAccess_,
                                    0,
                                    nullptr,
                                    OPEN_EXISTING,
@@ -97,7 +101,7 @@ void NamedPipeServerPool::ServerLoop()
 
     while (running_.load()) {
         HANDLE pipe = CreateNamedPipeW(pipeName_.c_str(),
-                                       PIPE_ACCESS_DUPLEX,
+                                       openMode_,
                                        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
                                        threadCount_,
                                        outBufferBytes_,

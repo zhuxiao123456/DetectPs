@@ -1,5 +1,4 @@
 #include "event_collector.h"
-#include "pipe_security.h"
 #include "sentry_log.h"
 #include <cstdio>
 #include <string>
@@ -36,121 +35,54 @@ bool EventCollector::DrainAckQueue::TryDequeue(std::string& out)
 // ── EventCollector ────────────────────────────────────────────────────────────
 
 EventCollector::EventCollector(std::string logDir)
-    : m_logDir(std::move(logDir))
+    : m_logDir(std::move(logDir)),
+      m_eventChannel(*this),
+      m_eventPipePool(amsi_ipc::kEventsPipeName,
+                      kThreadCount,
+                      m_eventChannel,
+                      0,
+                      65536,
+                      PIPE_ACCESS_INBOUND,
+                      GENERIC_WRITE)
 {
-    for (auto& h : m_threads) h = INVALID_HANDLE_VALUE;
 }
 
 EventCollector::~EventCollector()
 {
-    if (m_running.load()) Stop();
+    Stop();
 }
 
 void EventCollector::Start()
 {
+    if (m_started) {
+        return;
+    }
     InitializeCriticalSection(&m_fileLock);
-    m_running.store(true);
-    for (int i = 0; i < kThreadCount; i++)
-    {
-        DWORD tid = 0;
-        m_threads[i] = CreateThread(nullptr, 0, ThreadProc, this, 0, &tid);
-        if (m_threads[i] == nullptr || m_threads[i] == INVALID_HANDLE_VALUE)
-            SentryLog_Error("EventCollector", "Failed to create thread %d (GLE=%lu)", i, GetLastError());
+    m_started = true;
+    if (!m_eventPipePool.Start()) {
+        SentryLog_Error("EventCollector", "Failed to start one or more event pipe worker thread(s)");
     }
 }
 
 void EventCollector::Stop()
 {
-    m_running.store(false);
-
-    // Unblock each waiting ConnectNamedPipe by making a dummy client connection.
-    for (int i = 0; i < kThreadCount; i++)
-    {
-        HANDLE h = CreateFileW(L"\\\\.\\pipe\\amsi_detect_events",
-                               GENERIC_WRITE, 0, nullptr,
-                               OPEN_EXISTING, 0, nullptr);
-        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    if (!m_started) {
+        return;
     }
-
-    HANDLE valid[kThreadCount];
-    int    count = 0;
-    for (auto& h : m_threads)
-        if (h != INVALID_HANDLE_VALUE) valid[count++] = h;
-    if (count > 0)
-        WaitForMultipleObjects(count, valid, TRUE, 3000);
-    for (auto& h : m_threads)
-    {
-        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
-        h = INVALID_HANDLE_VALUE;
-    }
+    m_eventPipePool.Stop();
     DeleteCriticalSection(&m_fileLock);
+    m_started = false;
 }
 
-DWORD WINAPI EventCollector::ThreadProc(LPVOID param)
+void EventCollector::OnEventLine(const amsi_ipc::AmsiEventLine& event)
 {
-    static_cast<EventCollector*>(param)->ServerLoop();
-    return 0;
-}
-
-void EventCollector::ServerLoop()
-{
-    SECURITY_ATTRIBUTES sa = {};
-    PACL acl = nullptr;
-    bool haveSa = MakeAuthenticatedUsersSecurity(&sa, &acl);
-
-    while (m_running.load())
-    {
-        HANDLE hPipe = CreateNamedPipeW(
-            L"\\\\.\\pipe\\amsi_detect_events",
-            PIPE_ACCESS_INBOUND,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            kThreadCount,
-            0,      // outBufSize — inbound only
-            65536,  // inBufSize
-            0,
-            haveSa ? &sa : nullptr);
-
-        if (hPipe == INVALID_HANDLE_VALUE)
-        {
-            SentryLog_Error("EventCollector", "CreateNamedPipeW failed (GLE=%lu)", GetLastError());
-            Sleep(100);
-            continue;
-        }
-
-        BOOL connected = ConnectNamedPipe(hPipe, nullptr);
-        if (!m_running.load())
-        {
-            DisconnectNamedPipe(hPipe);
-            CloseHandle(hPipe);
-            break;
-        }
-        if (!connected && GetLastError() != ERROR_PIPE_CONNECTED)
-        {
-            CloseHandle(hPipe);
-            continue;
-        }
-
-        // Read the full JSONL line.
-        // In message mode the entire payload from one Write is a single message.
-        char buf[65536];
-        DWORD bytesRead = 0;
-        BOOL ok = ReadFile(hPipe, buf, static_cast<DWORD>(sizeof(buf) - 1), &bytesRead, nullptr);
-
-        DisconnectNamedPipe(hPipe);
-        CloseHandle(hPipe);
-
-        if (!ok || bytesRead == 0) continue;
-        buf[bytesRead] = '\0';
-
-        std::string line(buf, bytesRead);
-        // Trim trailing whitespace
-        while (!line.empty() && (line.back() == '\n' || line.back() == '\r' || line.back() == ' '))
-            line.pop_back();
-        if (!line.empty())
-            AppendLine(line);
-    }
-
-    if (haveSa) FreePipeSecurity(&sa, acl);
+    std::string line = event.payload;
+    // Preserve legacy EventCollector behavior: trim only trailing whitespace
+    // after the pipe payload has been received, then append non-empty events.
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r' || line.back() == ' '))
+        line.pop_back();
+    if (!line.empty())
+        AppendLine(line);
 }
 
 void EventCollector::AppendLine(const std::string& jsonLine)
