@@ -22,11 +22,19 @@ class NamedPipeServerPool;
 } // namespace amsi_ipc
 
 struct AmsiIpcHostConfig {
+    static AmsiIpcHostConfig ForDemo(std::string logDir,
+                                     std::string rulesPath,
+                                     std::string stagingDir);
+    static AmsiIpcHostConfig ForHostGuard();
+
+    // Demo fallback fields. HostGuard callers should use ForHostGuard() and
+    // provide all required adapters instead of relying on these paths.
     std::string logDir;
     std::string rulesPath;
     std::string stagingDir;
     bool enableDemoConfigWatcher = true;
     bool enableDemoStagingWatcher = true;
+    bool strictHostGuardMode = false;
     std::wstring rulesPipeName;
     std::wstring eventsPipeName;
     std::wstring controlStatusPipeName;

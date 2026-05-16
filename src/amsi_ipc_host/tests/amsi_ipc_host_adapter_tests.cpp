@@ -206,6 +206,57 @@ bool WaitForCallCount(const std::atomic<int>& calls, int expected)
     return calls.load() >= expected;
 }
 
+bool PipeBecomesAvailable(const std::wstring& pipeName)
+{
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        if (WaitNamedPipeW(pipeName.c_str(), 20)) {
+            return true;
+        }
+        Sleep(10);
+    }
+    return false;
+}
+
+bool ForDemoSetsDemoFallbackDefaults()
+{
+    AmsiIpcHostConfig config = AmsiIpcHostConfig::ForDemo("logs", "rules.json", "staging");
+
+    return Expect(config.logDir == "logs", "ForDemo preserves logDir") &&
+           Expect(config.rulesPath == "rules.json", "ForDemo preserves rulesPath") &&
+           Expect(config.stagingDir == "staging", "ForDemo preserves stagingDir") &&
+           Expect(config.enableDemoConfigWatcher, "ForDemo enables demo ConfigWatcher") &&
+           Expect(config.enableDemoStagingWatcher, "ForDemo enables demo AmsiStagingWatcher");
+}
+
+bool ForHostGuardSetsStrictDefaults()
+{
+    AmsiIpcHostConfig config = AmsiIpcHostConfig::ForHostGuard();
+
+    return Expect(config.logDir.empty(), "ForHostGuard leaves logDir empty") &&
+           Expect(config.rulesPath.empty(), "ForHostGuard leaves rulesPath empty") &&
+           Expect(config.stagingDir.empty(), "ForHostGuard leaves stagingDir empty") &&
+           Expect(!config.enableDemoConfigWatcher, "ForHostGuard disables demo ConfigWatcher") &&
+           Expect(!config.enableDemoStagingWatcher, "ForHostGuard disables demo AmsiStagingWatcher");
+}
+
+bool ForHostGuardRejectsMissingRequiredAdapters()
+{
+    AmsiIpcHostConfig config = AmsiIpcHostConfig::ForHostGuard();
+    ConfigureTestPipes(config, L"hostguard_missing_adapters");
+
+    AmsiIpcHost host(config, AmsiIpcHostAdapters{});
+    const bool started = host.Start();
+    host.Stop();
+
+    return Expect(!started, "ForHostGuard Start fails when required adapters are missing") &&
+           Expect(!PipeBecomesAvailable(config.rulesPipeName),
+                  "ForHostGuard missing adapters must not create rules pipe") &&
+           Expect(!PipeBecomesAvailable(config.eventsPipeName),
+                  "ForHostGuard missing adapters must not create events pipe") &&
+           Expect(!PipeBecomesAvailable(config.controlStatusPipeName),
+                  "ForHostGuard missing adapters must not create control status pipe");
+}
+
 bool InjectedEventSinkReceivesPipePayload()
 {
     FakeEventSink eventSink;
@@ -425,6 +476,15 @@ bool InvalidateAndBroadcastWorkWithDemoWatchersDisabled()
 
 int main()
 {
+    if (!ForDemoSetsDemoFallbackDefaults()) {
+        return 1;
+    }
+    if (!ForHostGuardSetsStrictDefaults()) {
+        return 1;
+    }
+    if (!ForHostGuardRejectsMissingRequiredAdapters()) {
+        return 1;
+    }
     if (!AdapterConstructorAcceptsExternalSinks()) {
         return 1;
     }

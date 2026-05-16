@@ -185,9 +185,7 @@ int main()
     const std::wstring statusPipe = TestPipeName(L"status");
     const std::wstring configPipe = TestPipeName(L"config");
 
-    AmsiIpcHostConfig config;
-    config.enableDemoConfigWatcher = false;
-    config.enableDemoStagingWatcher = false;
+    AmsiIpcHostConfig config = AmsiIpcHostConfig::ForHostGuard();
     config.rulesPipeName = rulesPipe;
     config.eventsPipeName = eventsPipe;
     config.controlStatusPipeName = statusPipe;

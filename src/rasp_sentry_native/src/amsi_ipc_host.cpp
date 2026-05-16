@@ -25,6 +25,29 @@ std::wstring OrDefaultPipeName(const std::wstring& configured,
 
 } // namespace
 
+AmsiIpcHostConfig AmsiIpcHostConfig::ForDemo(std::string logDir,
+                                             std::string rulesPath,
+                                             std::string stagingDir)
+{
+    AmsiIpcHostConfig config;
+    config.logDir = std::move(logDir);
+    config.rulesPath = std::move(rulesPath);
+    config.stagingDir = std::move(stagingDir);
+    config.enableDemoConfigWatcher = true;
+    config.enableDemoStagingWatcher = true;
+    config.strictHostGuardMode = false;
+    return config;
+}
+
+AmsiIpcHostConfig AmsiIpcHostConfig::ForHostGuard()
+{
+    AmsiIpcHostConfig config;
+    config.enableDemoConfigWatcher = false;
+    config.enableDemoStagingWatcher = false;
+    config.strictHostGuardMode = true;
+    return config;
+}
+
 AmsiIpcHost::AmsiIpcHost(AmsiIpcHostConfig config)
     : config_(std::move(config))
 {
@@ -45,6 +68,13 @@ bool AmsiIpcHost::Start()
 {
     if (started_) {
         return true;
+    }
+
+    if (config_.strictHostGuardMode &&
+        (!adapters_.ruleProvider || !adapters_.eventSink || !adapters_.controlStatusSink)) {
+        SentryLog_Error("Program",
+                        "AmsiIpcHost strict HostGuard mode requires ruleProvider, eventSink, and controlStatusSink");
+        return false;
     }
 
     const std::wstring rulesPipeName = OrDefaultPipeName(config_.rulesPipeName,
