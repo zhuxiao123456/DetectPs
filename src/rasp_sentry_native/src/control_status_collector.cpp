@@ -1,5 +1,4 @@
 #include "control_status_collector.h"
-#include "pipe_security.h"
 #include "sentry_log.h"
 
 #include <cstdio>
@@ -7,126 +6,55 @@
 #include <utility>
 
 ControlStatusCollector::ControlStatusCollector(std::string logDir)
-    : m_logDir(std::move(logDir))
+    : m_logDir(std::move(logDir)),
+      m_statusChannel(*this),
+      m_statusPipePool(amsi_ipc::kControlStatusPipeName,
+                       kThreadCount,
+                       m_statusChannel,
+                       0,
+                       65536,
+                       PIPE_ACCESS_INBOUND,
+                       GENERIC_WRITE)
 {
-    for (auto& h : m_threads)
-        h = INVALID_HANDLE_VALUE;
 }
 
 ControlStatusCollector::~ControlStatusCollector()
 {
-    if (m_running.load())
-        Stop();
+    Stop();
 }
 
 void ControlStatusCollector::Start()
 {
+    if (m_started) {
+        return;
+    }
     InitializeCriticalSection(&m_fileLock);
-    m_running.store(true);
-    for (int i = 0; i < kThreadCount; ++i)
-    {
-        DWORD tid = 0;
-        m_threads[i] = CreateThread(nullptr, 0, ThreadProc, this, 0, &tid);
-        if (m_threads[i] == nullptr || m_threads[i] == INVALID_HANDLE_VALUE)
-            SentryLog_Error("ControlStatusCollector", "Failed to create thread %d (GLE=%lu)", i, GetLastError());
+    m_started = true;
+    if (!m_statusPipePool.Start()) {
+        SentryLog_Error("ControlStatusCollector", "Failed to start one or more control status pipe worker thread(s)");
     }
 }
 
 void ControlStatusCollector::Stop()
 {
-    m_running.store(false);
-
-    for (int i = 0; i < kThreadCount; ++i)
-    {
-        HANDLE h = CreateFileW(L"\\\\.\\pipe\\amsi_detect_control_status",
-                               GENERIC_WRITE, 0, nullptr,
-                               OPEN_EXISTING, 0, nullptr);
-        if (h != INVALID_HANDLE_VALUE)
-            CloseHandle(h);
+    if (!m_started) {
+        return;
     }
 
-    HANDLE valid[kThreadCount];
-    int count = 0;
-    for (auto& h : m_threads)
-        if (h != INVALID_HANDLE_VALUE)
-            valid[count++] = h;
-    if (count > 0)
-        WaitForMultipleObjects(count, valid, TRUE, 3000);
-
-    for (auto& h : m_threads)
-    {
-        if (h != INVALID_HANDLE_VALUE)
-            CloseHandle(h);
-        h = INVALID_HANDLE_VALUE;
-    }
-
+    m_statusPipePool.Stop();
     DeleteCriticalSection(&m_fileLock);
+    m_started = false;
 }
 
-DWORD WINAPI ControlStatusCollector::ThreadProc(LPVOID param)
+void ControlStatusCollector::OnControlStatusLine(const amsi_ipc::AmsiControlStatusLine& status)
 {
-    static_cast<ControlStatusCollector*>(param)->ServerLoop();
-    return 0;
-}
-
-void ControlStatusCollector::ServerLoop()
-{
-    SECURITY_ATTRIBUTES sa = {};
-    PACL acl = nullptr;
-    bool haveSa = MakeAuthenticatedUsersSecurity(&sa, &acl);
-
-    while (m_running.load())
-    {
-        HANDLE hPipe = CreateNamedPipeW(
-            L"\\\\.\\pipe\\amsi_detect_control_status",
-            PIPE_ACCESS_INBOUND,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            kThreadCount,
-            0,
-            65536,
-            0,
-            haveSa ? &sa : nullptr);
-
-        if (hPipe == INVALID_HANDLE_VALUE)
-        {
-            SentryLog_Error("ControlStatusCollector", "CreateNamedPipeW failed (GLE=%lu)", GetLastError());
-            Sleep(100);
-            continue;
-        }
-
-        BOOL connected = ConnectNamedPipe(hPipe, nullptr);
-        if (!m_running.load())
-        {
-            DisconnectNamedPipe(hPipe);
-            CloseHandle(hPipe);
-            break;
-        }
-        if (!connected && GetLastError() != ERROR_PIPE_CONNECTED)
-        {
-            CloseHandle(hPipe);
-            continue;
-        }
-
-        char buf[65536];
-        DWORD bytesRead = 0;
-        BOOL ok = ReadFile(hPipe, buf, static_cast<DWORD>(sizeof(buf) - 1), &bytesRead, nullptr);
-
-        DisconnectNamedPipe(hPipe);
-        CloseHandle(hPipe);
-
-        if (!ok || bytesRead == 0)
-            continue;
-        buf[bytesRead] = '\0';
-
-        std::string line(buf, bytesRead);
-        while (!line.empty() && (line.back() == '\n' || line.back() == '\r' || line.back() == ' '))
-            line.pop_back();
-        if (!line.empty())
-            AppendLine(line);
-    }
-
-    if (haveSa)
-        FreePipeSecurity(&sa, acl);
+    std::string line = status.payload;
+    // Preserve legacy ControlStatusCollector behavior exactly: trim only
+    // trailing LF, CR, and space before appending non-empty payloads.
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r' || line.back() == ' '))
+        line.pop_back();
+    if (!line.empty())
+        AppendLine(line);
 }
 
 void ControlStatusCollector::AppendLine(const std::string& jsonLine)
