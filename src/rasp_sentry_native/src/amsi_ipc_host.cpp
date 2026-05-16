@@ -1,9 +1,13 @@
 #include "amsi_ipc_host.h"
 
+#include "amsi_control_status_channel.h"
+#include "amsi_event_channel.h"
+#include "amsi_pipe_names.h"
 #include "amsi_staging_watcher.h"
 #include "config_watcher.h"
 #include "control_status_collector.h"
 #include "event_collector.h"
+#include "named_pipe_server_pool.h"
 #include "rule_server.h"
 #include "sentry_log.h"
 
@@ -11,6 +15,12 @@
 
 AmsiIpcHost::AmsiIpcHost(AmsiIpcHostConfig config)
     : config_(std::move(config))
+{
+}
+
+AmsiIpcHost::AmsiIpcHost(AmsiIpcHostConfig config, AmsiIpcHostAdapters adapters)
+    : config_(std::move(config)),
+      adapters_(adapters)
 {
 }
 
@@ -25,19 +35,53 @@ bool AmsiIpcHost::Start()
         return true;
     }
 
-    eventCollector_.reset(new EventCollector(config_.logDir));
-    controlStatusCollector_.reset(new ControlStatusCollector(config_.logDir));
     ruleServer_.reset(new RuleServer(config_.rulesPath));
     configWatcher_.reset(new ConfigWatcher(config_.rulesPath, ruleServer_.get()));
-    stagingWatcher_.reset(new AmsiStagingWatcher(config_.stagingDir, eventCollector_->GetDrainQueue()));
+    if (!adapters_.eventSink) {
+        eventCollector_.reset(new EventCollector(config_.logDir));
+        stagingWatcher_.reset(new AmsiStagingWatcher(config_.stagingDir, eventCollector_->GetDrainQueue()));
+    }
+    if (!adapters_.controlStatusSink) {
+        controlStatusCollector_.reset(new ControlStatusCollector(config_.logDir));
+    }
 
     // Keep the demo startup order stable with the previous rasp_sentry main().
-    eventCollector_->Start();
+    if (adapters_.eventSink) {
+        injectedEventChannel_.reset(new amsi_ipc::AmsiEventChannel(*adapters_.eventSink));
+        injectedEventPipePool_.reset(new amsi_ipc::NamedPipeServerPool(
+            amsi_ipc::kEventsPipeName,
+            EventCollector::kThreadCount,
+            *injectedEventChannel_,
+            0,
+            65536,
+            PIPE_ACCESS_INBOUND,
+            GENERIC_WRITE));
+        if (!injectedEventPipePool_->Start()) {
+            SentryLog_Error("Program", "Failed to start one or more injected event pipe worker thread(s)");
+        }
+    } else {
+        eventCollector_->Start();
+    }
     stage_ = StartStage::EventCollector;
     SentryLog_Info("Program", "EventCollector started - %d threads on amsi_detect_events",
                    EventCollector::kThreadCount);
 
-    controlStatusCollector_->Start();
+    if (adapters_.controlStatusSink) {
+        injectedControlStatusChannel_.reset(new amsi_ipc::AmsiControlStatusChannel(*adapters_.controlStatusSink));
+        injectedControlStatusPipePool_.reset(new amsi_ipc::NamedPipeServerPool(
+            amsi_ipc::kControlStatusPipeName,
+            ControlStatusCollector::kThreadCount,
+            *injectedControlStatusChannel_,
+            0,
+            65536,
+            PIPE_ACCESS_INBOUND,
+            GENERIC_WRITE));
+        if (!injectedControlStatusPipePool_->Start()) {
+            SentryLog_Error("Program", "Failed to start one or more injected control status pipe worker thread(s)");
+        }
+    } else {
+        controlStatusCollector_->Start();
+    }
     stage_ = StartStage::ControlStatusCollector;
     SentryLog_Info("Program", "ControlStatusCollector started - %d threads on amsi_detect_control_status",
                    ControlStatusCollector::kThreadCount);
@@ -51,9 +95,11 @@ bool AmsiIpcHost::Start()
     stage_ = StartStage::ConfigWatcher;
     SentryLog_Info("Program", "ConfigWatcher started - watching %s", config_.rulesPath.c_str());
 
-    stagingWatcher_->Start();
-    stage_ = StartStage::AmsiStagingWatcher;
-    SentryLog_Info("Program", "AmsiStagingWatcher started - staging: %s", config_.stagingDir.c_str());
+    if (stagingWatcher_) {
+        stagingWatcher_->Start();
+        stage_ = StartStage::AmsiStagingWatcher;
+        SentryLog_Info("Program", "AmsiStagingWatcher started - staging: %s", config_.stagingDir.c_str());
+    }
 
     started_ = true;
     return true;
@@ -74,14 +120,24 @@ void AmsiIpcHost::Stop()
     if (stage >= static_cast<int>(StartStage::ControlStatusCollector) && controlStatusCollector_) {
         controlStatusCollector_->Stop();
     }
+    if (stage >= static_cast<int>(StartStage::ControlStatusCollector) && injectedControlStatusPipePool_) {
+        injectedControlStatusPipePool_->Stop();
+    }
     if (stage >= static_cast<int>(StartStage::EventCollector) && eventCollector_) {
         eventCollector_->Stop();
+    }
+    if (stage >= static_cast<int>(StartStage::EventCollector) && injectedEventPipePool_) {
+        injectedEventPipePool_->Stop();
     }
 
     stagingWatcher_.reset();
     configWatcher_.reset();
     ruleServer_.reset();
+    injectedControlStatusPipePool_.reset();
+    injectedControlStatusChannel_.reset();
     controlStatusCollector_.reset();
+    injectedEventPipePool_.reset();
+    injectedEventChannel_.reset();
     eventCollector_.reset();
 
     stage_ = StartStage::None;
