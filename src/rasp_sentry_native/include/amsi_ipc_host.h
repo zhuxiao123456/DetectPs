@@ -27,6 +27,10 @@ struct AmsiIpcHostConfig {
     std::string stagingDir;
     bool enableDemoConfigWatcher = true;
     bool enableDemoStagingWatcher = true;
+    std::wstring rulesPipeName;
+    std::wstring eventsPipeName;
+    std::wstring controlStatusPipeName;
+    std::wstring configPipeName;
 };
 
 struct AmsiIpcHostAdapters {

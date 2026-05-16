@@ -16,6 +16,22 @@
 
 namespace {
 
+std::wstring TestPipeName(const wchar_t* suffix)
+{
+    return std::wstring(LR"(\\.\pipe\amsi_detect_adapter_test_)") +
+           std::to_wstring(GetCurrentProcessId()) +
+           L"_" +
+           suffix;
+}
+
+void ConfigureTestPipes(AmsiIpcHostConfig& config, const wchar_t* prefix)
+{
+    config.rulesPipeName = TestPipeName((std::wstring(prefix) + L"_rules").c_str());
+    config.eventsPipeName = TestPipeName((std::wstring(prefix) + L"_events").c_str());
+    config.controlStatusPipeName = TestPipeName((std::wstring(prefix) + L"_status").c_str());
+    config.configPipeName = TestPipeName((std::wstring(prefix) + L"_config").c_str());
+}
+
 struct FakeEventSink final : amsi_ipc::IAmsiEventSink {
     void OnEventLine(const amsi_ipc::AmsiEventLine& event) override
     {
@@ -85,6 +101,8 @@ bool AdapterConstructorAcceptsExternalSinks()
     config.logDir = ".";
     config.rulesPath = "rasp_rules.json";
     config.stagingDir = ".";
+    ConfigureTestPipes(config, L"event_sink");
+    config.eventsPipeName = TestPipeName(L"event_sink");
 
     AmsiIpcHostAdapters adapters;
     adapters.eventSink = &eventSink;
@@ -95,16 +113,16 @@ bool AdapterConstructorAcceptsExternalSinks()
            Expect(statusSink.calls.load() == 0, "constructor must not call control status sink");
 }
 
-bool WritePipePayload(const wchar_t* pipeName, const std::string& payload)
+bool WritePipePayload(const std::wstring& pipeName, const std::string& payload)
 {
     for (int attempt = 0; attempt < 50; ++attempt) {
-        if (WaitNamedPipeW(pipeName, 100)) {
+        if (WaitNamedPipeW(pipeName.c_str(), 100)) {
             break;
         }
         Sleep(20);
     }
 
-    HANDLE pipe = CreateFileW(pipeName,
+    HANDLE pipe = CreateFileW(pipeName.c_str(),
                               GENERIC_WRITE,
                               0,
                               nullptr,
@@ -136,16 +154,16 @@ bool WritePipePayload(const wchar_t* pipeName, const std::string& payload)
     return true;
 }
 
-std::string ExchangeRulesPipePayload(const std::string& payload)
+std::string ExchangeRulesPipePayload(const std::wstring& pipeName, const std::string& payload)
 {
     for (int attempt = 0; attempt < 50; ++attempt) {
-        if (WaitNamedPipeW(amsi_ipc::kRulesPipeName, 100)) {
+        if (WaitNamedPipeW(pipeName.c_str(), 100)) {
             break;
         }
         Sleep(20);
     }
 
-    HANDLE pipe = CreateFileW(amsi_ipc::kRulesPipeName,
+    HANDLE pipe = CreateFileW(pipeName.c_str(),
                               GENERIC_READ | GENERIC_WRITE,
                               0,
                               nullptr,
@@ -197,6 +215,7 @@ bool InjectedEventSinkReceivesPipePayload()
     config.logDir = ".";
     config.rulesPath = "rasp_rules.json";
     config.stagingDir = ".";
+    ConfigureTestPipes(config, L"event_sink_payload");
 
     AmsiIpcHostAdapters adapters;
     adapters.eventSink = &eventSink;
@@ -208,7 +227,7 @@ bool InjectedEventSinkReceivesPipePayload()
     }
 
     const std::string payload = "{\"cat\":\"Detection\",\"rule\":\"adapter-event\"}";
-    const bool wrote = WritePipePayload(amsi_ipc::kEventsPipeName, payload);
+    const bool wrote = WritePipePayload(config.eventsPipeName, payload);
     const bool delivered = WaitForCallCount(eventSink.calls, 1);
     host.Stop();
 
@@ -226,6 +245,7 @@ bool InjectedControlStatusSinkReceivesPipePayload()
     config.logDir = ".";
     config.rulesPath = "rasp_rules.json";
     config.stagingDir = ".";
+    ConfigureTestPipes(config, L"control_status_sink");
 
     AmsiIpcHostAdapters adapters;
     adapters.eventSink = &eventSink;
@@ -237,7 +257,7 @@ bool InjectedControlStatusSinkReceivesPipePayload()
     }
 
     const std::string payload = "{\"msgType\":\"RULE_LOAD_RESULT\",\"success\":true}";
-    const bool wrote = WritePipePayload(amsi_ipc::kControlStatusPipeName, payload);
+    const bool wrote = WritePipePayload(config.controlStatusPipeName, payload);
     const bool delivered = WaitForCallCount(statusSink.calls, 1);
     host.Stop();
 
@@ -256,6 +276,7 @@ bool InjectedRuleProviderServesRulesPipe()
     config.logDir = ".";
     config.rulesPath = "rasp_rules.json";
     config.stagingDir = ".";
+    ConfigureTestPipes(config, L"rule_provider");
 
     AmsiIpcHostAdapters adapters;
     adapters.eventSink = &eventSink;
@@ -267,7 +288,7 @@ bool InjectedRuleProviderServesRulesPipe()
         return false;
     }
 
-    const std::string response = ExchangeRulesPipePayload("GET_RULES\n");
+    const std::string response = ExchangeRulesPipePayload(config.rulesPipeName, "GET_RULES\n");
     host.Stop();
 
     return Expect(response == R"([{"id":"injected-rule","sensor":"AmsiProvider"}])" "\n",
@@ -286,6 +307,7 @@ bool InvalidateRulesUsesInjectedProvider()
     config.logDir = ".";
     config.rulesPath = "rasp_rules.json";
     config.stagingDir = ".";
+    ConfigureTestPipes(config, L"invalidate");
 
     AmsiIpcHostAdapters adapters;
     adapters.eventSink = &eventSink;
@@ -309,6 +331,7 @@ bool BroadcastReloadAndUnloadReturnResultsWithoutListeners()
     config.logDir = ".";
     config.rulesPath = "rasp_rules.json";
     config.stagingDir = ".";
+    ConfigureTestPipes(config, L"broadcast");
 
     AmsiIpcHostAdapters adapters;
     adapters.eventSink = &eventSink;
@@ -335,6 +358,7 @@ bool HostStartsWithDemoWatchersDisabled()
     config.stagingDir = "";
     config.enableDemoConfigWatcher = false;
     config.enableDemoStagingWatcher = false;
+    ConfigureTestPipes(config, L"watchers");
 
     AmsiIpcHostAdapters adapters;
     adapters.eventSink = &eventSink;
@@ -346,11 +370,11 @@ bool HostStartsWithDemoWatchersDisabled()
         return false;
     }
 
-    const std::string rulesResponse = ExchangeRulesPipePayload("GET_RULES\n");
+    const std::string rulesResponse = ExchangeRulesPipePayload(config.rulesPipeName, "GET_RULES\n");
     const std::string eventPayload = "{\"cat\":\"Detection\",\"rule\":\"watchers-disabled\"}";
     const std::string statusPayload = "{\"msgType\":\"RULE_LOAD_RESULT\",\"success\":true}";
-    const bool eventWrote = WritePipePayload(amsi_ipc::kEventsPipeName, eventPayload);
-    const bool statusWrote = WritePipePayload(amsi_ipc::kControlStatusPipeName, statusPayload);
+    const bool eventWrote = WritePipePayload(config.eventsPipeName, eventPayload);
+    const bool statusWrote = WritePipePayload(config.controlStatusPipeName, statusPayload);
     const bool eventDelivered = WaitForCallCount(eventSink.calls, 1);
     const bool statusDelivered = WaitForCallCount(statusSink.calls, 1);
     host.Stop();
@@ -375,6 +399,7 @@ bool InvalidateAndBroadcastWorkWithDemoWatchersDisabled()
     config.stagingDir = "";
     config.enableDemoConfigWatcher = false;
     config.enableDemoStagingWatcher = false;
+    ConfigureTestPipes(config, L"watchers_facade");
 
     AmsiIpcHostAdapters adapters;
     adapters.eventSink = &eventSink;

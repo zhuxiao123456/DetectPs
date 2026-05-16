@@ -15,6 +15,16 @@
 
 #include <utility>
 
+namespace {
+
+std::wstring OrDefaultPipeName(const std::wstring& configured,
+                               const wchar_t* defaultName)
+{
+    return configured.empty() ? std::wstring(defaultName) : configured;
+}
+
+} // namespace
+
 AmsiIpcHost::AmsiIpcHost(AmsiIpcHostConfig config)
     : config_(std::move(config))
 {
@@ -37,10 +47,12 @@ bool AmsiIpcHost::Start()
         return true;
     }
 
+    const std::wstring rulesPipeName = OrDefaultPipeName(config_.rulesPipeName,
+                                                         amsi_ipc::kRulesPipeName);
     if (adapters_.ruleProvider) {
-        ruleServer_.reset(new RuleServer(*adapters_.ruleProvider));
+        ruleServer_.reset(new RuleServer(*adapters_.ruleProvider, rulesPipeName));
     } else {
-        ruleServer_.reset(new RuleServer(config_.rulesPath));
+        ruleServer_.reset(new RuleServer(config_.rulesPath, rulesPipeName));
     }
     if (config_.enableDemoConfigWatcher) {
         configWatcher_.reset(new ConfigWatcher(config_.rulesPath, ruleServer_->RuleProvider()));
@@ -58,8 +70,10 @@ bool AmsiIpcHost::Start()
     // Keep the demo startup order stable with the previous rasp_sentry main().
     if (adapters_.eventSink) {
         injectedEventChannel_.reset(new amsi_ipc::AmsiEventChannel(*adapters_.eventSink));
+        const std::wstring eventsPipeName = OrDefaultPipeName(config_.eventsPipeName,
+                                                              amsi_ipc::kEventsPipeName);
         injectedEventPipePool_.reset(new amsi_ipc::NamedPipeServerPool(
-            amsi_ipc::kEventsPipeName,
+            eventsPipeName,
             EventCollector::kThreadCount,
             *injectedEventChannel_,
             0,
@@ -78,8 +92,10 @@ bool AmsiIpcHost::Start()
 
     if (adapters_.controlStatusSink) {
         injectedControlStatusChannel_.reset(new amsi_ipc::AmsiControlStatusChannel(*adapters_.controlStatusSink));
+        const std::wstring controlStatusPipeName = OrDefaultPipeName(config_.controlStatusPipeName,
+                                                                     amsi_ipc::kControlStatusPipeName);
         injectedControlStatusPipePool_.reset(new amsi_ipc::NamedPipeServerPool(
-            amsi_ipc::kControlStatusPipeName,
+            controlStatusPipeName,
             ControlStatusCollector::kThreadCount,
             *injectedControlStatusChannel_,
             0,
@@ -170,7 +186,9 @@ void AmsiIpcHost::InvalidateRules()
 amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastReload(int maxListeners,
                                                            std::uint32_t timeoutMs)
 {
-    const amsi_ipc::AmsiConfigBroadcaster broadcaster(amsi_ipc::kConfigPipeName);
+    const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
+                                                          amsi_ipc::kConfigPipeName);
+    const amsi_ipc::AmsiConfigBroadcaster broadcaster(configPipeName);
     return broadcaster.Broadcast(amsi_ipc::AmsiControlSignal::Reload,
                                  maxListeners,
                                  timeoutMs);
@@ -179,7 +197,9 @@ amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastReload(int maxListeners,
 amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastUnload(int maxListeners,
                                                            std::uint32_t timeoutMs)
 {
-    const amsi_ipc::AmsiConfigBroadcaster broadcaster(amsi_ipc::kConfigPipeName);
+    const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
+                                                          amsi_ipc::kConfigPipeName);
+    const amsi_ipc::AmsiConfigBroadcaster broadcaster(configPipeName);
     return broadcaster.Broadcast(amsi_ipc::AmsiControlSignal::Unload,
                                  maxListeners,
                                  timeoutMs);

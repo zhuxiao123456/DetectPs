@@ -19,7 +19,9 @@ public:
     static constexpr int kThreadCount = 8;
 
     explicit RuleServer(std::string rulesPath);
+    RuleServer(std::string rulesPath, std::wstring pipeName);
     explicit RuleServer(amsi_ipc::IAmsiRuleProvider& provider);
+    RuleServer(amsi_ipc::IAmsiRuleProvider& provider, std::wstring pipeName);
     ~RuleServer();
 
     void Start();

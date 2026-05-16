@@ -3,17 +3,27 @@
 #include "sentry_log.h"
 
 RuleServer::RuleServer(std::string rulesPath)
+    : RuleServer(std::move(rulesPath), amsi_ipc::kRulesPipeName)
+{
+}
+
+RuleServer::RuleServer(std::string rulesPath, std::wstring pipeName)
     : m_ownedProvider(new DemoFileRuleProvider(std::move(rulesPath))),
       m_provider(m_ownedProvider.get()),
       m_ruleChannel(*this),
-      m_rulePipePool(amsi_ipc::kRulesPipeName, kThreadCount, m_ruleChannel)
+      m_rulePipePool(std::move(pipeName), kThreadCount, m_ruleChannel)
 {
 }
 
 RuleServer::RuleServer(amsi_ipc::IAmsiRuleProvider& provider)
+    : RuleServer(provider, amsi_ipc::kRulesPipeName)
+{
+}
+
+RuleServer::RuleServer(amsi_ipc::IAmsiRuleProvider& provider, std::wstring pipeName)
     : m_provider(&provider),
       m_ruleChannel(*this),
-      m_rulePipePool(amsi_ipc::kRulesPipeName, kThreadCount, m_ruleChannel)
+      m_rulePipePool(std::move(pipeName), kThreadCount, m_ruleChannel)
 {
 }
 
