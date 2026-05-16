@@ -77,6 +77,7 @@ add_executable(rasp_sentry
     src/main.cpp
     src/sentry_log.cpp
     src/pipe_security.cpp
+    src/amsi_ipc_host.cpp
     ../amsi_ipc_host/src/amsi_config_broadcaster.cpp
     ../amsi_ipc_host/src/named_pipe_server_pool.cpp
     ../amsi_ipc_host/src/amsi_rule_channel.cpp
