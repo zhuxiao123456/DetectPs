@@ -1,21 +1,17 @@
 #include "rule_server.h"
+
 #include "sentry_log.h"
-#include "base64.h"
-#include "nlohmann/json.hpp"
-#include <fstream>
-#include <algorithm>
-#include <string>
-#include <vector>
-
-extern "C" {
-#include "lua.h"
-#include "lauxlib.h"
-}
-
-// ── RuleServer ────────────────────────────────────────────────────────────────
 
 RuleServer::RuleServer(std::string rulesPath)
-    : m_rulesPath(std::move(rulesPath)),
+    : m_ownedProvider(new DemoFileRuleProvider(std::move(rulesPath))),
+      m_provider(m_ownedProvider.get()),
+      m_ruleChannel(*this),
+      m_rulePipePool(amsi_ipc::kRulesPipeName, kThreadCount, m_ruleChannel)
+{
+}
+
+RuleServer::RuleServer(amsi_ipc::IAmsiRuleProvider& provider)
+    : m_provider(&provider),
       m_ruleChannel(*this),
       m_rulePipePool(amsi_ipc::kRulesPipeName, kThreadCount, m_ruleChannel)
 {
@@ -31,7 +27,6 @@ void RuleServer::Start()
     if (m_started) {
         return;
     }
-    InitializeCriticalSection(&m_cacheLock);
     m_started = true;
     if (!m_rulePipePool.Start()) {
         SentryLog_Error("RuleServer", "Failed to start one or more rule pipe worker thread(s)");
@@ -44,7 +39,6 @@ void RuleServer::Stop()
         return;
     }
     m_rulePipePool.Stop();
-    DeleteCriticalSection(&m_cacheLock);
     m_started = false;
 }
 
@@ -55,352 +49,23 @@ void RuleServer::InvalidateCache()
 
 void RuleServer::InvalidateRuleCache()
 {
-    SentryLog_Info("RuleServer", "Cache invalidated — next request will rebuild from disk");
-    EnterCriticalSection(&m_cacheLock);
-    m_cachedAssembled.clear();
-    m_cachedAmsiRules.clear();
-    LeaveCriticalSection(&m_cacheLock);
+    if (m_provider) {
+        m_provider->InvalidateRuleCache();
+    }
+}
+
+amsi_ipc::IAmsiRuleProvider* RuleServer::RuleProvider()
+{
+    return m_provider;
 }
 
 bool RuleServer::BuildRulesResponse(const std::string& command,
                                     amsi_ipc::AmsiRuleResponse& out,
                                     std::string& error)
 {
-    if (_stricmp(command.c_str(), "GET_ALL_RULES") == 0) {
-        out.json = GetAssembledJson();
-        return true;
+    if (!m_provider) {
+        error = "rule provider unavailable";
+        return false;
     }
-    if (_stricmp(command.c_str(), "GET_RULES") == 0) {
-        out.json = GetAmsiRulesJson();
-        return true;
-    }
-
-    error = "unknown command: " + command;
-    SentryLog_Warn("RuleServer", "Unknown command: '%s'", command.c_str());
-    return false;
-}
-
-// ── Cache management ──────────────────────────────────────────────────────────
-
-const std::string& RuleServer::GetAssembledJson()
-{
-    // Fast path (no lock)
-    if (!m_cachedAssembled.empty()) return m_cachedAssembled;
-
-    EnterCriticalSection(&m_cacheLock);
-    if (m_cachedAssembled.empty())
-    {
-        SentryLog_Info("RuleServer", "Cache miss — building assembled JSON");
-        m_cachedAssembled = BuildAssembledJson();
-    }
-    LeaveCriticalSection(&m_cacheLock);
-    return m_cachedAssembled;
-}
-
-const std::string& RuleServer::GetAmsiRulesJson()
-{
-    // Ensure assembled is ready first (without holding cacheLock twice)
-    GetAssembledJson();
-
-    if (!m_cachedAmsiRules.empty()) return m_cachedAmsiRules;
-
-    EnterCriticalSection(&m_cacheLock);
-    if (m_cachedAmsiRules.empty())
-    {
-        SentryLog_Info("RuleServer", "Cache miss — building AMSI-filtered JSON");
-        m_cachedAmsiRules = FilterAmsiProviderRules(m_cachedAssembled);
-    }
-    LeaveCriticalSection(&m_cacheLock);
-    return m_cachedAmsiRules;
-}
-
-// ── JSON assembly (static free functions — nlohmann types stay in .cpp) ───────
-
-using json = nlohmann::json;
-
-static std::string DirOf(const std::string& filePath)
-{
-    size_t pos = filePath.find_last_of("/\\");
-    return (pos == std::string::npos) ? "." : filePath.substr(0, pos);
-}
-
-// Transformation 1 — replaces regex-based InlineGlobalLibraries() in C# RuleServer.
-static void InlineGlobalLibraries(json& root, const std::string& rulesDir)
-{
-    if (!root.contains("globalLibraries")) return;
-    const auto& libs = root["globalLibraries"];
-    if (!libs.is_array()) return;
-
-    json b64Array = json::array();
-    int count = 0;
-
-    for (const auto& entry : libs)
-    {
-        if (!entry.is_string()) continue;
-        std::string relPath = entry.get<std::string>();
-        std::replace(relPath.begin(), relPath.end(), '/', '\\');
-        std::string absPath = rulesDir + "\\" + relPath;
-
-        std::ifstream fs(absPath, std::ios::binary);
-        if (!fs.is_open())
-        {
-            SentryLog_Warn("RuleServer", "globalLibrary not found: %s", absPath.c_str());
-            continue;
-        }
-        std::vector<uint8_t> bytes(
-            (std::istreambuf_iterator<char>(fs)),
-            std::istreambuf_iterator<char>());
-
-        b64Array.push_back(base64_encode(bytes));
-        ++count;
-    }
-
-    root.erase("globalLibraries");
-    root["globalLibrariesBase64"] = std::move(b64Array);
-    SentryLog_Info("RuleServer", "Inlined %d global library file(s) as globalLibrariesBase64", count);
-}
-
-// Transformation 2 — replaces regex-based InlineScriptFiles() in C# RuleServer.
-static void InlineScriptFiles(json& root, const std::string& rulesDir)
-{
-    if (!root.contains("rules") || !root["rules"].is_array()) return;
-
-    int count = 0;
-    for (auto& rule : root["rules"])
-    {
-        if (!rule.is_object() || !rule.contains("script")) continue;
-        if (!rule["script"].is_string()) continue;
-
-        std::string relPath = rule["script"].get<std::string>();
-        std::replace(relPath.begin(), relPath.end(), '/', '\\');
-        std::string absPath = rulesDir + "\\" + relPath;
-
-        rule.erase("script");
-
-        std::ifstream fs(absPath, std::ios::binary);
-        if (!fs.is_open())
-        {
-            SentryLog_Warn("RuleServer", "Script not found: %s — rule gets empty scriptBodyBase64", absPath.c_str());
-            rule["scriptBodyBase64"] = "";
-            continue;
-        }
-        std::vector<uint8_t> bytes(
-            (std::istreambuf_iterator<char>(fs)),
-            std::istreambuf_iterator<char>());
-
-        rule["scriptBodyBase64"] = base64_encode(bytes);
-        ++count;
-    }
-    SentryLog_Info("RuleServer", "Inlined %d Lua script file(s) as scriptBodyBase64", count);
-}
-
-// Transformation 4 — replaces regex ExtractGlobalLibPrefix() in C# RuleServer.
-static std::string ExtractGlobalLibPrefix(const json& root)
-{
-    if (!root.contains("globalLibrariesBase64")) return {};
-    const auto& arr = root["globalLibrariesBase64"];
-    if (!arr.is_array()) return {};
-
-    std::string prefix;
-    for (const auto& entry : arr)
-    {
-        if (!entry.is_string()) continue;
-        std::string decoded = base64_decode_str(entry.get<std::string>());
-        if (!decoded.empty())
-        {
-            prefix += decoded;
-            prefix += '\n';
-        }
-    }
-    return prefix;
-}
-
-// Transformation 5 — replaces regex PrependLibToRuleScript() in C# RuleServer.
-struct LuaBytecodeWriter
-{
-    std::vector<uint8_t> bytes;
-};
-
-static int LuaDumpWriter(lua_State*, const void* data, size_t size, void* userData)
-{
-    auto* writer = static_cast<LuaBytecodeWriter*>(userData);
-    const auto* chunk = static_cast<const uint8_t*>(data);
-    writer->bytes.insert(writer->bytes.end(), chunk, chunk + size);
-    return 0;
-}
-
-static std::vector<uint8_t> CompileToBytecode(const std::string& combinedSource,
-                                              const char* chunkName)
-{
-    lua_State* L = luaL_newstate();
-    if (!L)
-        return {};
-
-    int rc = luaL_loadbuffer(L, combinedSource.data(), combinedSource.size(), chunkName);
-    if (rc != LUA_OK)
-    {
-        const char* err = lua_tostring(L, -1);
-        SentryLog_Error("RuleServer",
-                        "CompileToBytecode: luaL_loadbuffer failed for %s: %s",
-                        chunkName,
-                        err ? err : "(nil)");
-        lua_close(L);
-        return {};
-    }
-
-    LuaBytecodeWriter writer;
-    rc = lua_dump(L, LuaDumpWriter, &writer, 0);
-    lua_close(L);
-
-    if (rc != 0 || writer.bytes.empty())
-    {
-        SentryLog_Error("RuleServer",
-                        "CompileToBytecode: lua_dump failed for %s (rc=%d)",
-                        chunkName,
-                        rc);
-        return {};
-    }
-
-    return writer.bytes;
-}
-
-static void PrependLibToRuleScript(json& rule, const std::string& libPrefix)
-{
-    if (!rule.contains("scriptBodyBase64")) return;
-    if (!rule["scriptBodyBase64"].is_string()) return;
-
-    const std::string existingB64 = rule["scriptBodyBase64"].get<std::string>();
-    std::string ruleScript;
-    if (!existingB64.empty())
-    {
-        ruleScript = base64_decode_str(existingB64);
-        if (ruleScript.empty()) return;  // corrupt base64 — leave unchanged
-    }
-
-    const std::string combined = libPrefix.empty() ? ruleScript : libPrefix + "\n" + ruleScript;
-    std::string chunkName = "=rasp_rule";
-    if (rule.contains("id") && rule["id"].is_string())
-        chunkName = "=" + rule["id"].get<std::string>();
-
-    std::vector<uint8_t> bytecode = CompileToBytecode(combined, chunkName.c_str());
-    if (!bytecode.empty())
-    {
-        rule["scriptBodyBase64"] = base64_encode(bytecode.data(), bytecode.size());
-        rule["scriptEncoding"] = "bytecode";
-        SentryLog_Info("RuleServer",
-                       "Compiled %s to bytecode (%zu bytes)",
-                       chunkName.c_str(),
-                       bytecode.size());
-    }
-    else
-    {
-        SentryLog_Warn("RuleServer",
-                       "Bytecode compilation failed for %s - falling back to source text",
-                       chunkName.c_str());
-        rule["scriptBodyBase64"] = base64_encode(combined);
-        rule.erase("scriptEncoding");
-    }
-}
-
-static void CompileAllRulesToBytecode(json& root)
-{
-    if (!root.contains("rules") || !root["rules"].is_array()) return;
-
-    std::string libPrefix = ExtractGlobalLibPrefix(root);
-    int compiled = 0;
-    int skipped = 0;
-
-    for (auto& rule : root["rules"])
-    {
-        if (!rule.is_object()) continue;
-        if (rule.contains("scriptEncoding") &&
-            rule["scriptEncoding"].is_string() &&
-            rule["scriptEncoding"].get<std::string>() == "bytecode")
-        {
-            ++skipped;
-            continue;
-        }
-
-        const bool hadScript = rule.contains("scriptBodyBase64") && rule["scriptBodyBase64"].is_string();
-        PrependLibToRuleScript(rule, libPrefix);
-        if (hadScript &&
-            rule.contains("scriptEncoding") &&
-            rule["scriptEncoding"].is_string() &&
-            rule["scriptEncoding"].get<std::string>() == "bytecode")
-        {
-            ++compiled;
-        }
-    }
-
-    SentryLog_Info("RuleServer",
-                   "CompileAllRulesToBytecode: compiled=%d skipped=%d",
-                   compiled,
-                   skipped);
-}
-
-// ── RuleServer JSON methods ───────────────────────────────────────────────────
-
-// Replaces C# BuildAssembledJson() — top-level orchestrator.
-std::string RuleServer::BuildAssembledJson()
-{
-    try
-    {
-        std::ifstream f(m_rulesPath, std::ios::in);
-        if (!f.is_open())
-        {
-            SentryLog_Error("RuleServer", "Cannot open rules file: %s", m_rulesPath.c_str());
-            return "[]";
-        }
-
-        json root;
-        f >> root;   // throws nlohmann::json::parse_error on malformed input
-
-        std::string rulesDir = DirOf(m_rulesPath);
-        ::InlineGlobalLibraries(root, rulesDir);
-        ::InlineScriptFiles(root, rulesDir);
-        ::CompileAllRulesToBytecode(root);
-
-        return root.dump();
-    }
-    catch (const std::exception& ex)
-    {
-        SentryLog_Error("RuleServer", "BuildAssembledJson failed: %s", ex.what());
-        return "[]";
-    }
-}
-
-// Transformation 3 — replaces manual brace-counting FilterAmsiProviderRules() in C# RuleServer.
-std::string RuleServer::FilterAmsiProviderRules(const std::string& assembledJson)
-{
-    if (assembledJson.empty() || assembledJson == "[]") return "[]";
-    try
-    {
-        json root = json::parse(assembledJson);
-        std::string libPrefix = ::ExtractGlobalLibPrefix(root);
-
-        if (!root.contains("rules") || !root["rules"].is_array()) return "[]";
-
-        json result = json::array();
-        for (auto rule : root["rules"])  // value copy — mutated per rule
-        {
-            if (!rule.is_object()) continue;
-            if (!rule.contains("sensor") || !rule["sensor"].is_string()) continue;
-            if (rule["sensor"].get<std::string>() != "AmsiProvider") continue;
-
-            bool alreadyBytecode = rule.contains("scriptEncoding") &&
-                                   rule["scriptEncoding"].is_string() &&
-                                   rule["scriptEncoding"].get<std::string>() == "bytecode";
-            if (!alreadyBytecode)
-                ::PrependLibToRuleScript(rule, libPrefix);
-            result.push_back(std::move(rule));
-        }
-
-        SentryLog_Info("RuleServer", "Filtered %zu AmsiProvider rule(s)", result.size());
-        return result.dump();
-    }
-    catch (const std::exception& ex)
-    {
-        SentryLog_Error("RuleServer", "FilterAmsiProviderRules failed: %s", ex.what());
-        return "[]";
-    }
+    return m_provider->BuildRulesResponse(command, out, error);
 }

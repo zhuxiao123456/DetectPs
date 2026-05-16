@@ -1,8 +1,10 @@
 #include "amsi_ipc_host.h"
 
+#include "amsi_config_broadcaster.h"
 #include "amsi_control_status_channel.h"
 #include "amsi_event_channel.h"
 #include "amsi_pipe_names.h"
+#include "amsi_rule_provider.h"
 #include "amsi_staging_watcher.h"
 #include "config_watcher.h"
 #include "control_status_collector.h"
@@ -35,8 +37,12 @@ bool AmsiIpcHost::Start()
         return true;
     }
 
-    ruleServer_.reset(new RuleServer(config_.rulesPath));
-    configWatcher_.reset(new ConfigWatcher(config_.rulesPath, ruleServer_.get()));
+    if (adapters_.ruleProvider) {
+        ruleServer_.reset(new RuleServer(*adapters_.ruleProvider));
+    } else {
+        ruleServer_.reset(new RuleServer(config_.rulesPath));
+    }
+    configWatcher_.reset(new ConfigWatcher(config_.rulesPath, ruleServer_->RuleProvider()));
     if (!adapters_.eventSink) {
         eventCollector_.reset(new EventCollector(config_.logDir));
         stagingWatcher_.reset(new AmsiStagingWatcher(config_.stagingDir, eventCollector_->GetDrainQueue()));
@@ -142,4 +148,33 @@ void AmsiIpcHost::Stop()
 
     stage_ = StartStage::None;
     started_ = false;
+}
+
+void AmsiIpcHost::InvalidateRules()
+{
+    if (adapters_.ruleProvider) {
+        adapters_.ruleProvider->InvalidateRuleCache();
+        return;
+    }
+    if (ruleServer_) {
+        ruleServer_->InvalidateRuleCache();
+    }
+}
+
+amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastReload(int maxListeners,
+                                                           std::uint32_t timeoutMs)
+{
+    const amsi_ipc::AmsiConfigBroadcaster broadcaster(amsi_ipc::kConfigPipeName);
+    return broadcaster.Broadcast(amsi_ipc::AmsiControlSignal::Reload,
+                                 maxListeners,
+                                 timeoutMs);
+}
+
+amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastUnload(int maxListeners,
+                                                           std::uint32_t timeoutMs)
+{
+    const amsi_ipc::AmsiConfigBroadcaster broadcaster(amsi_ipc::kConfigPipeName);
+    return broadcaster.Broadcast(amsi_ipc::AmsiControlSignal::Unload,
+                                 maxListeners,
+                                 timeoutMs);
 }

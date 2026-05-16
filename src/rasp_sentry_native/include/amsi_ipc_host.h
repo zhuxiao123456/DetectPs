@@ -1,7 +1,10 @@
 #pragma once
 
 #include <memory>
+#include <cstdint>
 #include <string>
+
+#include "amsi_config_broadcaster.h"
 
 class AmsiStagingWatcher;
 class ConfigWatcher;
@@ -14,6 +17,7 @@ class AmsiControlStatusChannel;
 class AmsiEventChannel;
 class IAmsiControlStatusSink;
 class IAmsiEventSink;
+class IAmsiRuleProvider;
 class NamedPipeServerPool;
 } // namespace amsi_ipc
 
@@ -26,6 +30,7 @@ struct AmsiIpcHostConfig {
 struct AmsiIpcHostAdapters {
     amsi_ipc::IAmsiEventSink* eventSink = nullptr;
     amsi_ipc::IAmsiControlStatusSink* controlStatusSink = nullptr;
+    amsi_ipc::IAmsiRuleProvider* ruleProvider = nullptr;
 };
 
 class AmsiIpcHost {
@@ -39,6 +44,11 @@ public:
 
     bool Start();
     void Stop();
+    void InvalidateRules();
+    amsi_ipc::AmsiBroadcastResult BroadcastReload(int maxListeners = 32,
+                                                  std::uint32_t timeoutMs = 500);
+    amsi_ipc::AmsiBroadcastResult BroadcastUnload(int maxListeners = 32,
+                                                  std::uint32_t timeoutMs = 500);
 
 private:
     enum class StartStage {

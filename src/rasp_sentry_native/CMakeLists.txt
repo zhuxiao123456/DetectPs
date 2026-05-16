@@ -85,6 +85,7 @@ add_executable(rasp_sentry
     ../amsi_ipc_host/src/amsi_control_status_channel.cpp
     src/event_collector.cpp
     src/control_status_collector.cpp
+    src/demo_file_rule_provider.cpp
     src/rule_server.cpp
     src/config_watcher.cpp
     src/amsi_staging_watcher.cpp
@@ -240,6 +241,7 @@ add_executable(amsi_ipc_host_adapter_tests
     ../amsi_ipc_host/src/amsi_control_status_channel.cpp
     src/event_collector.cpp
     src/control_status_collector.cpp
+    src/demo_file_rule_provider.cpp
     src/rule_server.cpp
     src/config_watcher.cpp
     src/amsi_staging_watcher.cpp
@@ -270,5 +272,68 @@ target_link_libraries(amsi_ipc_host_adapter_tests PRIVATE
 if(MSVC)
     target_compile_options(amsi_ipc_host_adapter_tests PRIVATE /W3 /WX- /MP)
     set_property(TARGET amsi_ipc_host_adapter_tests PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
+add_executable(demo_file_rule_provider_tests
+    tests/demo_file_rule_provider_tests.cpp
+    src/demo_file_rule_provider.cpp
+    src/sentry_log.cpp
+)
+
+target_include_directories(demo_file_rule_provider_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../amsi_ipc_host/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+    "${LUA_SRC_DIR}"
+)
+
+target_compile_definitions(demo_file_rule_provider_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    NOMINMAX
+    _WIN32_WINNT=0x0601
+)
+
+target_link_libraries(demo_file_rule_provider_tests PRIVATE
+    lua54_static_sentry
+    kernel32
+)
+
+if(MSVC)
+    target_compile_options(demo_file_rule_provider_tests PRIVATE /W3 /WX- /MP)
+    set_property(TARGET demo_file_rule_provider_tests PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
+add_executable(config_watcher_tests
+    tests/config_watcher_tests.cpp
+    src/config_watcher.cpp
+    src/sentry_log.cpp
+    ../amsi_ipc_host/src/amsi_config_broadcaster.cpp
+)
+
+target_include_directories(config_watcher_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../amsi_ipc_host/include"
+)
+
+target_compile_definitions(config_watcher_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    NOMINMAX
+    _WIN32_WINNT=0x0601
+)
+
+target_link_libraries(config_watcher_tests PRIVATE
+    kernel32
+    shlwapi
+)
+
+if(MSVC)
+    target_compile_options(config_watcher_tests PRIVATE /W3 /WX- /MP)
+    set_property(TARGET config_watcher_tests PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()

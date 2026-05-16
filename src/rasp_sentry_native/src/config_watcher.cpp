@@ -1,6 +1,6 @@
 #include "config_watcher.h"
 #include "amsi_config_broadcaster.h"
-#include "rule_server.h"
+#include "amsi_rule_provider.h"
 #include "sentry_log.h"
 #include <shlwapi.h>
 #include <algorithm>
@@ -26,10 +26,10 @@ std::string ConfigWatcher::DirOf(const std::string& filePath)
 
 // ── ConfigWatcher ─────────────────────────────────────────────────────────────
 
-ConfigWatcher::ConfigWatcher(std::string rulesPath, RuleServer* ruleServer)
+ConfigWatcher::ConfigWatcher(std::string rulesPath, amsi_ipc::IAmsiRuleProvider* ruleProvider)
     : m_rulesPath(std::move(rulesPath))
     , m_rulesDir(DirOf(m_rulesPath))
-    , m_ruleServer(ruleServer)
+    , m_ruleProvider(ruleProvider)
 {
     InitializeCriticalSection(&m_debounceLock);
 }
@@ -208,8 +208,20 @@ VOID CALLBACK ConfigWatcher::DebounceCallback(PVOID param, BOOLEAN /*fired*/)
 void ConfigWatcher::FireDebounced()
 {
     SentryLog_Info("ConfigWatcher", "Debounce expired — invalidating cache and broadcasting reload");
-    if (m_ruleServer) m_ruleServer->InvalidateCache();
+    InvalidateRuleCache();
     BroadcastReload();
+}
+
+void ConfigWatcher::InvalidateRuleCache()
+{
+    if (m_ruleProvider) {
+        m_ruleProvider->InvalidateRuleCache();
+    }
+}
+
+void ConfigWatcher::InvalidateRuleCacheForTest()
+{
+    InvalidateRuleCache();
 }
 
 // ── Broadcast ─────────────────────────────────────────────────────────────────
