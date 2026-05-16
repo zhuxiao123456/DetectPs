@@ -323,6 +323,79 @@ bool BroadcastReloadAndUnloadReturnResultsWithoutListeners()
            Expect(unload.reached == 0, "BroadcastUnload reports no listeners");
 }
 
+bool HostStartsWithDemoWatchersDisabled()
+{
+    FakeEventSink eventSink;
+    FakeControlStatusSink statusSink;
+    FakeRuleProvider ruleProvider;
+
+    AmsiIpcHostConfig config;
+    config.logDir = ".";
+    config.rulesPath = "";
+    config.stagingDir = "";
+    config.enableDemoConfigWatcher = false;
+    config.enableDemoStagingWatcher = false;
+
+    AmsiIpcHostAdapters adapters;
+    adapters.eventSink = &eventSink;
+    adapters.controlStatusSink = &statusSink;
+    adapters.ruleProvider = &ruleProvider;
+
+    AmsiIpcHost host(config, adapters);
+    if (!Expect(host.Start(), "host starts with demo watchers disabled")) {
+        return false;
+    }
+
+    const std::string rulesResponse = ExchangeRulesPipePayload("GET_RULES\n");
+    const std::string eventPayload = "{\"cat\":\"Detection\",\"rule\":\"watchers-disabled\"}";
+    const std::string statusPayload = "{\"msgType\":\"RULE_LOAD_RESULT\",\"success\":true}";
+    const bool eventWrote = WritePipePayload(amsi_ipc::kEventsPipeName, eventPayload);
+    const bool statusWrote = WritePipePayload(amsi_ipc::kControlStatusPipeName, statusPayload);
+    const bool eventDelivered = WaitForCallCount(eventSink.calls, 1);
+    const bool statusDelivered = WaitForCallCount(statusSink.calls, 1);
+    host.Stop();
+
+    return Expect(rulesResponse == R"([{"id":"injected-rule","sensor":"AmsiProvider"}])" "\n",
+                  "rules pipe works with demo watchers disabled") &&
+           Expect(eventWrote && eventDelivered && eventSink.lastPayload == eventPayload,
+                  "event pipe works with demo watchers disabled") &&
+           Expect(statusWrote && statusDelivered && statusSink.lastPayload == statusPayload,
+                  "control status pipe works with demo watchers disabled");
+}
+
+bool InvalidateAndBroadcastWorkWithDemoWatchersDisabled()
+{
+    FakeEventSink eventSink;
+    FakeControlStatusSink statusSink;
+    FakeRuleProvider ruleProvider;
+
+    AmsiIpcHostConfig config;
+    config.logDir = ".";
+    config.rulesPath = "";
+    config.stagingDir = "";
+    config.enableDemoConfigWatcher = false;
+    config.enableDemoStagingWatcher = false;
+
+    AmsiIpcHostAdapters adapters;
+    adapters.eventSink = &eventSink;
+    adapters.controlStatusSink = &statusSink;
+    adapters.ruleProvider = &ruleProvider;
+
+    AmsiIpcHost host(config, adapters);
+    if (!Expect(host.Start(), "host starts before facade calls with demo watchers disabled")) {
+        return false;
+    }
+
+    host.InvalidateRules();
+    const auto reload = host.BroadcastReload(1, 10);
+    host.Stop();
+
+    return Expect(ruleProvider.invalidateCalls == 1,
+                  "InvalidateRules works with demo watchers disabled") &&
+           Expect(reload.reached == 0,
+                  "BroadcastReload works with demo watchers disabled and no listeners");
+}
+
 } // namespace
 
 int main()
@@ -343,6 +416,12 @@ int main()
         return 1;
     }
     if (!BroadcastReloadAndUnloadReturnResultsWithoutListeners()) {
+        return 1;
+    }
+    if (!HostStartsWithDemoWatchersDisabled()) {
+        return 1;
+    }
+    if (!InvalidateAndBroadcastWorkWithDemoWatchersDisabled()) {
         return 1;
     }
     return 0;

@@ -147,6 +147,8 @@ public:
         config.logDir = "";
         config.rulesPath = "";
         config.stagingDir = "";
+        config.enableDemoConfigWatcher = false;
+        config.enableDemoStagingWatcher = false;
 
         AmsiIpcHostAdapters adapters;
         adapters.ruleProvider = &ruleProvider_;
@@ -176,8 +178,8 @@ private:
 当前注意事项：
 
 - `AmsiIpcHostConfig` 仍保留 demo path 字段。
-- 当前代码中 demo watcher 仍可能依赖 `rulesPath` / `stagingDir`。
-- HostGuard 最小落地前，下一批需要让 demo watcher 可选化。
+- HostGuard 模式应关闭 `enableDemoConfigWatcher` 和 `enableDemoStagingWatcher`。
+- demo `rasp_sentry.exe` 不设置这两个字段，默认继续启用 watcher。
 
 ## 8. Demo-only 组件边界
 
@@ -259,11 +261,14 @@ auto result = host.BroadcastReload();
 
 ### Batch 5e-3：demo watcher 可选化
 
-目标：
+状态：已完成。
 
-- `AmsiIpcHostAdapters` 或 config 增加 demo watcher 开关。
-- HostGuard 模式默认不启动 `ConfigWatcher` / `AmsiStagingWatcher`。
-- `rasp_sentry.exe` demo 默认行为保持不变。
+当前 `AmsiIpcHostConfig` 提供：
+
+- `enableDemoConfigWatcher`
+- `enableDemoStagingWatcher`
+
+HostGuard 模式应显式设为 `false`。demo `rasp_sentry.exe` 使用默认值 `true`，行为保持不变。
 
 ## 12. 迁移红线
 

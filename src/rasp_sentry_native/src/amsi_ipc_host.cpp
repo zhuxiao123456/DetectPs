@@ -42,10 +42,14 @@ bool AmsiIpcHost::Start()
     } else {
         ruleServer_.reset(new RuleServer(config_.rulesPath));
     }
-    configWatcher_.reset(new ConfigWatcher(config_.rulesPath, ruleServer_->RuleProvider()));
+    if (config_.enableDemoConfigWatcher) {
+        configWatcher_.reset(new ConfigWatcher(config_.rulesPath, ruleServer_->RuleProvider()));
+    }
     if (!adapters_.eventSink) {
         eventCollector_.reset(new EventCollector(config_.logDir));
-        stagingWatcher_.reset(new AmsiStagingWatcher(config_.stagingDir, eventCollector_->GetDrainQueue()));
+        if (config_.enableDemoStagingWatcher) {
+            stagingWatcher_.reset(new AmsiStagingWatcher(config_.stagingDir, eventCollector_->GetDrainQueue()));
+        }
     }
     if (!adapters_.controlStatusSink) {
         controlStatusCollector_.reset(new ControlStatusCollector(config_.logDir));
@@ -97,9 +101,11 @@ bool AmsiIpcHost::Start()
     SentryLog_Info("Program", "RuleServer started - %d threads on amsi_detect_rules",
                    RuleServer::kThreadCount);
 
-    configWatcher_->Start();
-    stage_ = StartStage::ConfigWatcher;
-    SentryLog_Info("Program", "ConfigWatcher started - watching %s", config_.rulesPath.c_str());
+    if (configWatcher_) {
+        configWatcher_->Start();
+        stage_ = StartStage::ConfigWatcher;
+        SentryLog_Info("Program", "ConfigWatcher started - watching %s", config_.rulesPath.c_str());
+    }
 
     if (stagingWatcher_) {
         stagingWatcher_->Start();

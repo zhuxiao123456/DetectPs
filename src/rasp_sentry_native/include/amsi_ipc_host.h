@@ -25,6 +25,8 @@ struct AmsiIpcHostConfig {
     std::string logDir;
     std::string rulesPath;
     std::string stagingDir;
+    bool enableDemoConfigWatcher = true;
+    bool enableDemoStagingWatcher = true;
 };
 
 struct AmsiIpcHostAdapters {
