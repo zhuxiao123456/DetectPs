@@ -85,6 +85,7 @@ add_executable(rasp_sentry
     ../amsi_ipc_host/src/amsi_control_status_channel.cpp
     src/event_collector.cpp
     src/control_status_collector.cpp
+    src/dll_instance_registry.cpp
     src/demo_file_rule_provider.cpp
     src/rule_server.cpp
     src/config_watcher.cpp
@@ -241,6 +242,7 @@ add_executable(amsi_ipc_host_adapter_tests
     ../amsi_ipc_host/src/amsi_control_status_channel.cpp
     src/event_collector.cpp
     src/control_status_collector.cpp
+    src/dll_instance_registry.cpp
     src/demo_file_rule_provider.cpp
     src/rule_server.cpp
     src/config_watcher.cpp
@@ -307,6 +309,33 @@ if(MSVC)
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
+add_executable(dll_instance_registry_tests
+    tests/dll_instance_registry_tests.cpp
+    src/dll_instance_registry.cpp
+)
+
+target_include_directories(dll_instance_registry_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+target_compile_definitions(dll_instance_registry_tests PRIVATE
+    WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
+    NOMINMAX
+    _WIN32_WINNT=0x0601
+)
+
+target_link_libraries(dll_instance_registry_tests PRIVATE
+    kernel32
+)
+
+if(MSVC)
+    target_compile_options(dll_instance_registry_tests PRIVATE /W3 /WX- /MP)
+    set_property(TARGET dll_instance_registry_tests PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 add_executable(config_watcher_tests
     tests/config_watcher_tests.cpp
     src/config_watcher.cpp
@@ -350,6 +379,7 @@ add_executable(amsi_ipc_hostguard_integration_tests
     ../amsi_ipc_host/src/amsi_control_status_channel.cpp
     src/event_collector.cpp
     src/control_status_collector.cpp
+    src/dll_instance_registry.cpp
     src/demo_file_rule_provider.cpp
     src/rule_server.cpp
     src/config_watcher.cpp

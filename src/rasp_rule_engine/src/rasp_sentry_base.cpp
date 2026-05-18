@@ -18,6 +18,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
+#include <tlhelp32.h>
 
 #include <sddl.h>
 #include <string>
@@ -28,6 +29,7 @@
 #include <cstdio>
 #include <ctime>
 #include <algorithm>
+#include <sstream>
 
 #include "../include/rasp_sentry_base.h"
 #include "../include/event_submit_client.h"
@@ -384,6 +386,148 @@ static std::string SentryUtcTimestamp()
     return std::string(buf);
 }
 
+static std::string FileTimeToUtcTimestamp(const FILETIME& ft)
+{
+    SYSTEMTIME st;
+    if (!FileTimeToSystemTime(&ft, &st)) {
+        return SentryUtcTimestamp();
+    }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+             st.wYear, st.wMonth, st.wDay,
+             st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+    return std::string(buf);
+}
+
+static std::string FileTimeToCompactUtc(const FILETIME& ft)
+{
+    SYSTEMTIME st;
+    if (!FileTimeToSystemTime(&ft, &st)) {
+        GetSystemTime(&st);
+    }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%04d%02d%02dT%02d%02d%02d%03dZ",
+             st.wYear, st.wMonth, st.wDay,
+             st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+    return std::string(buf);
+}
+
+static FILETIME CurrentProcessStartFileTime()
+{
+    FILETIME createTime{}, exitTime{}, kernelTime{}, userTime{};
+    if (!GetProcessTimes(GetCurrentProcess(), &createTime, &exitTime, &kernelTime, &userTime)) {
+        GetSystemTimeAsFileTime(&createTime);
+    }
+    return createTime;
+}
+
+static std::string Hex64(unsigned long long value)
+{
+    char buf[17];
+    snprintf(buf, sizeof(buf), "%016llx", value);
+    return std::string(buf);
+}
+
+static std::string CurrentProcessPathUtf8()
+{
+    wchar_t path[MAX_PATH] = {};
+    const DWORD len = GetModuleFileNameW(nullptr, path, MAX_PATH);
+    if (len == 0) {
+        return {};
+    }
+    int bytes = WideCharToMultiByte(CP_UTF8, 0, path, static_cast<int>(len),
+                                    nullptr, 0, nullptr, nullptr);
+    if (bytes <= 0) {
+        return {};
+    }
+    std::string out(static_cast<std::size_t>(bytes), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, path, static_cast<int>(len),
+                        &out[0], bytes, nullptr, nullptr);
+    return out;
+}
+
+static std::string WideToUtf8(const wchar_t* value)
+{
+    if (!value || !value[0]) {
+        return {};
+    }
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, value, -1,
+                                          nullptr, 0, nullptr, nullptr);
+    if (bytes <= 1) {
+        return {};
+    }
+    std::string out(static_cast<std::size_t>(bytes - 1), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, value, -1,
+                        &out[0], bytes, nullptr, nullptr);
+    return out;
+}
+
+static DWORD CurrentParentPid()
+{
+    const DWORD currentPid = GetCurrentProcessId();
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    DWORD parentPid = 0;
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (entry.th32ProcessID == currentPid) {
+                parentPid = entry.th32ParentProcessID;
+                break;
+            }
+        } while (Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return parentPid;
+}
+
+static std::string ProcessPathUtf8(DWORD pid)
+{
+    if (pid == 0) {
+        return {};
+    }
+
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    }
+    if (!process) {
+        return {};
+    }
+
+    wchar_t path[32768] = {};
+    DWORD chars = static_cast<DWORD>(sizeof(path) / sizeof(path[0]));
+    std::string result;
+    if (QueryFullProcessImageNameW(process, 0, path, &chars)) {
+        result = WideToUtf8(path);
+    }
+    CloseHandle(process);
+    return result;
+}
+
+static std::string BuildDllInstanceId(std::string& processStartTimeOut)
+{
+    const DWORD pid = GetCurrentProcessId();
+    const FILETIME start = CurrentProcessStartFileTime();
+    processStartTimeOut = FileTimeToUtcTimestamp(start);
+
+    LARGE_INTEGER counter;
+    QueryPerformanceCounter(&counter);
+    const unsigned long long randomish =
+        (static_cast<unsigned long long>(counter.QuadPart) ^
+         (static_cast<unsigned long long>(GetTickCount64()) << 17) ^
+         static_cast<unsigned long long>(pid));
+
+    std::ostringstream oss;
+    oss << "amsi_detect_" << pid << '_' << FileTimeToCompactUtc(start)
+        << '_' << Hex64(randomish);
+    return oss.str();
+}
+
 static std::string ControlStatusJsonEscape(const std::string& value)
 {
     std::string out;
@@ -481,6 +625,65 @@ void RaspSentryBase::SendRuleLoadResult(bool success,
     SendRuleLoadResult(success, errorCode, errorMessage, RuleBundleMetadata{});
 }
 
+void RaspSentryBase::SendDllLifecycleStatus(const char* msgType) const
+{
+    const DWORD pid = GetCurrentProcessId();
+    char pidBuf[32];
+    snprintf(pidBuf, sizeof(pidBuf), "%lu", static_cast<unsigned long>(pid));
+
+    char json[2048];
+    if (std::strcmp(msgType, "DLL_LOADED") == 0) {
+        const DWORD parentPid = CurrentParentPid();
+        char parentPidBuf[32];
+        snprintf(parentPidBuf, sizeof(parentPidBuf), "%lu", static_cast<unsigned long>(parentPid));
+
+        _snprintf_s(json, sizeof(json), _TRUNCATE,
+                    "{\"msgType\":\"DLL_LOADED\","
+                    "\"module\":\"amsi_detect\","
+                    "\"instanceId\":\"%s\","
+                    "\"dllInstanceId\":\"%s\","
+                    "\"pid\":%s,"
+                    "\"processStartTime\":\"%s\","
+                    "\"processPath\":\"%s\","
+                    "\"parentPid\":%s,"
+                    "\"parentProcessPath\":\"%s\","
+                    "\"timestamp\":\"%s\"}",
+                    ControlStatusJsonEscape(m_dllInstanceId).c_str(),
+                    ControlStatusJsonEscape(m_dllInstanceId).c_str(),
+                    pidBuf,
+                    ControlStatusJsonEscape(m_processStartTimeUtc).c_str(),
+                    ControlStatusJsonEscape(CurrentProcessPathUtf8()).c_str(),
+                    parentPidBuf,
+                    ControlStatusJsonEscape(ProcessPathUtf8(parentPid)).c_str(),
+                    ControlStatusJsonEscape(SentryUtcTimestamp()).c_str());
+    } else {
+        _snprintf_s(json, sizeof(json), _TRUNCATE,
+                    "{\"msgType\":\"%s\","
+                    "\"module\":\"amsi_detect\","
+                    "\"instanceId\":\"%s\","
+                    "\"dllInstanceId\":\"%s\","
+                    "\"pid\":%s,"
+                    "\"timestamp\":\"%s\"}",
+                    msgType,
+                    ControlStatusJsonEscape(m_dllInstanceId).c_str(),
+                    ControlStatusJsonEscape(m_dllInstanceId).c_str(),
+                    pidBuf,
+                    ControlStatusJsonEscape(SentryUtcTimestamp()).c_str());
+    }
+
+    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_control_status",
+                               GENERIC_WRITE, 0, nullptr,
+                               OPEN_EXISTING, 0, nullptr);
+    if (hPipe == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    DWORD written = 0;
+    const DWORD expected = static_cast<DWORD>(strlen(json));
+    WriteFile(hPipe, json, expected, &written, nullptr);
+    CloseHandle(hPipe);
+}
+
 void RaspSentryBase::SendRuleLoadResult(bool success,
                                         int errorCode,
                                         const std::string& errorMessage,
@@ -491,7 +694,9 @@ void RaspSentryBase::SendRuleLoadResult(bool success,
     snprintf(pidBuf, sizeof(pidBuf), "%lu", static_cast<unsigned long>(pid));
 
     const std::string pidText(pidBuf);
-    const std::string dllInstanceId = std::string("amsi_detect_") + pidText;
+    const std::string dllInstanceId = m_dllInstanceId.empty()
+        ? std::string("amsi_detect_") + pidText
+        : m_dllInstanceId;
     const size_t ruleCount = ActiveRuleCountForStatus();
     const RuleBundleMetadata activeMetadata = ActiveRuleMetadataForStatus();
 
@@ -719,6 +924,21 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
     return 0;
 }
 
+DWORD WINAPI RaspSentryBase::HeartbeatThreadProc(LPVOID param)
+{
+    auto* self = static_cast<RaspSentryBase*>(param);
+    while (self->m_running.load()) {
+        for (int i = 0; i < 3000 && self->m_running.load(); ++i) {
+            Sleep(100);
+        }
+        if (!self->m_running.load()) {
+            break;
+        }
+        self->SendDllLifecycleStatus("DLL_HEARTBEAT");
+    }
+    return 0;
+}
+
 // =========================================================================
 // Initialize / Shutdown
 // =========================================================================
@@ -727,6 +947,7 @@ void RaspSentryBase::Initialize()
 {
     m_running.store(true);
     EnsureLogCsInit();
+    m_dllInstanceId = BuildDllInstanceId(m_processStartTimeUtc);
     m_eventSink.Start([this](const AsyncEvent& event) {
         return SendDetectionEventSyncWorkerOnly(event);
     });
@@ -769,12 +990,15 @@ void RaspSentryBase::Initialize()
 
     m_configThread = CreateThread(nullptr, 0, ConfigPipeThreadProc, this, 0, nullptr);
     m_logThread    = CreateThread(nullptr, 0, LogForwardThreadProc,  this, 0, nullptr);
+    SendDllLifecycleStatus("DLL_LOADED");
+    m_heartbeatThread = CreateThread(nullptr, 0, HeartbeatThreadProc, this, 0, nullptr);
 
-    Log("[%s] Initialize: ConfigPipeThread + LogForwardThread started", ModuleName());
+    Log("[%s] Initialize: ConfigPipeThread + LogForwardThread + HeartbeatThread started", ModuleName());
 }
 
 void RaspSentryBase::Shutdown()
 {
+    SendDllLifecycleStatus("DLL_UNLOADED");
     m_running.store(false);
     m_eventSink.Stop(std::chrono::milliseconds(1000));
 
@@ -794,6 +1018,13 @@ void RaspSentryBase::Shutdown()
         WaitForSingleObject(m_retryThread, 3000);
         CloseHandle(m_retryThread);
         m_retryThread = INVALID_HANDLE_VALUE;
+    }
+
+    if (m_heartbeatThread != INVALID_HANDLE_VALUE)
+    {
+        WaitForSingleObject(m_heartbeatThread, 3000);
+        CloseHandle(m_heartbeatThread);
+        m_heartbeatThread = INVALID_HANDLE_VALUE;
     }
 
     // 3. Unblock ConnectNamedPipe with a dummy client, then wait

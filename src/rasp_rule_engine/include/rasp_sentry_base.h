@@ -203,6 +203,9 @@ private:
     // Unconditional for all modules — active polling handles AMSI processes
     // that start before rasp_sentry (passive reload signal would never reach them).
     HANDLE m_retryThread  = INVALID_HANDLE_VALUE;
+    HANDLE m_heartbeatThread = INVALID_HANDLE_VALUE;
+    std::string m_dllInstanceId;
+    std::string m_processStartTimeUtc;
     mutable AsyncEventSink m_eventSink;
     mutable std::mutex m_ruleMetadataMutex;
     RuleBundleMetadata m_activeRuleMetadata;
@@ -210,4 +213,6 @@ private:
     static DWORD WINAPI LogForwardThreadProc(LPVOID param);
     static DWORD WINAPI ConfigPipeThreadProc(LPVOID param);
     static DWORD WINAPI SentryRetryThreadProc(LPVOID param);
+    static DWORD WINAPI HeartbeatThreadProc(LPVOID param);
+    void SendDllLifecycleStatus(const char* msgType) const;
 };

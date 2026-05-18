@@ -10,6 +10,7 @@
 #include "amsi_control_status_channel.h"
 #include "amsi_control_status_sink.h"
 #include "amsi_pipe_names.h"
+#include "dll_instance_registry.h"
 #include "named_pipe_server_pool.h"
 
 class ControlStatusCollector : public amsi_ipc::IAmsiControlStatusSink
@@ -24,6 +25,7 @@ public:
     void Start();
     void Stop();
     void OnControlStatusLine(const amsi_ipc::AmsiControlStatusLine& status) override;
+    const rasp_sentry::DllInstanceRegistry& InstanceRegistry() const;
 
 private:
     std::string m_logDir;
@@ -31,6 +33,8 @@ private:
     CRITICAL_SECTION m_fileLock;
     amsi_ipc::AmsiControlStatusChannel m_statusChannel;
     amsi_ipc::NamedPipeServerPool m_statusPipePool;
+    rasp_sentry::DllInstanceRegistry m_instanceRegistry;
 
     void AppendLine(const std::string& jsonLine);
+    void WriteInstanceSnapshot(std::int64_t nowMs);
 };
