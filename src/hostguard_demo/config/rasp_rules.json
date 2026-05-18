@@ -1,0 +1,9 @@
+{
+  "rules": [
+    {
+      "id": "hostguard-demo-amsi",
+      "sensor": "AmsiProvider",
+      "action": "log"
+    }
+  ]
+}

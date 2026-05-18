@@ -1,0 +1,118 @@
+#include "hostguard_file_rule_provider.h"
+
+#include "nlohmann/json.hpp"
+
+#include <cstring>
+#include <fstream>
+#include <mutex>
+
+using json = nlohmann::json;
+
+HostGuardFileRuleProvider::HostGuardFileRuleProvider(std::string rulesPath)
+    : rulesPath_(std::move(rulesPath))
+{
+}
+
+bool HostGuardFileRuleProvider::BuildRulesResponse(const std::string& command,
+                                                   amsi_ipc::AmsiRuleResponse& out,
+                                                   std::string& error)
+{
+    if (_stricmp(command.c_str(), "GET_RULES") == 0) {
+        out.json = GetAmsiRulesJson();
+        return true;
+    }
+    if (_stricmp(command.c_str(), "GET_ALL_RULES") == 0) {
+        out.json = GetAllRulesJson();
+        return true;
+    }
+
+    error = "unknown command: " + command;
+    return false;
+}
+
+void HostGuardFileRuleProvider::InvalidateRuleCache()
+{
+    std::unique_lock<std::shared_mutex> guard(lock_);
+    cachedAllRules_.clear();
+    cachedAmsiRules_.clear();
+}
+
+bool HostGuardFileRuleProvider::cache_ready() const
+{
+    std::shared_lock<std::shared_mutex> guard(lock_);
+    return !cachedAllRules_.empty() || !cachedAmsiRules_.empty();
+}
+
+std::string HostGuardFileRuleProvider::GetAllRulesJson()
+{
+    {
+        std::shared_lock<std::shared_mutex> guard(lock_);
+        if (!cachedAllRules_.empty()) {
+            return cachedAllRules_;
+        }
+    }
+
+    const std::string built = BuildAllRulesJson();
+    std::unique_lock<std::shared_mutex> guard(lock_);
+    if (cachedAllRules_.empty()) {
+        cachedAllRules_ = built;
+    }
+    return cachedAllRules_;
+}
+
+std::string HostGuardFileRuleProvider::GetAmsiRulesJson()
+{
+    {
+        std::shared_lock<std::shared_mutex> guard(lock_);
+        if (!cachedAmsiRules_.empty()) {
+            return cachedAmsiRules_;
+        }
+    }
+
+    const std::string allRules = GetAllRulesJson();
+    const std::string built = BuildAmsiRulesJson(allRules);
+    std::unique_lock<std::shared_mutex> guard(lock_);
+    if (cachedAmsiRules_.empty()) {
+        cachedAmsiRules_ = built;
+    }
+    return cachedAmsiRules_;
+}
+
+std::string HostGuardFileRuleProvider::BuildAllRulesJson() const
+{
+    std::ifstream input(rulesPath_, std::ios::binary);
+    if (!input.is_open()) {
+        return "[]";
+    }
+
+    try {
+        json root;
+        input >> root;
+        return root.dump();
+    } catch (...) {
+        return "[]";
+    }
+}
+
+std::string HostGuardFileRuleProvider::BuildAmsiRulesJson(const std::string& allRulesJson) const
+{
+    try {
+        const json root = json::parse(allRulesJson);
+        if (!root.is_object() || !root.contains("rules") || !root["rules"].is_array()) {
+            return "[]";
+        }
+
+        json result = json::array();
+        for (const auto& rule : root["rules"]) {
+            if (!rule.is_object() || !rule.contains("sensor") || !rule["sensor"].is_string()) {
+                continue;
+            }
+            if (rule["sensor"].get<std::string>() == "AmsiProvider") {
+                result.push_back(rule);
+            }
+        }
+        return result.dump();
+    } catch (...) {
+        return "[]";
+    }
+}
