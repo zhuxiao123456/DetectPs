@@ -38,9 +38,10 @@ struct EventJsonBuildInput {
     std::string ip;
     std::string ua;
     std::string payload;
-    // Batch 3: parent process summary (事件层摘要，不含路径)
+    // Batch 3: parent process summary.
     uint32_t    parentPid = 0;
     std::string parentProcessName;
+    std::string parentProcessPath;
 };
 
 struct EventJsonBuildResult {

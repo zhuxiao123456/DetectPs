@@ -59,9 +59,10 @@ struct RaspEvalResult
     std::string ip;       // IIS7: client IP;         AMSI: ""
     std::string ua;       // IIS7: User-Agent header; AMSI: ""
     int confidence;  // 置信度
-    // Batch 3: parent process summary (事件层摘要，不含路径)
+    // Batch 3: parent process summary.
     uint32_t    parentPid = 0;
     std::string parentProcessName;
+    std::string parentProcessPath;
 };
 
 struct RuleBundleMetadata

@@ -521,11 +521,14 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     // Batch 3: 一次性提取 parent 字段
     uint32_t parentPid = 0;
     std::string parentProcessName;
+    std::string parentProcessPath;
     for (const auto &f: ctx.fields) {
         if (f.name == "parentPid") {
             parentPid = ParseUint32OrZero(f.value);
         } else if (f.name == "parentProcessName") {
             parentProcessName = f.value;
+        } else if (f.name == "parentProcessPath") {
+            parentProcessPath = f.value;
         }
     }
 
@@ -669,6 +672,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
         // Batch 3: parent process fields
         r.parentPid = parentPid;
         r.parentProcessName = parentProcessName;
+        r.parentProcessPath = parentProcessPath;
         if (rule.confidence) {
             r.confidence = rule.confidence;
         } else {
@@ -726,6 +730,7 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
         const ProcessContextSnapshot& process = *scanContext.process;
         ctx.fields.push_back({"parentPid", std::to_string(process.parentPid)});
         ctx.fields.push_back({"parentProcessName", process.parentProcessName});
+        ctx.fields.push_back({"parentProcessPath", process.parentProcessPath});
         ctx.fields.push_back({"processCaptureStatus", ProcessCaptureStatusToString(process.status)});
         ctx.fields.push_back({"processRetryState", ProcessRetryStateToString(process.retryState)});
     }

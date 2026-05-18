@@ -122,7 +122,8 @@ EventJsonBuildResult EventJsonBuilder::BuildDetection(const EventJsonBuildInput&
         << "\"ua\":\"" << JsonEscape(input.ua) << "\","
         << "\"pattern\":\"" << JsonEscape(result.payload) << "\","
         << "\"parentPid\":\"" << input.parentPid << "\","
-        << "\"parentProcessName\":\"" << JsonEscape(input.parentProcessName) << "\"}";
+        << "\"parentProcessName\":\"" << JsonEscape(input.parentProcessName) << "\","
+        << "\"parentProcessPath\":\"" << JsonEscape(input.parentProcessPath) << "\"}";
     result.compactJson = oss.str();
     return result;
 }

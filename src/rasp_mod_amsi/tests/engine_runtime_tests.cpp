@@ -727,6 +727,7 @@ int main()
         result.confidence = 70;
         result.parentPid = 5678;
         result.parentProcessName = "wscript.exe";
+        result.parentProcessPath = "C:\\Windows\\System32\\wscript.exe";
 
         EventJsonBuildInput input;
         input.eventId = "evt-test";
@@ -743,6 +744,7 @@ int main()
         input.payload = result.payload;
         input.parentPid = result.parentPid;
         input.parentProcessName = result.parentProcessName;
+        input.parentProcessPath = result.parentProcessPath;
 
         EventJsonBuilder builder;
         EventJsonBuildResult built = builder.BuildDetection(input);
@@ -809,6 +811,9 @@ int main()
             return 1;
         if (!Expect(fields["parentProcessName"] == "wscript.exe",
                     "event submit path: parentProcessName wscript.exe reaches JSON"))
+            return 1;
+        if (!Expect(fields["parentProcessPath"] == "C:\\Windows\\System32\\wscript.exe",
+                    "event submit path: parentProcessPath reaches JSON"))
             return 1;
     }
 
