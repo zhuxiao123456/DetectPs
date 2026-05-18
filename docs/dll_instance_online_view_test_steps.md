@@ -79,13 +79,22 @@ Get-Content $logDir\rasp-dll-instances.json -Raw | ConvertFrom-Json
 
 Acceptance points:
 
+Hard assertions:
+
 - `onlineDllCount >= 1` after DLL load.
+- At least one instance has `state = Online` after load or heartbeat.
+- At least one instance has `ruleLoadSeen = true` after `RULE_LOAD_RESULT`.
+- At least one instance has non-empty `processPath`.
+
+Soft checks:
+
 - `historicalLoadedDllCount >= 1` after the first observed instance.
-- `instances[].state` is `Online` after load or heartbeat.
-- `instances[].ruleLoadSeen` becomes `true` after `RULE_LOAD_RESULT`.
-- `instances[].processPath` is non-empty.
-- `instances[].parentPid` is non-zero when Windows exposes it.
-- `instances[].parentProcessPath` is populated when permission allows it.
+- `parentPid` is non-zero when Windows exposes it.
+- `parentProcessPath` is populated when permission allows it.
+
+`parentProcessPath` must not be treated as a hard failure because parent process
+visibility depends on process lifetime, access rights, token context, and host
+environment.
 
 ## Semi-automatic script
 

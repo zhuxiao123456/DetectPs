@@ -84,11 +84,13 @@ ControlStatusCollector::ControlStatusCollector(std::string logDir)
                        PIPE_ACCESS_INBOUND,
                        GENERIC_WRITE)
 {
+    InitializeCriticalSection(&m_fileLock);
 }
 
 ControlStatusCollector::~ControlStatusCollector()
 {
     Stop();
+    DeleteCriticalSection(&m_fileLock);
 }
 
 void ControlStatusCollector::Start()
@@ -96,7 +98,6 @@ void ControlStatusCollector::Start()
     if (m_started) {
         return;
     }
-    InitializeCriticalSection(&m_fileLock);
     m_started = true;
     if (!m_statusPipePool.Start()) {
         SentryLog_Error("ControlStatusCollector", "Failed to start one or more control status pipe worker thread(s)");
@@ -110,7 +111,6 @@ void ControlStatusCollector::Stop()
     }
 
     m_statusPipePool.Stop();
-    DeleteCriticalSection(&m_fileLock);
     m_started = false;
 }
 
