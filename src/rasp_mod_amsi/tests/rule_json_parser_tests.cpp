@@ -163,6 +163,8 @@ int main()
         if (!Expect(first.regexChecks.size() == 1 && first.regexChecks[0].id == "ck1",
                     "extension regexChecks filters incomplete checks"))
             return 1;
+        if (!Expect(result.trustProcessPaths.empty(), "missing trust_process stays empty"))
+            return 1;
 
         const auto& second = *result.rules[1];
         if (!Expect(second.id == "rule-2", "second rule id parsed"))
@@ -220,6 +222,24 @@ int main()
             return 1;
         if (!Expect(result.version == "rules-v43" && result.hash.empty(),
                     "missing metadata fields stay empty"))
+            return 1;
+    }
+
+    {
+        auto result = Parse(R"json({
+            "trust_process": ["C:\\Program Files\\CSA\\csaca.exe", "C:/Tools/launcher.exe"],
+            "rules": [{"id":"trust-rule","sensor":"AmsiProvider"}]
+        })json");
+        if (!Expect(result.ok, "top-level trust_process bundle parses"))
+            return 1;
+        if (!Expect(result.trustProcessPaths.size() == 2,
+                    "top-level trust_process array is preserved"))
+            return 1;
+        if (!Expect(result.trustProcessPaths[0] == "C:\\Program Files\\CSA\\csaca.exe",
+                    "trust_process first path parsed"))
+            return 1;
+        if (!Expect(result.trustProcessPaths[1] == "C:/Tools/launcher.exe",
+                    "trust_process second path parsed"))
             return 1;
     }
 

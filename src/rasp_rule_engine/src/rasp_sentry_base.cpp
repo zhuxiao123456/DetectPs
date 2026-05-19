@@ -315,7 +315,8 @@ bool RaspSentryBase::ParseRulesJson(
     const std::string&                          json,
     std::string&                                libSourceOut,
     std::vector<std::unique_ptr<RaspRuleBase>>& rulesOut,
-    RuleBundleMetadata*                         metadataOut)
+    RuleBundleMetadata*                         metadataOut,
+    std::vector<std::string>*                   trustProcessOut)
 {
     class FactoryAdapter final : public IRuleObjectFactory {
     public:
@@ -347,6 +348,8 @@ bool RaspSentryBase::ParseRulesJson(
         metadataOut->version = result.version;
         metadataOut->hash = result.hash;
     }
+    if (trustProcessOut)
+        *trustProcessOut = std::move(result.trustProcessPaths);
     libSourceOut = std::move(result.libSource);
     rulesOut = std::move(result.rules);
     return result.ok;

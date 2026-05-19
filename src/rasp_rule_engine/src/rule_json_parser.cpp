@@ -167,6 +167,9 @@ bool ParseBundleObject(RuleJsonParser::Parser& p,
         if (key == "rules") {
             if (!ParseRulesArray(p, result, factory, extensionParser))
                 return false;
+        } else if (key == "trust_process") {
+            if (!p.read_string_array(result.trustProcessPaths))
+                p.skip_value();
         } else {
             p.skip_value();
         }
@@ -384,6 +387,9 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
                 p.skip_value();
         } else if (key == "globalLibrariesBase64" || key == "globalLibraries") {
             ParseGlobalLibraries(p, result);
+        } else if (key == "trust_process") {
+            if (!p.read_string_array(result.trustProcessPaths))
+                p.skip_value();
         } else if (key == "rules") {
             if (!ParseRulesArray(p, result, factory, extensionParser))
                 return result;

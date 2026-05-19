@@ -4,6 +4,9 @@
   "globalLibraries": [
     "rules/lib/rasp_lib.lua"
   ],
+  "trust_process": [
+    "c:\\csaca.exe"
+  ],
   "rules": [
     {
       "id": "AMSI-P01",

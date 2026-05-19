@@ -100,6 +100,7 @@ target_link_libraries(engine_runtime_tests PRIVATE
 
 if(MSVC)
     target_compile_options(engine_runtime_tests PRIVATE /W3 /WX-)
+    target_link_options(engine_runtime_tests PRIVATE /STACK:8388608)
 endif()
 
 add_executable(scan_budget_tests

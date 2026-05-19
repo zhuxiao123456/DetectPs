@@ -119,7 +119,8 @@ protected:
         const std::string&                           json,
         std::string&                                 libSourceOut,
         std::vector<std::unique_ptr<RaspRuleBase>>&  rulesOut,
-        RuleBundleMetadata*                          metadataOut = nullptr);
+        RuleBundleMetadata*                          metadataOut = nullptr,
+        std::vector<std::string>*                    trustProcessOut = nullptr);
 
     // Virtual factory — override to return module-specific derived type.
     // Default returns new RaspRuleBase().

@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdarg>
+#include <cstring>
 #include <string_view>
 #define DEFAULT_CONFIDENCE 70
 
@@ -83,6 +84,145 @@ bool ContainsAnyIgnoreCaseNormalized(std::string_view normalizedHaystack,
             return true;
     }
     return false;
+}
+
+std::string TrimAscii(std::string_view value)
+{
+    size_t begin = 0;
+    size_t end = value.size();
+    while (begin < end && std::isspace(static_cast<unsigned char>(value[begin])))
+        ++begin;
+    while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1])))
+        --end;
+    return std::string(value.substr(begin, end - begin));
+}
+
+std::string NormalizeTrustedProcessPath(std::string_view value)
+{
+    std::string normalized = TrimAscii(value);
+    if (normalized.size() >= 2 && normalized.front() == '"' && normalized.back() == '"')
+        normalized = normalized.substr(1, normalized.size() - 2);
+    std::replace(normalized.begin(), normalized.end(), '/', '\\');
+    while (normalized.size() > 3 && normalized.back() == '\\')
+        normalized.pop_back();
+    return normalized;
+}
+
+bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs)
+{
+    return lhs.size() == rhs.size() &&
+           std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](char a, char b) {
+               return LowerAscii(a) == LowerAscii(b);
+           });
+}
+
+bool EndsWithExeIgnoreCase(std::string_view value)
+{
+    constexpr std::string_view suffix = ".exe";
+    return value.size() >= suffix.size() &&
+           EqualsIgnoreCase(value.substr(value.size() - suffix.size()), suffix);
+}
+
+bool IsAbsoluteWindowsExePath(std::string_view value)
+{
+    return value.size() >= 7 &&
+           std::isalpha(static_cast<unsigned char>(value[0])) &&
+           value[1] == ':' &&
+           value[2] == '\\' &&
+           EndsWithExeIgnoreCase(value);
+}
+
+std::vector<std::string> NormalizeTrustProcessPaths(const std::vector<std::string>& paths)
+{
+    std::vector<std::string> normalized;
+    normalized.reserve(paths.size());
+    for (const std::string& raw : paths) {
+        const std::string path = NormalizeTrustedProcessPath(raw);
+        if (!IsAbsoluteWindowsExePath(path))
+            continue;
+        normalized.push_back(path);
+    }
+    return normalized;
+}
+
+bool TrustProcessMatches(const std::vector<std::string>& trustedPaths,
+                         const ScanContext* scanContext,
+                         std::string* matchedTrustProcess)
+{
+    if (trustedPaths.empty() || !scanContext || !scanContext->process)
+        return false;
+    const ProcessContextSnapshot& process = *scanContext->process;
+    // The current AMSI detection surface is PowerShell-only, so trust_process
+    // is scoped by the scan entry point and only needs to match the parent path.
+    if (process.parentProcessPath.empty())
+        return false;
+
+    const std::string parentPath = NormalizeTrustedProcessPath(process.parentProcessPath);
+    if (!IsAbsoluteWindowsExePath(parentPath))
+        return false;
+
+    for (const std::string& trustedPath : trustedPaths) {
+        if (EqualsIgnoreCase(parentPath, trustedPath)) {
+            if (matchedTrustProcess)
+                *matchedTrustProcess = trustedPath;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string JsonEscapeLocal(const std::string& value)
+{
+    std::string out;
+    out.reserve(value.size() + 8);
+    for (unsigned char ch : value) {
+        switch (ch) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\b': out += "\\b"; break;
+            case '\f': out += "\\f"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (ch < 0x20) {
+                    char buf[7];
+                    snprintf(buf, sizeof(buf), "\\u%04x", ch);
+                    out += buf;
+                } else {
+                    out += static_cast<char>(ch);
+                }
+                break;
+        }
+    }
+    return out;
+}
+
+void SendTrustProcessSkipStatus(const ProcessContextSnapshot& process,
+                                const std::string& matchedTrustProcess)
+{
+    char json[2048];
+    _snprintf_s(json, sizeof(json), _TRUNCATE,
+                "{\"msgType\":\"TRUST_PROCESS_SKIP\","
+                "\"module\":\"rasp_mod_amsi\","
+                "\"processPath\":\"%s\","
+                "\"parentProcessPath\":\"%s\","
+                "\"matchedTrustProcess\":\"%s\","
+                "\"reason\":\"trusted_parent_process\"}",
+                JsonEscapeLocal(process.currentProcessPath).c_str(),
+                JsonEscapeLocal(process.parentProcessPath).c_str(),
+                JsonEscapeLocal(matchedTrustProcess).c_str());
+
+    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_control_status",
+                               GENERIC_WRITE, 0, nullptr,
+                               OPEN_EXISTING, 0, nullptr);
+    if (hPipe == INVALID_HANDLE_VALUE)
+        return;
+
+    DWORD written = 0;
+    const DWORD expected = static_cast<DWORD>(strlen(json));
+    WriteFile(hPipe, json, expected, &written, nullptr);
+    CloseHandle(hPipe);
 }
 
 bool ParentPathGatePasses(const AmsiRaspRuleConfig& rule, const ScanContext* scanContext)
@@ -216,12 +356,14 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
         std::string &effectiveLib) {
     std::vector <std::unique_ptr<RaspRuleBase>> rawRules;
     std::string lib;
-    if (!ParseRulesJson(json, lib, rawRules) || rawRules.empty()) {
+    std::vector<std::string> rawTrustProcessPaths;
+    if (!ParseRulesJson(json, lib, rawRules, nullptr, &rawTrustProcessPaths) || rawRules.empty()) {
         Log("[RaspAmsi] BuildNextSnapshot: no rules parsed");
         return {};
     }
 
     effectiveLib = lib.empty() ? libSource : lib;
+    std::vector<std::string> trustProcessPaths = NormalizeTrustProcessPaths(rawTrustProcessPaths);
     std::vector <AmsiRaspRuleConfig> configs;
     configs.reserve(rawRules.size());
     for (auto &ptr: rawRules) {
@@ -234,7 +376,8 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     auto luaEngine = std::make_shared<RaspLuaEngine>();
     luaEngine->SetLogFn(RaspLuaLog);
     PrecompileAll(configs, effectiveLib, *luaEngine);
-    return std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(configs), std::move(luaEngine)});
+    return std::make_shared<RuleSnapshot>(
+        RuleSnapshot{std::move(configs), std::move(trustProcessPaths), std::move(luaEngine)});
 }
 
 static const char* ResolveTimeoutDecision(const std::vector<RaspEvalResult>& results,
@@ -440,7 +583,8 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
 // 原子交换规则快照
 void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
     std::shared_ptr<const RuleSnapshot> next =
-            std::make_shared<RuleSnapshot>(RuleSnapshot{std::move(rules), std::make_shared<RaspLuaEngine>()});
+            std::make_shared<RuleSnapshot>(
+                RuleSnapshot{std::move(rules), {}, std::make_shared<RaspLuaEngine>()});
     std::atomic_store(&m_snapshot, next);
 }
 
@@ -552,6 +696,15 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             contentName = f.value;
         else if (f.name == "appName")
             appName = f.value;
+    }
+
+    std::string matchedTrustProcess;
+    if (TrustProcessMatches(snap->trustProcessPaths, scanContext, &matchedTrustProcess)) {
+        SendTrustProcessSkipStatus(*scanContext->process, matchedTrustProcess);
+        Log("[RaspAmsi] trust_process skip: parentProcessPath=%s matched=%s",
+            scanContext->process->parentProcessPath.c_str(),
+            matchedTrustProcess.c_str());
+        return results;
     }
     // 遍历每个规则
     for (const auto &rule: snap->rules) {

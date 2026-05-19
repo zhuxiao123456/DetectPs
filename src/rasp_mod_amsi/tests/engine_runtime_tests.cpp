@@ -214,6 +214,17 @@ std::string OneRegexRuleJson(const char* id, const char* pattern)
            pattern + "\"]}}]}";
 }
 
+std::string TrustedProcessRegexRuleJson(const char* trustPath)
+{
+    return std::string("{\"trust_process\":[\"") + trustPath +
+           "\"],\"rules\":["
+           "{\"id\":\"trust_first\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+           "\"description\":\"trust_first\",\"config\":{\"regexPatterns\":[\"amsiinitfailed\"]}},"
+           "{\"id\":\"trust_second\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+           "\"description\":\"trust_second\",\"config\":{\"regexPatterns\":[\"amsiinitfailed\"]}}"
+           "]}";
+}
+
 std::string ParentPathGatedRegexRuleJson(const char* id,
                                          const char* pattern,
                                          const char* allowContains,
@@ -706,6 +717,101 @@ int main()
                                                  scanContext);
         if (!Expect(!matched.ruleMatched,
                     "parentPathAllowContains skips current rule even when regex matches"))
+            return 1;
+    }
+
+    {
+        auto engine = std::make_unique<TestAmsiRuleEngine>();
+        if (!Expect(engine->ParseAndSwap(TrustedProcessRegexRuleJson("C:\\\\csaca.exe"), ""),
+                    "trust_process rule snapshot publishes"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.currentProcessName = "powershell.exe";
+        process.currentProcessPath = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+        process.parentPid = 4321;
+        process.parentProcessName = "csaca.exe";
+        process.parentProcessPath = "c:/csaca.exe";
+        process.status = ProcessCaptureStatus::Success;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine->Evaluate(L"demo.ps1",
+                                                  L"powershell.exe",
+                                                  "amsiinitfailed",
+                                                  14,
+                                                  scanContext);
+        if (!Expect(!matched.ruleMatched,
+                    "trust_process exact normalized parent path skips all rules"))
+            return 1;
+    }
+
+    {
+        auto engine = std::make_unique<TestAmsiRuleEngine>();
+        if (!Expect(engine->ParseAndSwap(TrustedProcessRegexRuleJson("C:\\\\csaca.exe"), ""),
+                    "trust_process rule snapshot publishes for bypass tests"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.currentProcessName = "powershell.exe";
+        process.currentProcessPath = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+        process.parentPid = 4321;
+        process.parentProcessName = "csaca.exe";
+        process.parentProcessPath = "C:\\malware\\csaca.exe";
+        process.status = ProcessCaptureStatus::Success;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine->Evaluate(L"demo.ps1",
+                                                  L"powershell.exe",
+                                                  "amsiinitfailed",
+                                                  14,
+                                                  scanContext);
+        if (!Expect(matched.ruleMatched,
+                    "trust_process rejects same filename in different directory"))
+            return 1;
+
+        process.parentProcessPath = "C:\\csaca.exe.old";
+        matched = engine->Evaluate(L"demo.ps1",
+                                   L"powershell.exe",
+                                   "amsiinitfailed",
+                                   14,
+                                   scanContext);
+        if (!Expect(matched.ruleMatched,
+                    "trust_process rejects suffix bypass"))
+            return 1;
+    }
+
+    {
+        auto engine = std::make_unique<TestAmsiRuleEngine>();
+        if (!Expect(engine->ParseAndSwap(TrustedProcessRegexRuleJson("C:\\\\csaca.exe"), ""),
+                    "trust_process rule snapshot publishes without host gate"))
+            return 1;
+
+        ProcessContextSnapshot process;
+        process.valid = true;
+        process.parentResolved = true;
+        process.parentPid = 4321;
+        process.parentProcessName = "csaca.exe";
+        process.parentProcessPath = "C:\\csaca.exe";
+        process.status = ProcessCaptureStatus::Success;
+        process.retryState = ProcessRetryState::None;
+
+        ScanContext scanContext;
+        scanContext.process = &process;
+        AmsiEvalResult matched = engine->Evaluate(L"demo.vbs",
+                                                  L"WScript",
+                                                  "amsiinitfailed",
+                                                  14,
+                                                  scanContext);
+        if (!Expect(!matched.ruleMatched,
+                    "trust_process relies on parent path because scan entry is PowerShell-only"))
             return 1;
     }
 

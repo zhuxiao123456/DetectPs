@@ -73,6 +73,7 @@ protected:
 protected:
     struct RuleSnapshot {
         std::vector<AmsiRaspRuleConfig> rules;
+        std::vector<std::string> trustProcessPaths;
         std::shared_ptr<RaspLuaEngine> luaEngine;
     };
 

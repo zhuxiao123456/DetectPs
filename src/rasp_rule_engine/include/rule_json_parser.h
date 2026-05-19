@@ -13,6 +13,7 @@ struct RuleParseResult {
     std::string libSource;
     std::string version;
     std::string hash;
+    std::vector<std::string> trustProcessPaths;
     std::string error;
 };
 
