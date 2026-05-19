@@ -149,8 +149,12 @@ ScanGuard EngineRuntime::TryEnterScan()
     bool rejected = false;
     EngineState rejectedState = EngineState::Uninitialized;
     long active = 0;
+    const bool pausedAtEntry = m_detectionPaused.load(std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(m_mutex);
-    if ((m_state != EngineState::Ready && m_state != EngineState::Reloading) || !m_engine) {
+    // Pause/resume is an entry gate: scans that already hold a guard continue;
+    // the next scan entrance observes the pause bit and returns NoMatch upstream.
+    if (pausedAtEntry ||
+        (m_state != EngineState::Ready && m_state != EngineState::Reloading) || !m_engine) {
         rejected = true;
         rejectedState = m_state;
         active = m_activeScans.load();
@@ -175,6 +179,23 @@ ScanGuard EngineRuntime::TryEnterScan()
     }
     ++m_activeScans;
     return ScanGuard(this, m_engine.get());
+}
+
+void EngineRuntime::PauseDetection()
+{
+    m_detectionPaused.store(true, std::memory_order_relaxed);
+    EmitTelemetry("detection_paused", "pause_detection_signal");
+}
+
+void EngineRuntime::ResumeDetection()
+{
+    m_detectionPaused.store(false, std::memory_order_relaxed);
+    EmitTelemetry("detection_resumed", "resume_detection_signal");
+}
+
+bool EngineRuntime::IsDetectionPaused() const
+{
+    return m_detectionPaused.load(std::memory_order_relaxed);
 }
 
 bool EngineRuntime::CanAttemptReload() const

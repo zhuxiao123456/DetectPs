@@ -99,6 +99,9 @@ public:
     bool WaitForActiveScansToDrain(DWORD timeoutMs);
     void EnterInert(const char* reason);
     void EnterFaulted(const char* reason);
+    void PauseDetection();
+    void ResumeDetection();
+    bool IsDetectionPaused() const;
 
     void EmitTelemetry(const char* event, const char* detail = nullptr) const;
     bool TryBeginReload();
@@ -124,6 +127,7 @@ private:
     std::unique_ptr<AmsiRuleEngine> m_engine;
     EngineFactory m_factory;
     EngineInitializer m_initializer;
+    std::atomic<bool> m_detectionPaused{false};
     std::atomic<DWORD> m_lastScanRejectTelemetryTick{0};
     std::atomic<uint64_t> m_suppressedScanRejectTelemetry{0};
 };

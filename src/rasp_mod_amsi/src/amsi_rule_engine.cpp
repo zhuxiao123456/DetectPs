@@ -488,6 +488,18 @@ void AmsiRuleEngine::OnUnloadSignal() {
         Log("[RaspAmsi] OnUnloadSignal: failed to create unload thread - inert mode remains active");
 }
 
+void AmsiRuleEngine::OnPauseDetectionSignal()
+{
+    Log("[RaspAmsi] OnPauseDetectionSignal: detection paused");
+    GetAmsiEngineRuntime().PauseDetection();
+}
+
+void AmsiRuleEngine::OnResumeDetectionSignal()
+{
+    Log("[RaspAmsi] OnResumeDetectionSignal: detection resumed");
+    GetAmsiEngineRuntime().ResumeDetection();
+}
+
 // =========================================================================
 // Evaluate (protected, implements RaspSentryBase pure virtual)
 // 面向内部的 Evaluate (Protected 核心层)

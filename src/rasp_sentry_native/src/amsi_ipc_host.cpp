@@ -234,3 +234,25 @@ amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastUnload(int maxListeners,
                                  maxListeners,
                                  timeoutMs);
 }
+
+amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastPauseDetection(int maxListeners,
+                                                                   std::uint32_t timeoutMs)
+{
+    const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
+                                                          amsi_ipc::kConfigPipeName);
+    const amsi_ipc::AmsiConfigBroadcaster broadcaster(configPipeName);
+    return broadcaster.Broadcast(amsi_ipc::AmsiControlSignal::PauseDetection,
+                                 maxListeners,
+                                 timeoutMs);
+}
+
+amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastResumeDetection(int maxListeners,
+                                                                    std::uint32_t timeoutMs)
+{
+    const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
+                                                          amsi_ipc::kConfigPipeName);
+    const amsi_ipc::AmsiConfigBroadcaster broadcaster(configPipeName);
+    return broadcaster.Broadcast(amsi_ipc::AmsiControlSignal::ResumeDetection,
+                                 maxListeners,
+                                 timeoutMs);
+}

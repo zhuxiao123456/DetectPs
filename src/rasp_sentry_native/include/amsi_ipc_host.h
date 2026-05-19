@@ -63,6 +63,10 @@ public:
                                                   std::uint32_t timeoutMs = 500);
     amsi_ipc::AmsiBroadcastResult BroadcastUnload(int maxListeners = 32,
                                                   std::uint32_t timeoutMs = 500);
+    amsi_ipc::AmsiBroadcastResult BroadcastPauseDetection(int maxListeners = 32,
+                                                          std::uint32_t timeoutMs = 500);
+    amsi_ipc::AmsiBroadcastResult BroadcastResumeDetection(int maxListeners = 32,
+                                                           std::uint32_t timeoutMs = 500);
 
 private:
     enum class StartStage {

@@ -676,6 +676,14 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
             self->Log("[%s] ConfigPipeThread: unload signal - calling OnUnloadSignal()",
                       self->ModuleName());
             self->OnUnloadSignal();
+        } else if (signal == 0x03) {
+            self->Log("[%s] ConfigPipeThread: pause detection signal - disabling scan entry",
+                      self->ModuleName());
+            self->OnPauseDetectionSignal();
+        } else if (signal == 0x04) {
+            self->Log("[%s] ConfigPipeThread: resume detection signal - enabling scan entry",
+                      self->ModuleName());
+            self->OnResumeDetectionSignal();
         }
     }
     LocalFree(configSd);

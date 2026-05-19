@@ -8,6 +8,8 @@ namespace amsi_ipc {
 enum class AmsiControlSignal : std::uint8_t {
     Reload = 0x01,
     Unload = 0x02,
+    PauseDetection = 0x03,
+    ResumeDetection = 0x04,
 };
 
 struct AmsiBroadcastResult {

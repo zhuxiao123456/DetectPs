@@ -293,6 +293,70 @@ int main()
     {
         auto runtime = MakeRuntime();
         runtime->EnsureInitialized();
+        runtime->PauseDetection();
+        if (!Expect(runtime->IsDetectionPaused(),
+                    "runtime records detection pause state"))
+            return 1;
+        auto rejected = runtime->TryEnterScan();
+        if (!Expect(!rejected.IsActive(),
+                    "paused runtime rejects new scans"))
+            return 1;
+        runtime->ResumeDetection();
+        if (!Expect(!runtime->IsDetectionPaused(),
+                    "runtime clears detection pause state"))
+            return 1;
+        auto resumed = runtime->TryEnterScan();
+        if (!Expect(resumed.IsActive(),
+                    "resumed runtime accepts scans"))
+            return 1;
+    }
+
+    {
+        auto runtime = MakeRuntime();
+        runtime->EnsureInitialized();
+        auto inFlight = runtime->TryEnterScan();
+        if (!Expect(inFlight.IsActive(),
+                    "scan enters before pause"))
+            return 1;
+        runtime->PauseDetection();
+        if (!Expect(runtime->ActiveScanCount() == 1,
+                    "pause does not interrupt in-flight scan"))
+            return 1;
+        auto rejected = runtime->TryEnterScan();
+        if (!Expect(!rejected.IsActive(),
+                    "pause applies to the next scan entry"))
+            return 1;
+        inFlight = {};
+        if (!Expect(runtime->ActiveScanCount() == 0,
+                    "in-flight scan can finish after pause"))
+            return 1;
+        runtime->ResumeDetection();
+        auto resumed = runtime->TryEnterScan();
+        if (!Expect(resumed.IsActive(),
+                    "resume accepts new scan after paused in-flight scan exits"))
+            return 1;
+    }
+
+    {
+        auto runtime = MakeRuntime();
+        runtime->EnsureInitialized();
+        runtime->PauseDetection();
+        runtime->PauseDetection();
+        auto rejected = runtime->TryEnterScan();
+        if (!Expect(!rejected.IsActive(),
+                    "repeated pause remains paused"))
+            return 1;
+        runtime->ResumeDetection();
+        runtime->ResumeDetection();
+        auto resumed = runtime->TryEnterScan();
+        if (!Expect(resumed.IsActive(),
+                    "repeated resume remains enabled"))
+            return 1;
+    }
+
+    {
+        auto runtime = MakeRuntime();
+        runtime->EnsureInitialized();
         auto guard = runtime->TryEnterScan();
         auto start = std::chrono::steady_clock::now();
         bool drained = runtime->BeginShutdown("test_shutdown", 25);
@@ -347,6 +411,24 @@ int main()
         reload.Complete(true, "published");
         if (!Expect(runtime->GetState() == EngineState::Ready,
                     "successful reload returns ready"))
+            return 1;
+    }
+
+    {
+        auto runtime = MakeRuntime();
+        runtime->EnsureInitialized();
+        runtime->PauseDetection();
+        auto reload = runtime->TryEnterReload("reload_while_paused");
+        if (!Expect(reload.IsActive(),
+                    "paused runtime can still reload rules"))
+            return 1;
+        reload.Complete(true, "published");
+        if (!Expect(runtime->IsDetectionPaused(),
+                    "reload does not clear pause state"))
+            return 1;
+        auto rejected = runtime->TryEnterScan();
+        if (!Expect(!rejected.IsActive(),
+                    "scan remains paused after reload"))
             return 1;
     }
 

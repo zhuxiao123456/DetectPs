@@ -172,6 +172,11 @@ protected:
     // the unload signal; only AMSI overrides this).
     virtual void OnUnloadSignal() {}
 
+    // Called by ConfigPipeThread on 0x03/0x04. Modules without a scan entry
+    // gate keep the default no-op behavior.
+    virtual void OnPauseDetectionSignal() {}
+    virtual void OnResumeDetectionSignal() {}
+
     virtual const char* ModuleName()      const = 0; // e.g. "rasp_mod_iis7"
     virtual const char* LogEventPattern() const = 0; // e.g. "iis7-log"
     virtual size_t ActiveRuleCountForStatus() const { return 0; }

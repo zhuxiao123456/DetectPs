@@ -63,6 +63,8 @@ protected:
                       const std::string& libSource) override;
     void OnReloadSignal() override;
     void OnUnloadSignal() override;
+    void OnPauseDetectionSignal() override;
+    void OnResumeDetectionSignal() override;
 
     const char* ModuleName()      const override { return "rasp_mod_amsi"; }
     const char* LogEventPattern() const override { return "amsi-log"; }

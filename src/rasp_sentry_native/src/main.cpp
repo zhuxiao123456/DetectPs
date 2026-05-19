@@ -3,8 +3,15 @@
 #endif
 #include <windows.h>
 
+#include <algorithm>
+#include <atomic>
+#include <cctype>
 #include <cstdio>
+#include <functional>
+#include <iostream>
+#include <memory>
 #include <string>
+#include <thread>
 
 #include "amsi_ipc_host.h"
 #include "sentry_log.h"
@@ -35,6 +42,84 @@ static std::string WideToUtf8(const wchar_t* ws)
     if (!out.empty() && out.back() == '\0')
         out.pop_back();
     return out;
+}
+
+static std::string NormalizeCommand(std::string command)
+{
+    command.erase(std::remove_if(command.begin(),
+                                 command.end(),
+                                 [](unsigned char ch) { return ch == '\r' || ch == '\n'; }),
+                  command.end());
+    std::transform(command.begin(),
+                   command.end(),
+                   command.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return command;
+}
+
+static void PrintBroadcastResult(const char* action,
+                                 const amsi_ipc::AmsiBroadcastResult& result)
+{
+    std::printf("%s: reached=%d lastError=%lu\n",
+                action,
+                result.reached,
+                static_cast<unsigned long>(result.lastError));
+}
+
+static void RunCommandLoop(std::shared_ptr<AmsiIpcHost> host,
+                           std::atomic<bool>& lastRequestedPolicyPaused,
+                           std::atomic<bool>& keepRunning)
+{
+    std::string command;
+    while (keepRunning.load(std::memory_order_relaxed) &&
+           std::cout << "rasp_sentry> " &&
+           std::getline(std::cin, command))
+    {
+        command = NormalizeCommand(command);
+        if (command.empty()) {
+            continue;
+        }
+        if (command == "quit" || command == "exit") {
+            if (g_stopEvent) {
+                SetEvent(g_stopEvent);
+            }
+            break;
+        }
+        if (command == "status") {
+            std::printf("lastRequestedPolicyPaused: %s\n",
+                        lastRequestedPolicyPaused.load(std::memory_order_relaxed) ? "yes" : "no");
+            std::printf("note: host-side command record only; not per-DLL actual state\n");
+            continue;
+        }
+        if (command == "reload") {
+            host->InvalidateRules();
+            const auto result = host->BroadcastReload();
+            PrintBroadcastResult("reload", result);
+            continue;
+        }
+        if (command == "unload") {
+            const auto result = host->BroadcastUnload();
+            PrintBroadcastResult("unload", result);
+            continue;
+        }
+        if (command == "pause" || command == "policy-off" || command == "disable-detection") {
+            const auto result = host->BroadcastPauseDetection();
+            lastRequestedPolicyPaused.store(true, std::memory_order_relaxed);
+            PrintBroadcastResult("policy-off", result);
+            SentryLog_Info("Program", "policy-off broadcast reached=%d lastError=%lu",
+                           result.reached, static_cast<unsigned long>(result.lastError));
+            continue;
+        }
+        if (command == "resume" || command == "policy-on" || command == "enable-detection") {
+            const auto result = host->BroadcastResumeDetection();
+            lastRequestedPolicyPaused.store(false, std::memory_order_relaxed);
+            PrintBroadcastResult("policy-on", result);
+            SentryLog_Info("Program", "policy-on broadcast reached=%d lastError=%lu",
+                           result.reached, static_cast<unsigned long>(result.lastError));
+            continue;
+        }
+        std::printf("unknown command: %s\n", command.c_str());
+    }
 }
 
 int wmain(int argc, wchar_t** argv)
@@ -74,19 +159,36 @@ int wmain(int argc, wchar_t** argv)
     }
     SetConsoleCtrlHandler(CtrlHandler, TRUE);
 
-    AmsiIpcHost host(AmsiIpcHostConfig{logDir, rulesPath, stagingDir});
-    if (!host.Start()) {
+    auto host = std::make_shared<AmsiIpcHost>(AmsiIpcHostConfig{logDir, rulesPath, stagingDir});
+    if (!host->Start()) {
         SentryLog_Error("Program", "failed to start AMSI IPC host");
         CloseHandle(g_stopEvent);
         g_stopEvent = nullptr;
         return 1;
     }
 
+    std::atomic<bool> lastRequestedPolicyPaused{false};
+    std::atomic<bool> keepCommandLoopRunning{true};
+    std::thread commandThread(RunCommandLoop,
+                              host,
+                              std::ref(lastRequestedPolicyPaused),
+                              std::ref(keepCommandLoopRunning));
+
     SentryLog_Info("Program", "rasp_sentry_native running. Press Ctrl+C to stop.");
+    std::printf("rasp_sentry_native running. Commands: status, reload, unload, policy-off, policy-on, quit\n");
     WaitForSingleObject(g_stopEvent, INFINITE);
 
+    keepCommandLoopRunning.store(false, std::memory_order_relaxed);
+    if (commandThread.joinable()) {
+        if (GetFileType(GetStdHandle(STD_INPUT_HANDLE)) == FILE_TYPE_CHAR) {
+            commandThread.detach();
+        } else {
+            commandThread.join();
+        }
+    }
+
     SentryLog_Info("Program", "rasp_sentry_native stopping...");
-    host.Stop();
+    host->Stop();
 
     SentryLog_Info("Program", "rasp_sentry_native stopped.");
     CloseHandle(g_stopEvent);
