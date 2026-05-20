@@ -42,6 +42,15 @@ set(HOSTGUARD_IPC_SOURCES
     "${AMSI_IPC_HOST_DIR}/src/amsi_control_status_channel.cpp"
 )
 
+add_library(hostguard_amsi_ipc_adapter STATIC
+    src/hostguard_amsi_ipc_adapter.cpp
+)
+
+target_include_directories(hostguard_amsi_ipc_adapter PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${AMSI_IPC_HOST_DIR}/include"
+)
+
 add_executable(hostguard_demo
     src/main.cpp
     ${HOSTGUARD_DEMO_SOURCES}
@@ -61,12 +70,16 @@ add_executable(hostguard_demo_options_tests
     ${HOSTGUARD_IPC_SOURCES}
 )
 
+add_executable(hostguard_amsi_ipc_adapter_tests
+    tests/hostguard_amsi_ipc_adapter_tests.cpp
+)
+
 add_executable(hostguard_demo_pipe_client
     src/hostguard_demo_pipe_client.cpp
     src/hostguard_pipe_client.cpp
 )
 
-foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_tests hostguard_demo_pipe_client)
+foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_tests hostguard_amsi_ipc_adapter_tests hostguard_demo_pipe_client)
     target_include_directories(${target} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${RASP_SENTRY_NATIVE_DIR}/include"
@@ -97,7 +110,15 @@ foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_
     endif()
 endforeach()
 
+foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_tests hostguard_amsi_ipc_adapter_tests)
+    target_link_libraries(${target} PRIVATE hostguard_amsi_ipc_adapter)
+endforeach()
+
 if(MSVC)
+    target_compile_options(hostguard_amsi_ipc_adapter PRIVATE /W3 /WX- /MP)
+    set_property(TARGET hostguard_amsi_ipc_adapter PROPERTY
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
     target_compile_options(lua54_static_hostguard_demo PRIVATE /W0)
     set_property(TARGET lua54_static_hostguard_demo PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
