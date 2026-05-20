@@ -231,6 +231,36 @@ bool HostGuardDemoApp::Reload()
     return true;
 }
 
+bool HostGuardDemoApp::PauseDetection()
+{
+    if (!amsiIpcModule_) {
+        startError_ = "AMSI IPC module is not enabled";
+        return false;
+    }
+
+    std::string error;
+    if (!amsiIpcModule_->ApplyPolicy(false, "hostguard-demo-policy-disabled", 1000, error)) {
+        startError_ = "HostGuardAmsiIpcModule PauseDetection failed: " + error;
+        return false;
+    }
+    return true;
+}
+
+bool HostGuardDemoApp::ResumeDetection()
+{
+    if (!amsiIpcModule_) {
+        startError_ = "AMSI IPC module is not enabled";
+        return false;
+    }
+
+    std::string error;
+    if (!amsiIpcModule_->ApplyPolicy(true, "hostguard-demo-policy-enabled", 1000, error)) {
+        startError_ = "HostGuardAmsiIpcModule ResumeDetection failed: " + error;
+        return false;
+    }
+    return true;
+}
+
 bool HostGuardDemoApp::Unload()
 {
     if (amsiIpcModule_) {

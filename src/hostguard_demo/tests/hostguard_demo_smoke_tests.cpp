@@ -1,4 +1,5 @@
 #include "hostguard_demo_app.h"
+#include "hostguard_command_loop.h"
 #include "hostguard_file_rule_provider.h"
 #include "hostguard_jsonl_control_status_sink.h"
 #include "hostguard_jsonl_event_sink.h"
@@ -14,6 +15,7 @@
 
 #include <cstdio>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <string>
 
@@ -196,9 +198,48 @@ int main()
         ok &= Expect(status.str().find("amsiIpc.moduleStarted: yes") != std::string::npos,
                      "status prints AMSI IPC module started");
         ok &= Expect(adapterApp.Reload(), "mock AMSI IPC module reload rules completes");
+        ok &= Expect(adapterApp.PauseDetection(), "mock AMSI IPC module pause detection completes");
+        std::ostringstream pausedStatus;
+        adapterApp.PrintStatus(pausedStatus);
+        ok &= Expect(pausedStatus.str().find("amsiIpc.policyEnabled: no") != std::string::npos,
+                     "status prints AMSI IPC policy disabled after pause");
+        ok &= Expect(adapterApp.ResumeDetection(), "mock AMSI IPC module resume detection completes");
+        std::ostringstream resumedStatus;
+        adapterApp.PrintStatus(resumedStatus);
+        ok &= Expect(resumedStatus.str().find("amsiIpc.policyEnabled: yes") != std::string::npos,
+                     "status prints AMSI IPC policy enabled after resume");
         ok &= Expect(adapterApp.Unload(), "mock AMSI IPC module unload completes");
         adapterApp.Stop();
         ok &= Expect(!adapterApp.started(), "HostGuardDemoApp stops mock AMSI IPC adapter");
+    }
+
+    {
+        HostGuardDemoOptions commandOptions;
+        commandOptions.rulesPath = rulesPath;
+        commandOptions.logDir = logDir;
+        commandOptions.amsiIpc.enabled = true;
+        commandOptions.amsiIpc.enableRealIpc = false;
+        commandOptions.amsiIpc.useProductionPipes = false;
+
+        HostGuardDemoApp commandApp(commandOptions);
+        ok &= Expect(commandApp.Start(), "HostGuardDemoApp starts for command loop policy test");
+
+        std::istringstream input("pause-detection\nstatus\nresume-detection\nquit\n");
+        std::ostringstream output;
+        auto* oldInput = std::cin.rdbuf(input.rdbuf());
+        auto* oldOutput = std::cout.rdbuf(output.rdbuf());
+        const int commandResult = RunHostGuardCommandLoop(commandApp);
+        std::cin.rdbuf(oldInput);
+        std::cout.rdbuf(oldOutput);
+
+        ok &= Expect(commandResult == 0, "command loop exits successfully");
+        ok &= Expect(output.str().find("pause-detection sent") != std::string::npos,
+                     "command loop accepts pause-detection command");
+        ok &= Expect(output.str().find("amsiIpc.policyEnabled: no") != std::string::npos,
+                     "command loop status shows disabled policy after pause");
+        ok &= Expect(output.str().find("resume-detection sent") != std::string::npos,
+                     "command loop accepts resume-detection command");
+        ok &= Expect(!commandApp.started(), "command loop quit stops app");
     }
 
     HostGuardDemoOptions adapterRealOptions;
@@ -231,6 +272,8 @@ int main()
     ok &= Expect(ReadFileText(hostguard_demo::DailyJsonlPath(logDir, "rasp-control-status")).find(R"({"pipeStatus":2})") != std::string::npos,
                  "adapter status callback reaches JSONL sink");
     ok &= Expect(adapterRealApp.Reload(), "real AMSI IPC module reload rules completes");
+    ok &= Expect(adapterRealApp.PauseDetection(), "real AMSI IPC module pause detection completes");
+    ok &= Expect(adapterRealApp.ResumeDetection(), "real AMSI IPC module resume detection completes");
     ok &= Expect(adapterRealApp.Unload(), "real AMSI IPC module unload completes");
 
     HostGuardDemoOptions conflictingLegacyOptions;

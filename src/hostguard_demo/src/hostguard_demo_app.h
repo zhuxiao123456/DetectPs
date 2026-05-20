@@ -50,6 +50,8 @@ public:
     bool Start();
     void Stop();
     bool Reload();
+    bool PauseDetection();
+    bool ResumeDetection();
     bool Unload();
     void PrintStatus(std::ostream& output) const;
 

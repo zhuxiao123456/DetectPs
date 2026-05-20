@@ -41,6 +41,14 @@ int RunHostGuardCommandLoop(HostGuardDemoApp& app)
             std::cout << (app.Reload() ? "reload sent\n" : "reload failed\n");
             continue;
         }
+        if (command == "pause-detection" || command == "policy-off") {
+            std::cout << (app.PauseDetection() ? "pause-detection sent\n" : "pause-detection failed\n");
+            continue;
+        }
+        if (command == "resume-detection" || command == "policy-on") {
+            std::cout << (app.ResumeDetection() ? "resume-detection sent\n" : "resume-detection failed\n");
+            continue;
+        }
         if (command == "unload") {
             std::cout << (app.Unload() ? "unload sent\n" : "unload failed\n");
             continue;
