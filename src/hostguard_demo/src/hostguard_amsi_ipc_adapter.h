@@ -15,7 +15,11 @@
 #include <thread>
 #include <vector>
 
+class AmsiIpcHost;
+
 namespace hostguard_demo {
+
+class HostGuardAmsiIpcRuntime;
 
 enum class DetectionQueueFullPolicy {
     DropImmediately,
@@ -31,6 +35,7 @@ enum class QueueFullPolicy {
 
 struct HostGuardAmsiIpcConfig {
     bool useProductionPipes = true;
+    bool enableRealIpc = false;
 
     int rulePipeThreads = 8;
     int eventPipeThreads = 4;
@@ -58,6 +63,11 @@ struct HostGuardAmsiIpcConfig {
     bool dropDllDiagnosticLogOnQueueFull = true;
     QueueFullPolicy statusQueueFullPolicy = QueueFullPolicy::WaitThenDrop;
     bool failStartIfPipeSecurityInvalid = true;
+
+    std::wstring rulesPipeName;
+    std::wstring eventsPipeName;
+    std::wstring controlStatusPipeName;
+    std::wstring configPipeName;
 };
 
 enum class HostGuardAmsiMessageKind {
@@ -110,6 +120,7 @@ struct HostGuardAmsiIpcStatus {
     bool started = false;
     bool stopping = false;
     bool productionPipes = false;
+    bool detectionEnabled = true;
 
     std::uint64_t ruleRequests = 0;
     std::uint64_t ruleRequestUnsupported = 0;
@@ -362,6 +373,11 @@ public:
                              std::string policyVersion,
                              std::string& error);
 
+    bool Reload(std::uint32_t timeoutMs, HostGuardAmsiBroadcastResult& result);
+    bool PauseDetection(std::uint32_t timeoutMs, HostGuardAmsiBroadcastResult& result);
+    bool ResumeDetection(std::uint32_t timeoutMs, HostGuardAmsiBroadcastResult& result);
+    bool Unload(std::uint32_t timeoutMs, HostGuardAmsiBroadcastResult& result);
+
     void SetDetectionEventCallback(std::function<void(const HostGuardAmsiEventEnvelope& event)> cb);
     void SetDllDiagnosticLogCallback(std::function<void(const HostGuardAmsiEventEnvelope& log)> cb);
     void SetStatusCallback(std::function<void(const std::string& rawJson)> cb);
@@ -377,6 +393,16 @@ public:
     HostGuardAmsiIpcStatus GetStatus() const;
 
 private:
+    friend class HostGuardAmsiIpcRuntime;
+
+    bool BuildRulesResponseForIpc(const std::string& command,
+                                  amsi_ipc::AmsiRuleResponse& out,
+                                  std::string& error);
+    bool EnqueueRawEventFromIpc(const std::string& rawJson);
+    bool EnqueueStatusFromIpc(const std::string& rawJson);
+    std::string NextBroadcastId();
+    void MarkFaulted(const std::string& error);
+
     void DetectionForwarder();
     void DllDiagnosticLogForwarder();
     void StatusForwarder();
@@ -387,6 +413,11 @@ private:
     HostGuardAmsiIpcStatus status_;
     HostGuardRuleProvider ruleProvider_;
     AdapterDiagRingBuffer diag_;
+    std::unique_ptr<HostGuardAmsiIpcRuntime> runtime_;
+    mutable std::mutex runtimeMutex_;
+    BroadcastTracker broadcastTracker_;
+    std::uint64_t nextBroadcastCounter_ = 1;
+    bool detectionEnabled_ = true;
 
     BoundedQueue<HostGuardAmsiEventEnvelope> detectionQueue_;
     BoundedQueue<HostGuardAmsiEventEnvelope> dllLogQueue_;

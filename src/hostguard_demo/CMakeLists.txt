@@ -48,6 +48,7 @@ add_library(hostguard_amsi_ipc_adapter STATIC
 
 target_include_directories(hostguard_amsi_ipc_adapter PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${RASP_SENTRY_NATIVE_DIR}/include"
     "${AMSI_IPC_HOST_DIR}/include"
 )
 
@@ -72,6 +73,7 @@ add_executable(hostguard_demo_options_tests
 
 add_executable(hostguard_amsi_ipc_adapter_tests
     tests/hostguard_amsi_ipc_adapter_tests.cpp
+    ${HOSTGUARD_IPC_SOURCES}
 )
 
 add_executable(hostguard_demo_pipe_client

@@ -1,5 +1,9 @@
 #include "hostguard_amsi_ipc_adapter.h"
 
+#include "amsi_control_status_sink.h"
+#include "amsi_event_sink.h"
+#include "amsi_ipc_host.h"
+
 #include <chrono>
 #include <sstream>
 #include <utility>
@@ -55,6 +59,123 @@ std::size_t StringBytes(const std::string& value)
 }
 
 } // namespace
+
+class HostGuardAmsiIpcRuntime {
+public:
+    explicit HostGuardAmsiIpcRuntime(HostGuardAmsiIpcAdapter& owner)
+        : owner_(owner)
+    {
+    }
+
+    bool Start(const HostGuardAmsiIpcConfig& config, std::string& error)
+    {
+        AmsiIpcHostConfig hostConfig = AmsiIpcHostConfig::ForHostGuard();
+        hostConfig.rulesPipeName = config.rulesPipeName;
+        hostConfig.eventsPipeName = config.eventsPipeName;
+        hostConfig.controlStatusPipeName = config.controlStatusPipeName;
+        hostConfig.configPipeName = config.configPipeName;
+
+        AmsiIpcHostAdapters adapters;
+        adapters.ruleProvider = &ruleProvider_;
+        adapters.eventSink = &eventSink_;
+        adapters.controlStatusSink = &statusSink_;
+
+        host_.reset(new AmsiIpcHost(hostConfig, adapters));
+        if (!host_->Start()) {
+            error = "failed to start AmsiIpcHost runtime";
+            host_.reset();
+            return false;
+        }
+        return true;
+    }
+
+    void Stop()
+    {
+        if (host_) {
+            host_->Stop();
+            host_.reset();
+        }
+    }
+
+    amsi_ipc::AmsiBroadcastResult BroadcastReload(std::uint32_t timeoutMs)
+    {
+        return host_ ? host_->BroadcastReload(32, timeoutMs) : amsi_ipc::AmsiBroadcastResult{};
+    }
+
+    amsi_ipc::AmsiBroadcastResult BroadcastUnload(std::uint32_t timeoutMs)
+    {
+        return host_ ? host_->BroadcastUnload(32, timeoutMs) : amsi_ipc::AmsiBroadcastResult{};
+    }
+
+    amsi_ipc::AmsiBroadcastResult BroadcastPauseDetection(std::uint32_t timeoutMs)
+    {
+        return host_ ? host_->BroadcastPauseDetection(32, timeoutMs) : amsi_ipc::AmsiBroadcastResult{};
+    }
+
+    amsi_ipc::AmsiBroadcastResult BroadcastResumeDetection(std::uint32_t timeoutMs)
+    {
+        return host_ ? host_->BroadcastResumeDetection(32, timeoutMs) : amsi_ipc::AmsiBroadcastResult{};
+    }
+
+private:
+    class RuntimeRuleProvider final : public amsi_ipc::IAmsiRuleProvider {
+    public:
+        explicit RuntimeRuleProvider(HostGuardAmsiIpcRuntime& runtime)
+            : runtime_(runtime)
+        {
+        }
+
+        bool BuildRulesResponse(const std::string& command,
+                                amsi_ipc::AmsiRuleResponse& out,
+                                std::string& error) override
+        {
+            return runtime_.owner_.BuildRulesResponseForIpc(command, out, error);
+        }
+
+        void InvalidateRuleCache() override {}
+
+    private:
+        HostGuardAmsiIpcRuntime& runtime_;
+    };
+
+    class RuntimeEventSink final : public amsi_ipc::IAmsiEventSink {
+    public:
+        explicit RuntimeEventSink(HostGuardAmsiIpcRuntime& runtime)
+            : runtime_(runtime)
+        {
+        }
+
+        void OnEventLine(const amsi_ipc::AmsiEventLine& event) override
+        {
+            runtime_.owner_.EnqueueRawEventFromIpc(event.payload);
+        }
+
+    private:
+        HostGuardAmsiIpcRuntime& runtime_;
+    };
+
+    class RuntimeStatusSink final : public amsi_ipc::IAmsiControlStatusSink {
+    public:
+        explicit RuntimeStatusSink(HostGuardAmsiIpcRuntime& runtime)
+            : runtime_(runtime)
+        {
+        }
+
+        void OnControlStatusLine(const amsi_ipc::AmsiControlStatusLine& status) override
+        {
+            runtime_.owner_.EnqueueStatusFromIpc(status.payload);
+        }
+
+    private:
+        HostGuardAmsiIpcRuntime& runtime_;
+    };
+
+    HostGuardAmsiIpcAdapter& owner_;
+    RuntimeRuleProvider ruleProvider_{*this};
+    RuntimeEventSink eventSink_{*this};
+    RuntimeStatusSink statusSink_{*this};
+    std::unique_ptr<AmsiIpcHost> host_;
+};
 
 bool HostGuardRuleProvider::UpdateRules(std::string allRulesJson,
                                         std::string amsiRulesJson,
@@ -265,6 +386,7 @@ bool HostGuardAmsiIpcAdapter::Init(const HostGuardAmsiIpcConfig& config, std::st
     status_ = HostGuardAmsiIpcStatus{};
     status_.initialized = true;
     status_.productionPipes = config.useProductionPipes;
+    status_.detectionEnabled = detectionEnabled_;
     status_.lifecycleState = "Initialized";
     diag_.SetCapacity(config.adapterDiagRingCapacity);
     detectionQueue_.Reset(config.detectionEventQueueCapacity, config.detectionEventQueueMaxBytes, EnvelopeBytes);
@@ -275,24 +397,42 @@ bool HostGuardAmsiIpcAdapter::Init(const HostGuardAmsiIpcConfig& config, std::st
 
 bool HostGuardAmsiIpcAdapter::Start(std::string& error)
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (!status_.initialized) {
-        error = "adapter not initialized";
-        return false;
+    bool enableRealIpc = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!status_.initialized) {
+            error = "adapter not initialized";
+            return false;
+        }
+        if (status_.started) {
+            error = "adapter already started";
+            return false;
+        }
+        status_.stopping = false;
+        status_.started = true;
+        status_.lifecycleState = "Running";
+        detectionQueue_.Reset(config_.detectionEventQueueCapacity, config_.detectionEventQueueMaxBytes, EnvelopeBytes);
+        dllLogQueue_.Reset(config_.dllDiagnosticLogQueueCapacity, config_.dllDiagnosticLogQueueMaxBytes, EnvelopeBytes);
+        statusQueue_.Reset(config_.statusQueueCapacity, config_.statusQueueMaxBytes, StringBytes);
+        enableRealIpc = config_.enableRealIpc;
     }
-    if (status_.started) {
-        error = "adapter already started";
-        return false;
-    }
-    status_.stopping = false;
-    status_.started = true;
-    status_.lifecycleState = "Running";
-    detectionQueue_.Reset(config_.detectionEventQueueCapacity, config_.detectionEventQueueMaxBytes, EnvelopeBytes);
-    dllLogQueue_.Reset(config_.dllDiagnosticLogQueueCapacity, config_.dllDiagnosticLogQueueMaxBytes, EnvelopeBytes);
-    statusQueue_.Reset(config_.statusQueueCapacity, config_.statusQueueMaxBytes, StringBytes);
+
     detectionForwarder_ = std::thread(&HostGuardAmsiIpcAdapter::DetectionForwarder, this);
     dllLogForwarder_ = std::thread(&HostGuardAmsiIpcAdapter::DllDiagnosticLogForwarder, this);
     statusForwarder_ = std::thread(&HostGuardAmsiIpcAdapter::StatusForwarder, this);
+
+    if (enableRealIpc) {
+        std::unique_lock<std::mutex> runtimeLock(runtimeMutex_);
+        std::unique_ptr<HostGuardAmsiIpcRuntime> runtime(new HostGuardAmsiIpcRuntime(*this));
+        if (!runtime->Start(config_, error)) {
+            runtimeLock.unlock();
+            Stop();
+            MarkFaulted(error);
+            return false;
+        }
+        runtime_ = std::move(runtime);
+        AddDiag("warn", "adapter", "control pipe security validation is delegated to AmsiIpcHost and not independently verified in Phase 2");
+    }
     return true;
 }
 
@@ -306,6 +446,14 @@ void HostGuardAmsiIpcAdapter::Stop()
         status_.stopping = true;
         status_.started = false;
         status_.lifecycleState = "Stopped";
+    }
+
+    {
+        std::lock_guard<std::mutex> runtimeLock(runtimeMutex_);
+        if (runtime_) {
+            runtime_->Stop();
+            runtime_.reset();
+        }
     }
 
     detectionQueue_.Close();
@@ -341,10 +489,157 @@ bool HostGuardAmsiIpcAdapter::UpdateRules(std::string allRulesJson,
     return true;
 }
 
-bool HostGuardAmsiIpcAdapter::SetDetectionEnabled(bool, std::string policyVersion, std::string&)
+bool HostGuardAmsiIpcAdapter::BuildRulesResponseForIpc(const std::string& command,
+                                                       amsi_ipc::AmsiRuleResponse& out,
+                                                       std::string& error)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ++status_.ruleRequests;
+    }
+
+    const bool ok = ruleProvider_.BuildRulesResponse(command, out, error);
+    if (!ok) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (error == "UNSUPPORTED_COMMAND") {
+            ++status_.ruleRequestUnsupported;
+        }
+    }
+    return ok;
+}
+
+bool HostGuardAmsiIpcAdapter::SetDetectionEnabled(bool enabled, std::string policyVersion, std::string&)
 {
     std::lock_guard<std::mutex> lock(mutex_);
+    detectionEnabled_ = enabled;
+    status_.detectionEnabled = enabled;
     status_.lastPolicyVersion = std::move(policyVersion);
+    return true;
+}
+
+void HostGuardAmsiIpcAdapter::MarkFaulted(const std::string& error)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    status_.started = false;
+    status_.stopping = false;
+    status_.lifecycleState = "Faulted";
+    status_.lastError = error;
+}
+
+std::string HostGuardAmsiIpcAdapter::NextBroadcastId()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return NowString() + "-" + std::to_string(nextBroadcastCounter_++);
+}
+
+namespace {
+
+void FillBroadcastResult(const std::string& broadcastId,
+                         const std::string& command,
+                         const amsi_ipc::AmsiBroadcastResult& native,
+                         HostGuardAmsiBroadcastResult& result)
+{
+    result = HostGuardAmsiBroadcastResult{};
+    result.broadcastId = broadcastId;
+    result.command = command;
+    result.delivered = static_cast<std::uint32_t>(native.reached < 0 ? 0 : native.reached);
+    // Legacy broadcaster only writes a one-byte control signal. Delivery is not an ack.
+    result.acked = 0;
+    result.failed = native.lastError == 0 ? 0 : 1;
+    if (native.lastError != 0) {
+        result.error = "AmsiConfigBroadcaster lastError=" + std::to_string(native.lastError);
+    }
+}
+
+} // namespace
+
+bool HostGuardAmsiIpcAdapter::Reload(std::uint32_t timeoutMs, HostGuardAmsiBroadcastResult& result)
+{
+    const std::string broadcastId = NextBroadcastId();
+    std::string error;
+    if (!broadcastTracker_.BeginBroadcast(broadcastId, "reload", 32, error)) {
+        AddDiag("warn", "adapter", "failed to begin reload broadcast: " + error);
+    }
+
+    std::lock_guard<std::mutex> runtimeLock(runtimeMutex_);
+    if (!runtime_) {
+        result = HostGuardAmsiBroadcastResult{};
+        result.broadcastId = broadcastId;
+        result.command = "reload";
+        result.error = "real IPC runtime is not started";
+        return false;
+    }
+    FillBroadcastResult(broadcastId, "reload", runtime_->BroadcastReload(timeoutMs), result);
+    return true;
+}
+
+bool HostGuardAmsiIpcAdapter::PauseDetection(std::uint32_t timeoutMs, HostGuardAmsiBroadcastResult& result)
+{
+    const std::string broadcastId = NextBroadcastId();
+    std::string error;
+    if (!broadcastTracker_.BeginBroadcast(broadcastId, "pause", 32, error)) {
+        AddDiag("warn", "adapter", "failed to begin pause broadcast: " + error);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        detectionEnabled_ = false;
+        status_.detectionEnabled = false;
+    }
+    std::lock_guard<std::mutex> runtimeLock(runtimeMutex_);
+    if (!runtime_) {
+        result = HostGuardAmsiBroadcastResult{};
+        result.broadcastId = broadcastId;
+        result.command = "pause";
+        result.error = "real IPC runtime is not started";
+        return false;
+    }
+    FillBroadcastResult(broadcastId, "pause", runtime_->BroadcastPauseDetection(timeoutMs), result);
+    return true;
+}
+
+bool HostGuardAmsiIpcAdapter::ResumeDetection(std::uint32_t timeoutMs, HostGuardAmsiBroadcastResult& result)
+{
+    const std::string broadcastId = NextBroadcastId();
+    std::string error;
+    if (!broadcastTracker_.BeginBroadcast(broadcastId, "resume", 32, error)) {
+        AddDiag("warn", "adapter", "failed to begin resume broadcast: " + error);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        detectionEnabled_ = true;
+        status_.detectionEnabled = true;
+    }
+    std::lock_guard<std::mutex> runtimeLock(runtimeMutex_);
+    if (!runtime_) {
+        result = HostGuardAmsiBroadcastResult{};
+        result.broadcastId = broadcastId;
+        result.command = "resume";
+        result.error = "real IPC runtime is not started";
+        return false;
+    }
+    FillBroadcastResult(broadcastId, "resume", runtime_->BroadcastResumeDetection(timeoutMs), result);
+    return true;
+}
+
+bool HostGuardAmsiIpcAdapter::Unload(std::uint32_t timeoutMs, HostGuardAmsiBroadcastResult& result)
+{
+    const std::string broadcastId = NextBroadcastId();
+    std::string error;
+    if (!broadcastTracker_.BeginBroadcast(broadcastId, "unload", 32, error)) {
+        AddDiag("warn", "adapter", "failed to begin unload broadcast: " + error);
+    }
+
+    std::lock_guard<std::mutex> runtimeLock(runtimeMutex_);
+    if (!runtime_) {
+        result = HostGuardAmsiBroadcastResult{};
+        result.broadcastId = broadcastId;
+        result.command = "unload";
+        result.error = "real IPC runtime is not started";
+        return false;
+    }
+    FillBroadcastResult(broadcastId, "unload", runtime_->BroadcastUnload(timeoutMs), result);
     return true;
 }
 
@@ -373,6 +668,11 @@ void HostGuardAmsiIpcAdapter::SetAdapterDiagCallback(std::function<void(const Ho
 }
 
 bool HostGuardAmsiIpcAdapter::InjectRawEventForTest(const std::string& rawJson)
+{
+    return EnqueueRawEventFromIpc(rawJson);
+}
+
+bool HostGuardAmsiIpcAdapter::EnqueueRawEventFromIpc(const std::string& rawJson)
 {
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -427,6 +727,12 @@ bool HostGuardAmsiIpcAdapter::InjectRawEventForTest(const std::string& rawJson)
         return pushed || config_.dropDllDiagnosticLogOnQueueFull;
     }
     case HostGuardAmsiMessageKind::DrainAck:
+        if (!envelope.broadcastId.empty()) {
+            HostGuardAmsiAckInfo ack;
+            ack.broadcastId = envelope.broadcastId;
+            ack.rawJson = envelope.rawJson;
+            broadcastTracker_.OnAck(envelope.broadcastId, ack);
+        }
         {
             std::lock_guard<std::mutex> lock(mutex_);
             ++status_.drainAckReceived;
@@ -443,12 +749,19 @@ bool HostGuardAmsiIpcAdapter::InjectRawEventForTest(const std::string& rawJson)
             std::lock_guard<std::mutex> lock(mutex_);
             ++status_.unknownEventReceived;
             ++status_.unknownEventDropped;
+            status_.lastError = "unknown event pipe payload";
         }
+        AddDiag("warn", "adapter", "unknown event pipe payload");
         return true;
     }
 }
 
 bool HostGuardAmsiIpcAdapter::InjectStatusForTest(const std::string& rawJson)
+{
+    return EnqueueStatusFromIpc(rawJson);
+}
+
+bool HostGuardAmsiIpcAdapter::EnqueueStatusFromIpc(const std::string& rawJson)
 {
     {
         std::lock_guard<std::mutex> lock(mutex_);
