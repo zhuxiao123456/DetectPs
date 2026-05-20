@@ -1,12 +1,11 @@
 #pragma once
 
+#include "amsi_rule_provider.h"
 #include "hostguard_amsi_ipc_adapter.h"
 
 #include <functional>
 #include <string>
 #include <vector>
-
-class HostGuardFileRuleProvider;
 
 namespace hostguard_demo {
 
@@ -16,13 +15,17 @@ struct HostGuardPolicySnapshot {
 };
 
 struct HostGuardModuleContext {
-    HostGuardFileRuleProvider* ruleProvider = nullptr;
+    amsi_ipc::IAmsiRuleProvider* ruleProvider = nullptr;
 
     std::function<HostGuardPolicySnapshot()> loadPolicy;
     std::function<void(const HostGuardAmsiEventEnvelope& event)> eventBus;
     std::function<void(const HostGuardAmsiEventEnvelope& log)> dllDiagnosticLogBus;
     std::function<void(const std::string& rawStatus)> statusBus;
     std::function<void(const HostGuardAmsiAdapterDiag& diag)> diagLogger;
+
+    // Test/fault-injection seam for the commercial simulation harness.
+    // Production HostGuard should leave this empty.
+    std::function<bool(std::string& error)> beforeAdapterStartForTest;
 };
 
 struct HostGuardAmsiIpcModuleStatus {
@@ -35,6 +38,12 @@ struct HostGuardAmsiIpcModuleStatus {
     HostGuardAmsiBroadcastResult lastReload;
     HostGuardAmsiBroadcastResult lastPolicyBroadcast;
     HostGuardAmsiBroadcastResult lastUnload;
+};
+
+struct HostGuardAmsiIpcModuleCommandResult {
+    bool ok = false;
+    std::string output;
+    std::string error;
 };
 
 class HostGuardAmsiIpcModule {
@@ -63,6 +72,9 @@ public:
     bool InjectStatusForTest(const std::string& rawJson);
 
     HostGuardAmsiIpcModuleStatus GetStatus() const;
+    std::string ExportStatusText() const;
+    HostGuardAmsiIpcModuleCommandResult RunControlCommand(const std::string& command,
+                                                          std::uint32_t timeoutMs);
     std::vector<HostGuardAmsiAdapterDiag> GetRecentAdapterDiag() const;
 
 private:

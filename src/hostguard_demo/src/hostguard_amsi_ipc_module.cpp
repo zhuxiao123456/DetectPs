@@ -1,8 +1,8 @@
 #include "hostguard_amsi_ipc_module.h"
 
 #include "amsi_rule_provider.h"
-#include "hostguard_file_rule_provider.h"
 
+#include <exception>
 #include <iomanip>
 #include <sstream>
 #include <utility>
@@ -30,6 +30,24 @@ std::string StableHash(const std::string& value)
 HostGuardPolicySnapshot DefaultPolicy()
 {
     return HostGuardPolicySnapshot{true, "hostguard-demo-policy-enabled"};
+}
+
+const char* BoolText(bool value)
+{
+    return value ? "yes" : "no";
+}
+
+void AppendBroadcast(std::ostringstream& out,
+                     const char* name,
+                     const HostGuardAmsiBroadcastResult& result)
+{
+    out << name << ".command: " << result.command << "\n"
+        << name << ".broadcastId: " << result.broadcastId << "\n"
+        << name << ".delivered: " << result.delivered << "\n"
+        << name << ".acked: " << result.acked << "\n"
+        << name << ".failed: " << result.failed << "\n"
+        << name << ".timeout: " << result.timeout << "\n"
+        << name << ".error: " << result.error << "\n";
 }
 
 } // namespace
@@ -110,13 +128,30 @@ bool HostGuardAmsiIpcModule::Start(std::string& error)
         return false;
     }
 
-    const HostGuardPolicySnapshot policy = context_.loadPolicy ? context_.loadPolicy() : DefaultPolicy();
+    HostGuardPolicySnapshot policy;
+    try {
+        policy = context_.loadPolicy ? context_.loadPolicy() : DefaultPolicy();
+    } catch (const std::exception& ex) {
+        error = std::string("loadPolicy failed: ") + ex.what();
+        status_.lastError = error;
+        return false;
+    } catch (...) {
+        error = "loadPolicy failed: unknown exception";
+        status_.lastError = error;
+        return false;
+    }
+
     if (!adapter_.SetDetectionEnabled(policy.detectionEnabled, policy.policyVersion, error)) {
         status_.lastError = error;
         return false;
     }
     status_.policyEnabled = policy.detectionEnabled;
     status_.policyVersion = policy.policyVersion;
+
+    if (context_.beforeAdapterStartForTest && !context_.beforeAdapterStartForTest(error)) {
+        status_.lastError = error;
+        return false;
+    }
 
     if (!adapter_.Start(error)) {
         status_.lastError = error;
@@ -243,6 +278,84 @@ HostGuardAmsiIpcModuleStatus HostGuardAmsiIpcModule::GetStatus() const
     auto status = status_;
     status.adapter = adapter_.GetStatus();
     return status;
+}
+
+std::string HostGuardAmsiIpcModule::ExportStatusText() const
+{
+    const auto status = GetStatus();
+    std::ostringstream out;
+    out << "module.initialized: " << BoolText(status.initialized) << "\n"
+        << "module.started: " << BoolText(status.started) << "\n"
+        << "module.policyEnabled: " << BoolText(status.policyEnabled) << "\n"
+        << "module.policyVersion: " << status.policyVersion << "\n"
+        << "module.lastError: " << status.lastError << "\n"
+        << "adapter.initialized: " << BoolText(status.adapter.initialized) << "\n"
+        << "adapter.started: " << BoolText(status.adapter.started) << "\n"
+        << "adapter.lifecycleState: " << status.adapter.lifecycleState << "\n"
+        << "adapter.productionPipes: " << BoolText(status.adapter.productionPipes) << "\n"
+        << "adapter.detectionEnabled: " << BoolText(status.adapter.detectionEnabled) << "\n"
+        << "adapter.lastRuleVersion: " << status.adapter.lastRuleVersion << "\n"
+        << "adapter.lastRuleHash: " << status.adapter.lastRuleHash << "\n"
+        << "adapter.lastPolicyVersion: " << status.adapter.lastPolicyVersion << "\n"
+        << "adapter.lastError: " << status.adapter.lastError << "\n"
+        << "adapter.ruleRequests: " << status.adapter.ruleRequests << "\n"
+        << "adapter.ruleRequestUnsupported: " << status.adapter.ruleRequestUnsupported << "\n"
+        << "adapter.eventReceived: " << status.adapter.eventReceived << "\n"
+        << "adapter.detectionEventReceived: " << status.adapter.detectionEventReceived << "\n"
+        << "adapter.dllDiagnosticLogReceived: " << status.adapter.dllDiagnosticLogReceived << "\n"
+        << "adapter.drainAckReceived: " << status.adapter.drainAckReceived << "\n"
+        << "adapter.drainAckCorrelated: " << status.adapter.drainAckCorrelated << "\n"
+        << "adapter.drainAckUncorrelated: " << status.adapter.drainAckUncorrelated << "\n"
+        << "adapter.unknownEventReceived: " << status.adapter.unknownEventReceived << "\n"
+        << "adapter.statusReceived: " << status.adapter.statusReceived << "\n"
+        << "adapter.detectionEventDropped: " << status.adapter.detectionEventDropped << "\n"
+        << "adapter.dllDiagnosticLogDropped: " << status.adapter.dllDiagnosticLogDropped << "\n"
+        << "adapter.statusDropped: " << status.adapter.statusDropped << "\n";
+    AppendBroadcast(out, "module.lastReload", status.lastReload);
+    AppendBroadcast(out, "module.lastPolicyBroadcast", status.lastPolicyBroadcast);
+    AppendBroadcast(out, "module.lastUnload", status.lastUnload);
+    return out.str();
+}
+
+HostGuardAmsiIpcModuleCommandResult HostGuardAmsiIpcModule::RunControlCommand(const std::string& command,
+                                                                              std::uint32_t timeoutMs)
+{
+    HostGuardAmsiIpcModuleCommandResult result;
+    if (command == "status") {
+        result.ok = true;
+        result.output = ExportStatusText();
+        return result;
+    }
+    if (command == "dump-diag") {
+        result.ok = true;
+        std::ostringstream out;
+        const auto entries = GetRecentAdapterDiag();
+        for (const auto& entry : entries) {
+            out << entry.timestamp << " " << entry.level << " ["
+                << entry.component << "] " << entry.message << "\n";
+        }
+        if (entries.empty()) {
+            out << "(none)\n";
+        }
+        result.output = out.str();
+        return result;
+    }
+
+    std::string error;
+    if (command == "reload-rules") {
+        result.ok = ReloadRules(timeoutMs, error);
+    } else if (command == "pause-detection") {
+        result.ok = ApplyPolicy(false, "manual-policy-disabled", timeoutMs, error);
+    } else if (command == "resume-detection") {
+        result.ok = ApplyPolicy(true, "manual-policy-enabled", timeoutMs, error);
+    } else {
+        error = "unsupported module control command: " + command;
+        result.ok = false;
+    }
+
+    result.error = error;
+    result.output = result.ok ? ExportStatusText() : std::string{};
+    return result;
 }
 
 std::vector<HostGuardAmsiAdapterDiag> HostGuardAmsiIpcModule::GetRecentAdapterDiag() const
