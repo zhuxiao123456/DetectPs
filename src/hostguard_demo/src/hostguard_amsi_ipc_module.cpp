@@ -4,6 +4,7 @@
 
 #include <exception>
 #include <iomanip>
+#include <mutex>
 #include <sstream>
 #include <utility>
 
@@ -29,7 +30,7 @@ std::string StableHash(const std::string& value)
 
 HostGuardPolicySnapshot DefaultPolicy()
 {
-    return HostGuardPolicySnapshot{true, "hostguard-demo-policy-enabled"};
+    return HostGuardPolicySnapshot{true, "hostguard-amsi-policy-enabled"};
 }
 
 const char* BoolText(bool value)
@@ -59,53 +60,103 @@ HostGuardAmsiIpcModule::~HostGuardAmsiIpcModule()
     UnInit();
 }
 
+HostGuardModuleContext HostGuardAmsiIpcModule::ContextSnapshot() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return context_;
+}
+
+amsi_ipc::IAmsiRuleProvider* HostGuardAmsiIpcModule::RuleProviderFromContext(
+    const HostGuardModuleContext& context) const
+{
+    return context.sharedRuleProvider ? context.sharedRuleProvider.get() : context.ruleProvider;
+}
+
+void HostGuardAmsiIpcModule::RecordLastError(const std::string& error)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    status_.lastError = error;
+}
+
 bool HostGuardAmsiIpcModule::Init(const HostGuardAmsiIpcConfig& config,
                                   HostGuardModuleContext context,
                                   std::string& error)
 {
-    if (status_.initialized) {
-        error = "module already initialized";
-        return false;
-    }
-    if (!context.ruleProvider) {
-        error = "module context requires ruleProvider";
-        return false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (status_.initialized) {
+            error = "module already initialized";
+            return false;
+        }
+        if (!context.ruleProvider && !context.sharedRuleProvider) {
+            error = "module context requires ruleProvider";
+            return false;
+        }
+
+        config_ = config;
+        context_ = std::move(context);
+        if (!context_.loadPolicy) {
+            context_.loadPolicy = DefaultPolicy;
+        }
     }
 
-    config_ = config;
-    context_ = std::move(context);
-    if (!context_.loadPolicy) {
-        context_.loadPolicy = DefaultPolicy;
-    }
-
-    if (!adapter_.Init(config_, error)) {
-        status_.lastError = error;
+    if (!adapter_.Init(config, error)) {
+        RecordLastError(error);
         return false;
     }
 
     adapter_.SetDetectionEventCallback([this](const HostGuardAmsiEventEnvelope& event) {
-        if (context_.eventBus) {
-            context_.eventBus(event);
+        const auto context = ContextSnapshot();
+        if (context.eventBus) {
+            try {
+                context.eventBus(event);
+            } catch (const std::exception& ex) {
+                RecordLastError(std::string("eventBus callback failed: ") + ex.what());
+            } catch (...) {
+                RecordLastError("eventBus callback failed: unknown exception");
+            }
         }
     });
     adapter_.SetDllDiagnosticLogCallback([this](const HostGuardAmsiEventEnvelope& log) {
-        if (context_.dllDiagnosticLogBus) {
-            context_.dllDiagnosticLogBus(log);
-        } else if (context_.eventBus) {
-            context_.eventBus(log);
+        const auto context = ContextSnapshot();
+        try {
+            if (context.dllDiagnosticLogBus) {
+                context.dllDiagnosticLogBus(log);
+            } else if (context.eventBus) {
+                context.eventBus(log);
+            }
+        } catch (const std::exception& ex) {
+            RecordLastError(std::string("dllDiagnosticLogBus callback failed: ") + ex.what());
+        } catch (...) {
+            RecordLastError("dllDiagnosticLogBus callback failed: unknown exception");
         }
     });
     adapter_.SetStatusCallback([this](const std::string& rawStatus) {
-        if (context_.statusBus) {
-            context_.statusBus(rawStatus);
+        const auto context = ContextSnapshot();
+        if (context.statusBus) {
+            try {
+                context.statusBus(rawStatus);
+            } catch (const std::exception& ex) {
+                RecordLastError(std::string("statusBus callback failed: ") + ex.what());
+            } catch (...) {
+                RecordLastError("statusBus callback failed: unknown exception");
+            }
         }
     });
     adapter_.SetAdapterDiagCallback([this](const HostGuardAmsiAdapterDiag& diag) {
-        if (context_.diagLogger) {
-            context_.diagLogger(diag);
+        const auto context = ContextSnapshot();
+        if (context.diagLogger) {
+            try {
+                context.diagLogger(diag);
+            } catch (const std::exception& ex) {
+                RecordLastError(std::string("diagLogger callback failed: ") + ex.what());
+            } catch (...) {
+                RecordLastError("diagLogger callback failed: unknown exception");
+            }
         }
     });
 
+    std::lock_guard<std::mutex> lock(mutex_);
     status_.initialized = true;
     status_.started = false;
     status_.lastError.clear();
@@ -114,51 +165,63 @@ bool HostGuardAmsiIpcModule::Init(const HostGuardAmsiIpcConfig& config,
 
 bool HostGuardAmsiIpcModule::Start(std::string& error)
 {
-    if (!status_.initialized) {
-        error = "module not initialized";
-        status_.lastError = error;
-        return false;
-    }
-    if (status_.started) {
-        return true;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!status_.initialized) {
+            error = "module not initialized";
+            status_.lastError = error;
+            return false;
+        }
+        if (status_.started) {
+            return true;
+        }
     }
 
     if (!LoadRulesIntoAdapter(false, error)) {
-        status_.lastError = error;
+        RecordLastError(error);
         return false;
     }
 
+    const auto context = ContextSnapshot();
     HostGuardPolicySnapshot policy;
     try {
-        policy = context_.loadPolicy ? context_.loadPolicy() : DefaultPolicy();
+        policy = context.loadPolicy ? context.loadPolicy() : DefaultPolicy();
     } catch (const std::exception& ex) {
         error = std::string("loadPolicy failed: ") + ex.what();
-        status_.lastError = error;
+        RecordLastError(error);
         return false;
     } catch (...) {
         error = "loadPolicy failed: unknown exception";
-        status_.lastError = error;
+        RecordLastError(error);
         return false;
     }
 
     if (!adapter_.SetDetectionEnabled(policy.detectionEnabled, policy.policyVersion, error)) {
-        status_.lastError = error;
+        RecordLastError(error);
         return false;
     }
-    status_.policyEnabled = policy.detectionEnabled;
-    status_.policyVersion = policy.policyVersion;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        status_.policyEnabled = policy.detectionEnabled;
+        status_.desiredPolicyEnabled = policy.detectionEnabled;
+        status_.policyVersion = policy.policyVersion;
+        status_.desiredPolicyVersion = policy.policyVersion;
+    }
 
-    if (context_.beforeAdapterStartForTest && !context_.beforeAdapterStartForTest(error)) {
-        status_.lastError = error;
+#if defined(HOSTGUARD_TESTING)
+    if (context.beforeAdapterStartForTest && !context.beforeAdapterStartForTest(error)) {
+        RecordLastError(error);
         return false;
     }
+#endif
 
     if (!adapter_.Start(error)) {
-        status_.lastError = error;
+        RecordLastError(error);
         adapter_.Stop();
         return false;
     }
 
+    std::lock_guard<std::mutex> lock(mutex_);
     status_.started = true;
     status_.lastError.clear();
     return true;
@@ -166,62 +229,85 @@ bool HostGuardAmsiIpcModule::Start(std::string& error)
 
 void HostGuardAmsiIpcModule::Stop()
 {
+    adapter_.SetDetectionEventCallback(nullptr);
+    adapter_.SetDllDiagnosticLogCallback(nullptr);
+    adapter_.SetStatusCallback(nullptr);
+    adapter_.SetAdapterDiagCallback(nullptr);
     adapter_.Stop();
+    std::lock_guard<std::mutex> lock(mutex_);
     status_.started = false;
 }
 
 void HostGuardAmsiIpcModule::UnInit()
 {
     Stop();
+    std::lock_guard<std::mutex> lock(mutex_);
     status_.initialized = false;
     context_ = HostGuardModuleContext{};
 }
 
 bool HostGuardAmsiIpcModule::LoadRulesIntoAdapter(bool invalidateCache, std::string& error)
 {
-    if (!context_.ruleProvider) {
+    const auto context = ContextSnapshot();
+    auto* ruleProvider = RuleProviderFromContext(context);
+    if (!ruleProvider) {
         error = "module context requires ruleProvider";
         return false;
     }
     if (invalidateCache) {
-        context_.ruleProvider->InvalidateRuleCache();
+        ruleProvider->InvalidateRuleCache();
     }
 
     amsi_ipc::AmsiRuleResponse allRules;
     amsi_ipc::AmsiRuleResponse amsiRules;
-    if (!context_.ruleProvider->BuildRulesResponse("GET_ALL_RULES", allRules, error) ||
-        !context_.ruleProvider->BuildRulesResponse("GET_RULES", amsiRules, error)) {
+    if (!ruleProvider->BuildRulesResponse("GET_ALL_RULES", allRules, error) ||
+        !ruleProvider->BuildRulesResponse("GET_RULES", amsiRules, error)) {
         return false;
     }
 
     const std::string ruleHash = StableHash(allRules.json + "\n" + amsiRules.json);
-    return adapter_.UpdateRules(allRules.json,
-                                amsiRules.json,
-                                "hostguard-demo-" + ruleHash,
-                                ruleHash,
-                                error);
+    if (!adapter_.UpdateRules(allRules.json,
+                              amsiRules.json,
+                              "hostguard-amsi-rule-" + ruleHash,
+                              ruleHash,
+                              error)) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    status_.localRuleHash = ruleHash;
+    return true;
 }
 
 bool HostGuardAmsiIpcModule::BroadcastResultAccepted(bool broadcastOk) const
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     return broadcastOk || !config_.enableRealIpc;
 }
 
 bool HostGuardAmsiIpcModule::ReloadRules(std::uint32_t timeoutMs, std::string& error)
 {
     if (!LoadRulesIntoAdapter(true, error)) {
-        status_.lastError = error;
+        RecordLastError(error);
         return false;
     }
 
-    status_.lastReload = HostGuardAmsiBroadcastResult{};
-    const bool broadcastOk = adapter_.Reload(timeoutMs, status_.lastReload);
-    if (!BroadcastResultAccepted(broadcastOk)) {
-        error = status_.lastReload.error;
-        status_.lastError = error;
+    HostGuardAmsiBroadcastResult result;
+    const bool broadcastOk = adapter_.Reload(timeoutMs, result);
+    const bool accepted = BroadcastResultAccepted(broadcastOk);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        status_.lastReload = result;
+        status_.lastReloadBroadcastOk = accepted;
+        if (status_.lastReloadBroadcastOk) {
+            status_.lastBroadcastRuleHash = status_.localRuleHash;
+        }
+    }
+    if (!accepted) {
+        error = result.error;
+        RecordLastError(error);
         return false;
     }
-    status_.lastError.clear();
+    RecordLastError("");
     return true;
 }
 
@@ -231,35 +317,50 @@ bool HostGuardAmsiIpcModule::ApplyPolicy(bool enabled,
                                          std::string& error)
 {
     if (!adapter_.SetDetectionEnabled(enabled, policyVersion, error)) {
-        status_.lastError = error;
+        RecordLastError(error);
         return false;
     }
-    status_.policyEnabled = enabled;
-    status_.policyVersion = policyVersion;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        status_.policyEnabled = enabled;
+        status_.desiredPolicyEnabled = enabled;
+        status_.policyVersion = policyVersion;
+        status_.desiredPolicyVersion = policyVersion;
+    }
 
-    status_.lastPolicyBroadcast = HostGuardAmsiBroadcastResult{};
+    HostGuardAmsiBroadcastResult result;
     const bool broadcastOk = enabled ?
-        adapter_.ResumeDetection(timeoutMs, status_.lastPolicyBroadcast) :
-        adapter_.PauseDetection(timeoutMs, status_.lastPolicyBroadcast);
-    if (!BroadcastResultAccepted(broadcastOk)) {
-        error = status_.lastPolicyBroadcast.error;
-        status_.lastError = error;
+        adapter_.ResumeDetection(timeoutMs, result) :
+        adapter_.PauseDetection(timeoutMs, result);
+    const bool accepted = BroadcastResultAccepted(broadcastOk);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        status_.lastPolicyBroadcast = result;
+        status_.lastPolicyBroadcastOk = accepted;
+    }
+    if (!accepted) {
+        error = result.error;
+        RecordLastError(error);
         return false;
     }
-    status_.lastError.clear();
+    RecordLastError("");
     return true;
 }
 
 bool HostGuardAmsiIpcModule::Unload(std::uint32_t timeoutMs, std::string& error)
 {
-    status_.lastUnload = HostGuardAmsiBroadcastResult{};
-    const bool broadcastOk = adapter_.Unload(timeoutMs, status_.lastUnload);
+    HostGuardAmsiBroadcastResult result;
+    const bool broadcastOk = adapter_.Unload(timeoutMs, result);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        status_.lastUnload = result;
+    }
     if (!BroadcastResultAccepted(broadcastOk)) {
-        error = status_.lastUnload.error;
-        status_.lastError = error;
+        error = result.error;
+        RecordLastError(error);
         return false;
     }
-    status_.lastError.clear();
+    RecordLastError("");
     return true;
 }
 
@@ -275,7 +376,11 @@ bool HostGuardAmsiIpcModule::InjectStatusForTest(const std::string& rawJson)
 
 HostGuardAmsiIpcModuleStatus HostGuardAmsiIpcModule::GetStatus() const
 {
-    auto status = status_;
+    HostGuardAmsiIpcModuleStatus status;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        status = status_;
+    }
     status.adapter = adapter_.GetStatus();
     return status;
 }
@@ -287,7 +392,13 @@ std::string HostGuardAmsiIpcModule::ExportStatusText() const
     out << "module.initialized: " << BoolText(status.initialized) << "\n"
         << "module.started: " << BoolText(status.started) << "\n"
         << "module.policyEnabled: " << BoolText(status.policyEnabled) << "\n"
+        << "module.desiredPolicyEnabled: " << BoolText(status.desiredPolicyEnabled) << "\n"
+        << "module.lastPolicyBroadcastOk: " << BoolText(status.lastPolicyBroadcastOk) << "\n"
+        << "module.lastReloadBroadcastOk: " << BoolText(status.lastReloadBroadcastOk) << "\n"
         << "module.policyVersion: " << status.policyVersion << "\n"
+        << "module.desiredPolicyVersion: " << status.desiredPolicyVersion << "\n"
+        << "module.localRuleHash: " << status.localRuleHash << "\n"
+        << "module.lastBroadcastRuleHash: " << status.lastBroadcastRuleHash << "\n"
         << "module.lastError: " << status.lastError << "\n"
         << "adapter.initialized: " << BoolText(status.adapter.initialized) << "\n"
         << "adapter.started: " << BoolText(status.adapter.started) << "\n"
@@ -345,9 +456,9 @@ HostGuardAmsiIpcModuleCommandResult HostGuardAmsiIpcModule::RunControlCommand(co
     if (command == "reload-rules") {
         result.ok = ReloadRules(timeoutMs, error);
     } else if (command == "pause-detection") {
-        result.ok = ApplyPolicy(false, "manual-policy-disabled", timeoutMs, error);
+        result.ok = ApplyPolicy(false, "hostguard-amsi-policy-manual-disabled", timeoutMs, error);
     } else if (command == "resume-detection") {
-        result.ok = ApplyPolicy(true, "manual-policy-enabled", timeoutMs, error);
+        result.ok = ApplyPolicy(true, "hostguard-amsi-policy-manual-enabled", timeoutMs, error);
     } else {
         error = "unsupported module control command: " + command;
         result.ok = false;

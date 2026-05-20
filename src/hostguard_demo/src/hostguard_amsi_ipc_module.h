@@ -4,6 +4,8 @@
 #include "hostguard_amsi_ipc_adapter.h"
 
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -16,6 +18,7 @@ struct HostGuardPolicySnapshot {
 
 struct HostGuardModuleContext {
     amsi_ipc::IAmsiRuleProvider* ruleProvider = nullptr;
+    std::shared_ptr<amsi_ipc::IAmsiRuleProvider> sharedRuleProvider;
 
     std::function<HostGuardPolicySnapshot()> loadPolicy;
     std::function<void(const HostGuardAmsiEventEnvelope& event)> eventBus;
@@ -23,16 +26,22 @@ struct HostGuardModuleContext {
     std::function<void(const std::string& rawStatus)> statusBus;
     std::function<void(const HostGuardAmsiAdapterDiag& diag)> diagLogger;
 
-    // Test/fault-injection seam for the commercial simulation harness.
-    // Production HostGuard should leave this empty.
+#if defined(HOSTGUARD_TESTING)
     std::function<bool(std::string& error)> beforeAdapterStartForTest;
+#endif
 };
 
 struct HostGuardAmsiIpcModuleStatus {
     bool initialized = false;
     bool started = false;
     bool policyEnabled = true;
+    bool desiredPolicyEnabled = true;
+    bool lastPolicyBroadcastOk = false;
+    bool lastReloadBroadcastOk = false;
     std::string policyVersion;
+    std::string desiredPolicyVersion;
+    std::string localRuleHash;
+    std::string lastBroadcastRuleHash;
     std::string lastError;
     HostGuardAmsiIpcStatus adapter;
     HostGuardAmsiBroadcastResult lastReload;
@@ -80,7 +89,11 @@ public:
 private:
     bool LoadRulesIntoAdapter(bool invalidateCache, std::string& error);
     bool BroadcastResultAccepted(bool broadcastOk) const;
+    HostGuardModuleContext ContextSnapshot() const;
+    amsi_ipc::IAmsiRuleProvider* RuleProviderFromContext(const HostGuardModuleContext& context) const;
+    void RecordLastError(const std::string& error);
 
+    mutable std::mutex mutex_;
     HostGuardAmsiIpcConfig config_;
     HostGuardModuleContext context_;
     HostGuardAmsiIpcAdapter adapter_;

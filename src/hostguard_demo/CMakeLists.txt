@@ -130,6 +130,8 @@ foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_
     target_link_libraries(${target} PRIVATE hostguard_amsi_ipc_adapter)
 endforeach()
 
+target_compile_definitions(hostguard_amsi_ipc_module_tests PRIVATE HOSTGUARD_TESTING)
+
 if(MSVC)
     target_compile_options(hostguard_amsi_ipc_adapter PRIVATE /W3 /WX- /MP)
     set_property(TARGET hostguard_amsi_ipc_adapter PROPERTY

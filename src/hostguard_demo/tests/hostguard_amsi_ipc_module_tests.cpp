@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <future>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -160,8 +161,12 @@ int main()
     const auto statusText = module.ExportStatusText();
     ok &= Expect(statusText.find("module.started: yes") != std::string::npos,
                  "module status export includes module started state");
+    ok &= Expect(statusText.find("module.desiredPolicyEnabled: yes") != std::string::npos,
+                 "module status export includes desired policy state");
     ok &= Expect(statusText.find("adapter.lastRuleHash: ") != std::string::npos,
                  "module status export includes adapter rule hash");
+    ok &= Expect(statusText.find("module.localRuleHash: ") != std::string::npos,
+                 "module status export includes local rule hash");
 
     auto commandResult = module.RunControlCommand("status", 10);
     ok &= Expect(commandResult.ok && commandResult.output.find("module.policyVersion: policy-on") != std::string::npos,
@@ -235,6 +240,15 @@ int main()
     ok &= Expect(!pauseFailureModule.GetStatus().adapter.detectionEnabled &&
                  !pauseFailureModule.GetStatus().policyEnabled,
                  "module preserves detection disabled after failed pause broadcast");
+    ok &= Expect(!pauseFailureModule.GetStatus().desiredPolicyEnabled &&
+                 !pauseFailureModule.GetStatus().lastPolicyBroadcastOk,
+                 "module separates desired disabled policy from failed broadcast");
+
+    const auto reloadFailureStatus = reloadFailureModule.GetStatus();
+    ok &= Expect(!reloadFailureStatus.localRuleHash.empty() &&
+                 reloadFailureStatus.lastBroadcastRuleHash.empty() &&
+                 !reloadFailureStatus.lastReloadBroadcastOk,
+                 "module separates local rule update from failed reload broadcast");
 
     HostGuardAmsiIpcModule startFailureModule;
     HostGuardModuleContext startFailureContext = context;
@@ -248,6 +262,34 @@ int main()
                  "module Start reports injected adapter Start failure");
     ok &= Expect(startFailureModule.GetStatus().lastError == error,
                  "module status records adapter Start failure");
+
+    auto sharedProvider = std::make_shared<HostGuardFileRuleProvider>(rulesPath);
+    HostGuardModuleContext sharedProviderContext = context;
+    sharedProviderContext.ruleProvider = nullptr;
+    sharedProviderContext.sharedRuleProvider = sharedProvider;
+    HostGuardAmsiIpcModule sharedProviderModule;
+    ok &= Expect(sharedProviderModule.Init(adapterConfig, sharedProviderContext, error),
+                 "module Init accepts shared rule provider ownership");
+    ok &= Expect(sharedProviderModule.Start(error),
+                 "module Start succeeds with shared rule provider ownership");
+    sharedProviderModule.Stop();
+
+    HostGuardModuleContext throwingCallbackContext = context;
+    throwingCallbackContext.eventBus = [](const HostGuardAmsiEventEnvelope&) {
+        throw std::runtime_error("event bus down");
+    };
+    HostGuardAmsiIpcModule throwingCallbackModule;
+    ok &= Expect(throwingCallbackModule.Init(adapterConfig, throwingCallbackContext, error),
+                 "throwing callback module Init succeeds");
+    ok &= Expect(throwingCallbackModule.Start(error),
+                 "throwing callback module Start succeeds");
+    ok &= Expect(throwingCallbackModule.InjectRawEventForTest(R"({"cat":"Detection","id":"throwing"})"),
+                 "throwing callback event injection succeeds");
+    ok &= Expect(WaitUntil([&]() {
+                     return throwingCallbackModule.GetStatus().lastError.find("eventBus callback failed") != std::string::npos;
+                 }, 1000),
+                 "module catches event callback exception and records lastError");
+    throwingCallbackModule.Stop();
 
     std::atomic<bool> callbackEntered{false};
     std::atomic<bool> releaseCallback{false};

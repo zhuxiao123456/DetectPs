@@ -125,7 +125,7 @@ bool HostGuardDemoApp::Start()
         hostguard_demo::HostGuardModuleContext context;
         context.ruleProvider = ruleProvider_.get();
         context.loadPolicy = []() {
-            return hostguard_demo::HostGuardPolicySnapshot{true, "hostguard-demo-policy-enabled"};
+            return hostguard_demo::HostGuardPolicySnapshot{true, "hostguard-amsi-policy-enabled"};
         };
         context.eventBus = [this](const hostguard_demo::HostGuardAmsiEventEnvelope& event) {
             if (eventSink_) {
@@ -239,7 +239,7 @@ bool HostGuardDemoApp::PauseDetection()
     }
 
     std::string error;
-    if (!amsiIpcModule_->ApplyPolicy(false, "hostguard-demo-policy-disabled", 1000, error)) {
+    if (!amsiIpcModule_->ApplyPolicy(false, "hostguard-amsi-policy-disabled", 1000, error)) {
         startError_ = "HostGuardAmsiIpcModule PauseDetection failed: " + error;
         return false;
     }
@@ -254,7 +254,7 @@ bool HostGuardDemoApp::ResumeDetection()
     }
 
     std::string error;
-    if (!amsiIpcModule_->ApplyPolicy(true, "hostguard-demo-policy-enabled", 1000, error)) {
+    if (!amsiIpcModule_->ApplyPolicy(true, "hostguard-amsi-policy-enabled", 1000, error)) {
         startError_ = "HostGuardAmsiIpcModule ResumeDetection failed: " + error;
         return false;
     }
