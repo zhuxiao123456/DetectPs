@@ -22,7 +22,7 @@ bool ParseHostGuardDemoOptions(int argc,
                                HostGuardDemoOptions& options,
                                std::string& error)
 {
-    if (argc != 4) {
+    if (argc < 4) {
         error = "usage: " + HostGuardDemoUsage();
         return false;
     }
@@ -36,10 +36,25 @@ bool ParseHostGuardDemoOptions(int argc,
     options.rulesPath = argv[1];
     options.logDir = argv[2];
     ApplyHostGuardPipeMode(options, mode);
+
+    for (int i = 4; i < argc; ++i) {
+        const std::string flag = argv[i] ? argv[i] : "";
+        if (flag == "--amsi-ipc-enabled") {
+            options.amsiIpc.enabled = true;
+        } else if (flag == "--amsi-ipc-real-ipc") {
+            options.amsiIpc.enableRealIpc = true;
+        } else if (flag == "--amsi-ipc-mock") {
+            options.amsiIpc.enableRealIpc = false;
+        } else {
+            error = "unknown option: " + flag;
+            return false;
+        }
+    }
     return true;
 }
 
 std::string HostGuardDemoUsage()
 {
-    return "hostguard_demo.exe <rules.json> <log_dir> (--demo-pipes|--production-pipes)";
+    return "hostguard_demo.exe <rules.json> <log_dir> (--demo-pipes|--production-pipes) "
+           "[--amsi-ipc-enabled] [--amsi-ipc-real-ipc|--amsi-ipc-mock]";
 }

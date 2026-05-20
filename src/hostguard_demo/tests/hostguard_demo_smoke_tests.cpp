@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <fstream>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -168,6 +169,65 @@ int main()
     statusSink.OnControlStatusLine(amsi_ipc::AmsiControlStatusLine{R"({"status":1})"});
     ok &= Expect(ReadFileText(hostguard_demo::DailyJsonlPath(logDir, "rasp-control-status")).find(R"({"status":1})") != std::string::npos,
                  "control status sink writes JSONL payload");
+
+    HostGuardDemoOptions defaultOptions;
+    ok &= Expect(!defaultOptions.amsiIpc.enabled, "AMSI IPC adapter is disabled by default");
+    ok &= Expect(!defaultOptions.amsiIpc.enableRealIpc, "AMSI IPC adapter real IPC is disabled by default");
+    ok &= Expect(!defaultOptions.amsiIpc.useProductionPipes, "AMSI IPC adapter production pipes are disabled by default");
+
+    {
+        HostGuardDemoOptions adapterOptions;
+        adapterOptions.rulesPath = rulesPath;
+        adapterOptions.logDir = logDir;
+        adapterOptions.amsiIpc.enabled = true;
+        adapterOptions.amsiIpc.enableRealIpc = false;
+        adapterOptions.amsiIpc.useProductionPipes = false;
+
+        HostGuardDemoApp adapterApp(adapterOptions);
+        ok &= Expect(adapterApp.Start(), "HostGuardDemoApp starts with mock AMSI IPC adapter enabled");
+        std::ostringstream status;
+        adapterApp.PrintStatus(status);
+        ok &= Expect(status.str().find("amsiIpc.enabled: yes") != std::string::npos,
+                     "status prints AMSI IPC adapter enabled");
+        ok &= Expect(status.str().find("amsiIpc.enableRealIpc: no") != std::string::npos,
+                     "status prints AMSI IPC adapter real IPC disabled");
+        ok &= Expect(status.str().find("amsiIpc.useProductionPipes: no") != std::string::npos,
+                     "status prints AMSI IPC adapter production pipe flag");
+        adapterApp.Stop();
+        ok &= Expect(!adapterApp.started(), "HostGuardDemoApp stops mock AMSI IPC adapter");
+    }
+
+    HostGuardDemoOptions adapterRealOptions;
+    adapterRealOptions.rulesPath = rulesPath;
+    adapterRealOptions.logDir = logDir;
+    adapterRealOptions.amsiIpc.enabled = true;
+    adapterRealOptions.amsiIpc.enableRealIpc = true;
+    adapterRealOptions.amsiIpc.useProductionPipes = false;
+    adapterRealOptions.rulesPipeName = TestPipeName(L"adapter_rules");
+    adapterRealOptions.eventsPipeName = TestPipeName(L"adapter_events");
+    adapterRealOptions.controlStatusPipeName = TestPipeName(L"adapter_status");
+    adapterRealOptions.configPipeName = TestPipeName(L"adapter_config");
+
+    HostGuardDemoApp adapterRealApp(adapterRealOptions);
+    ok &= Expect(adapterRealApp.Start(), "HostGuardDemoApp starts with real AMSI IPC adapter enabled");
+    const std::string adapterRulesResponse = ExchangePipe(adapterRealOptions.rulesPipeName, "GET_RULES\n");
+    if (adapterRulesResponse.find("amsi-2") == std::string::npos) {
+        std::fprintf(stderr, "adapter rules response: %s\n", adapterRulesResponse.c_str());
+    }
+    ok &= Expect(adapterRulesResponse.find("amsi-2") != std::string::npos,
+                 "adapter real IPC rule pipe serves injected provider content");
+    ok &= Expect(WriteOnlyPipe(adapterRealOptions.eventsPipeName, R"({"cat":"Detection","pipeEvent":2})"),
+                 "adapter real IPC event pipe accepts detection payload");
+    Sleep(100);
+    ok &= Expect(ReadFileText(hostguard_demo::DailyJsonlPath(logDir, "rasp-events")).find(R"({"cat":"Detection","pipeEvent":2})") != std::string::npos,
+                 "adapter detection callback reaches JSONL sink");
+    ok &= Expect(WriteOnlyPipe(adapterRealOptions.controlStatusPipeName, R"({"pipeStatus":2})"),
+                 "adapter real IPC status pipe accepts raw status payload");
+    Sleep(100);
+    ok &= Expect(ReadFileText(hostguard_demo::DailyJsonlPath(logDir, "rasp-control-status")).find(R"({"pipeStatus":2})") != std::string::npos,
+                 "adapter status callback reaches JSONL sink");
+    adapterRealApp.Stop();
+    ok &= Expect(!adapterRealApp.started(), "HostGuardDemoApp stops real AMSI IPC adapter");
 
     HostGuardDemoOptions options;
     options.rulesPath = rulesPath;

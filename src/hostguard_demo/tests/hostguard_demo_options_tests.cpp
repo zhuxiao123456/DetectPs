@@ -45,6 +45,8 @@ int main()
                      "production mode uses formal control status pipe");
         ok &= Expect(options.configPipeName == LR"(\\.\pipe\amsi_detect_config)",
                      "production mode uses formal config pipe");
+        ok &= Expect(options.amsiIpc.useProductionPipes,
+                     "production mode sets adapter production pipe flag");
     }
 
     {
@@ -59,6 +61,29 @@ int main()
                      "demo mode also keeps strict HostGuard mode");
         ok &= Expect(options.rulesPipeName == LR"(\\.\pipe\amsi_detect_rules_demo)",
                      "demo mode uses demo rules pipe");
+        ok &= Expect(!options.amsiIpc.useProductionPipes,
+                     "demo mode clears adapter production pipe flag");
+        ok &= Expect(!options.amsiIpc.enabled,
+                     "demo mode keeps adapter disabled by default");
+    }
+
+    {
+        std::string error;
+        HostGuardDemoOptions options;
+        const auto args = Args({"hostguard_demo.exe",
+                                ".\\config\\rasp_rules.json",
+                                ".\\logs",
+                                "--demo-pipes",
+                                "--amsi-ipc-enabled",
+                                "--amsi-ipc-real-ipc"});
+        ok &= Expect(ParseHostGuardDemoOptions(static_cast<int>(args.size()), args.data(), options, error),
+                     "host demo accepts AMSI IPC adapter flags");
+        ok &= Expect(options.amsiIpc.enabled,
+                     "AMSI IPC adapter enabled flag is recorded");
+        ok &= Expect(options.amsiIpc.enableRealIpc,
+                     "AMSI IPC adapter real IPC flag is recorded");
+        ok &= Expect(!options.amsiIpc.useProductionPipes,
+                     "AMSI IPC adapter keeps demo pipe flag with demo mode");
     }
 
     {
@@ -67,6 +92,18 @@ int main()
         const auto args = Args({"hostguard_demo.exe", ".\\config\\rasp_rules.json", ".\\logs"});
         ok &= Expect(!ParseHostGuardDemoOptions(static_cast<int>(args.size()), args.data(), options, error),
                      "host demo requires explicit pipe mode");
+    }
+
+    {
+        std::string error;
+        HostGuardDemoOptions options;
+        const auto args = Args({"hostguard_demo.exe",
+                                ".\\config\\rasp_rules.json",
+                                ".\\logs",
+                                "--demo-pipes",
+                                "--bad-amsi-ipc-flag"});
+        ok &= Expect(!ParseHostGuardDemoOptions(static_cast<int>(args.size()), args.data(), options, error),
+                     "host demo rejects unknown AMSI IPC adapter flag");
     }
 
     {

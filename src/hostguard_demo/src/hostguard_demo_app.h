@@ -1,6 +1,7 @@
 #pragma once
 
 #include "amsi_config_broadcaster.h"
+#include "hostguard_amsi_ipc_adapter.h"
 
 #include <iosfwd>
 #include <memory>
@@ -27,6 +28,12 @@ struct HostGuardDemoOptions {
     std::wstring eventsPipeName = LR"(\\.\pipe\amsi_detect_events_demo)";
     std::wstring controlStatusPipeName = LR"(\\.\pipe\amsi_detect_control_status_demo)";
     std::wstring configPipeName = LR"(\\.\pipe\amsi_detect_config_demo)";
+
+    struct AmsiIpcOptions {
+        bool enabled = false;
+        bool enableRealIpc = false;
+        bool useProductionPipes = false;
+    } amsiIpc;
 };
 
 const char* HostGuardPipeModeName(HostGuardPipeMode mode);
@@ -55,9 +62,12 @@ private:
     std::string startError_;
     amsi_ipc::AmsiBroadcastResult lastReload_;
     amsi_ipc::AmsiBroadcastResult lastUnload_;
+    hostguard_demo::HostGuardAmsiBroadcastResult lastAdapterReload_;
+    hostguard_demo::HostGuardAmsiBroadcastResult lastAdapterUnload_;
 
     std::unique_ptr<HostGuardFileRuleProvider> ruleProvider_;
     std::unique_ptr<HostGuardJsonlEventSink> eventSink_;
     std::unique_ptr<HostGuardJsonlControlStatusSink> controlStatusSink_;
+    std::unique_ptr<hostguard_demo::HostGuardAmsiIpcAdapter> amsiIpcAdapter_;
     std::unique_ptr<AmsiIpcHost> host_;
 };
