@@ -12,9 +12,7 @@
 #endif
 #include <windows.h>
 
-#include <iomanip>
 #include <iostream>
-#include <sstream>
 
 namespace {
 
@@ -36,23 +34,6 @@ bool PipeServerExists(const std::wstring& pipeName)
 
     const DWORD error = GetLastError();
     return error == ERROR_PIPE_BUSY || error == ERROR_SEM_TIMEOUT;
-}
-
-std::string HexUint64(std::uint64_t value)
-{
-    std::ostringstream out;
-    out << std::hex << std::setw(16) << std::setfill('0') << value;
-    return out.str();
-}
-
-std::string StableHash(const std::string& value)
-{
-    std::uint64_t hash = 1469598103934665603ULL;
-    for (unsigned char ch : value) {
-        hash ^= ch;
-        hash *= 1099511628211ULL;
-    }
-    return HexUint64(hash);
 }
 
 } // namespace
@@ -102,24 +83,26 @@ bool HostGuardDemoApp::Start()
     }
     startError_.clear();
 
-    if (options_.pipeMode == HostGuardPipeMode::Production) {
-        if (PipeServerExists(options_.rulesPipeName)) {
-            startError_ = "production rules pipe is already served: " + NarrowAscii(options_.rulesPipeName);
-            return false;
-        }
-        if (PipeServerExists(options_.eventsPipeName)) {
-            startError_ = "production events pipe is already served: " + NarrowAscii(options_.eventsPipeName);
-            return false;
-        }
-        if (PipeServerExists(options_.controlStatusPipeName)) {
-            startError_ = "production control status pipe is already served: " +
-                          NarrowAscii(options_.controlStatusPipeName);
-            return false;
-        }
-        if (PipeServerExists(options_.configPipeName)) {
-            startError_ = "production config pipe is already served: " + NarrowAscii(options_.configPipeName);
-            return false;
-        }
+    if (PipeServerExists(options_.rulesPipeName)) {
+        startError_ = std::string(HostGuardPipeModeName(options_.pipeMode)) +
+                      " rules pipe is already served: " + NarrowAscii(options_.rulesPipeName);
+        return false;
+    }
+    if (PipeServerExists(options_.eventsPipeName)) {
+        startError_ = std::string(HostGuardPipeModeName(options_.pipeMode)) +
+                      " events pipe is already served: " + NarrowAscii(options_.eventsPipeName);
+        return false;
+    }
+    if (PipeServerExists(options_.controlStatusPipeName)) {
+        startError_ = std::string(HostGuardPipeModeName(options_.pipeMode)) +
+                      " control status pipe is already served: " +
+                      NarrowAscii(options_.controlStatusPipeName);
+        return false;
+    }
+    if (PipeServerExists(options_.configPipeName)) {
+        startError_ = std::string(HostGuardPipeModeName(options_.pipeMode)) +
+                      " config pipe is already served: " + NarrowAscii(options_.configPipeName);
+        return false;
     }
 
     hostguard_demo::EnsureDirectory(options_.logDir);
@@ -129,7 +112,7 @@ bool HostGuardDemoApp::Start()
     controlStatusSink_.reset(new HostGuardJsonlControlStatusSink(options_.logDir));
 
     if (options_.amsiIpc.enabled) {
-        amsiIpcAdapter_.reset(new hostguard_demo::HostGuardAmsiIpcAdapter());
+        amsiIpcModule_.reset(new hostguard_demo::HostGuardAmsiIpcModule());
 
         hostguard_demo::HostGuardAmsiIpcConfig adapterConfig;
         adapterConfig.enableRealIpc = options_.amsiIpc.enableRealIpc;
@@ -139,77 +122,48 @@ bool HostGuardDemoApp::Start()
         adapterConfig.controlStatusPipeName = options_.controlStatusPipeName;
         adapterConfig.configPipeName = options_.configPipeName;
 
-        std::string error;
-        if (!amsiIpcAdapter_->Init(adapterConfig, error)) {
-            startError_ = "HostGuardAmsiIpcAdapter Init failed: " + error;
-            amsiIpcAdapter_.reset();
-            controlStatusSink_.reset();
-            eventSink_.reset();
-            ruleProvider_.reset();
-            return false;
-        }
-
-        amsiIpcAdapter_->SetDetectionEventCallback([this](const hostguard_demo::HostGuardAmsiEventEnvelope& event) {
+        hostguard_demo::HostGuardModuleContext context;
+        context.ruleProvider = ruleProvider_.get();
+        context.loadPolicy = []() {
+            return hostguard_demo::HostGuardPolicySnapshot{true, "hostguard-demo-policy-enabled"};
+        };
+        context.eventBus = [this](const hostguard_demo::HostGuardAmsiEventEnvelope& event) {
             if (eventSink_) {
                 eventSink_->OnEventLine(amsi_ipc::AmsiEventLine{event.rawJson});
             }
-        });
-        amsiIpcAdapter_->SetDllDiagnosticLogCallback([this](const hostguard_demo::HostGuardAmsiEventEnvelope& log) {
+        };
+        context.dllDiagnosticLogBus = [this](const hostguard_demo::HostGuardAmsiEventEnvelope& log) {
             if (eventSink_) {
                 eventSink_->OnEventLine(amsi_ipc::AmsiEventLine{log.rawJson});
             }
-        });
-        amsiIpcAdapter_->SetStatusCallback([this](const std::string& rawJson) {
+        };
+        context.statusBus = [this](const std::string& rawJson) {
             if (controlStatusSink_) {
                 controlStatusSink_->OnControlStatusLine(amsi_ipc::AmsiControlStatusLine{rawJson});
             }
-        });
-        amsiIpcAdapter_->SetAdapterDiagCallback([](const hostguard_demo::HostGuardAmsiAdapterDiag& diag) {
-            SentryLog_Info("HostGuardAmsiIpcAdapter", "%s [%s] %s",
+        };
+        context.diagLogger = [](const hostguard_demo::HostGuardAmsiAdapterDiag& diag) {
+            SentryLog_Info("HostGuardAmsiIpcModule", "%s [%s] %s",
                            diag.level.c_str(),
                            diag.component.c_str(),
                            diag.message.c_str());
-        });
+        };
 
-        amsi_ipc::AmsiRuleResponse allRules;
-        amsi_ipc::AmsiRuleResponse amsiRules;
-        if (!ruleProvider_->BuildRulesResponse("GET_ALL_RULES", allRules, error) ||
-            !ruleProvider_->BuildRulesResponse("GET_RULES", amsiRules, error)) {
-            startError_ = "HostGuardAmsiIpcAdapter failed to read rules: " + error;
-            amsiIpcAdapter_.reset();
+        std::string error;
+        if (!amsiIpcModule_->Init(adapterConfig, std::move(context), error)) {
+            startError_ = "HostGuardAmsiIpcModule Init failed: " + error;
+            amsiIpcModule_.reset();
             controlStatusSink_.reset();
             eventSink_.reset();
             ruleProvider_.reset();
             return false;
         }
 
-        const std::string ruleHash = StableHash(allRules.json + "\n" + amsiRules.json);
-        if (!amsiIpcAdapter_->UpdateRules(allRules.json,
-                                          amsiRules.json,
-                                          "hostguard-demo-" + ruleHash,
-                                          ruleHash,
-                                          error)) {
-            startError_ = "HostGuardAmsiIpcAdapter UpdateRules failed: " + error;
-            amsiIpcAdapter_.reset();
-            controlStatusSink_.reset();
-            eventSink_.reset();
-            ruleProvider_.reset();
-            return false;
-        }
-        if (!amsiIpcAdapter_->SetDetectionEnabled(true, "hostguard-demo-policy-enabled", error)) {
-            startError_ = "HostGuardAmsiIpcAdapter SetDetectionEnabled failed: " + error;
-            amsiIpcAdapter_.reset();
-            controlStatusSink_.reset();
-            eventSink_.reset();
-            ruleProvider_.reset();
-            return false;
-        }
-
-        started_ = amsiIpcAdapter_->Start(error);
+        started_ = amsiIpcModule_->Start(error);
         if (!started_) {
-            startError_ = "HostGuardAmsiIpcAdapter Start failed: " + error;
-            amsiIpcAdapter_->Stop();
-            amsiIpcAdapter_.reset();
+            startError_ = "HostGuardAmsiIpcModule Start failed: " + error;
+            amsiIpcModule_->UnInit();
+            amsiIpcModule_.reset();
             controlStatusSink_.reset();
             eventSink_.reset();
             ruleProvider_.reset();
@@ -245,14 +199,14 @@ bool HostGuardDemoApp::Start()
 
 void HostGuardDemoApp::Stop()
 {
-    if (amsiIpcAdapter_) {
-        amsiIpcAdapter_->Stop();
+    if (amsiIpcModule_) {
+        amsiIpcModule_->UnInit();
     }
     if (host_) {
         host_->Stop();
     }
     host_.reset();
-    amsiIpcAdapter_.reset();
+    amsiIpcModule_.reset();
     controlStatusSink_.reset();
     eventSink_.reset();
     ruleProvider_.reset();
@@ -261,31 +215,13 @@ void HostGuardDemoApp::Stop()
 
 bool HostGuardDemoApp::Reload()
 {
-    if (amsiIpcAdapter_) {
+    if (amsiIpcModule_) {
         std::string error;
-        amsi_ipc::AmsiRuleResponse allRules;
-        amsi_ipc::AmsiRuleResponse amsiRules;
-        if (ruleProvider_) {
-            ruleProvider_->InvalidateRuleCache();
-        }
-        if (ruleProvider_ &&
-            ruleProvider_->BuildRulesResponse("GET_ALL_RULES", allRules, error) &&
-            ruleProvider_->BuildRulesResponse("GET_RULES", amsiRules, error)) {
-            const std::string ruleHash = StableHash(allRules.json + "\n" + amsiRules.json);
-            if (!amsiIpcAdapter_->UpdateRules(allRules.json,
-                                              amsiRules.json,
-                                              "hostguard-demo-" + ruleHash,
-                                              ruleHash,
-                                              error)) {
-                startError_ = "HostGuardAmsiIpcAdapter Reload UpdateRules failed: " + error;
-                return false;
-            }
-        } else {
-            startError_ = "HostGuardAmsiIpcAdapter Reload failed to read rules: " + error;
+        if (!amsiIpcModule_->ReloadRules(1000, error)) {
+            startError_ = "HostGuardAmsiIpcModule ReloadRules failed: " + error;
             return false;
         }
-        lastAdapterReload_ = hostguard_demo::HostGuardAmsiBroadcastResult{};
-        return amsiIpcAdapter_->Reload(1000, lastAdapterReload_);
+        return true;
     }
     if (!host_) {
         return false;
@@ -297,9 +233,13 @@ bool HostGuardDemoApp::Reload()
 
 bool HostGuardDemoApp::Unload()
 {
-    if (amsiIpcAdapter_) {
-        lastAdapterUnload_ = hostguard_demo::HostGuardAmsiBroadcastResult{};
-        return amsiIpcAdapter_->Unload(1000, lastAdapterUnload_);
+    if (amsiIpcModule_) {
+        std::string error;
+        if (!amsiIpcModule_->Unload(1000, error)) {
+            startError_ = "HostGuardAmsiIpcModule Unload failed: " + error;
+            return false;
+        }
+        return true;
     }
     if (!host_) {
         return false;
@@ -330,18 +270,21 @@ void HostGuardDemoApp::PrintStatus(std::ostream& output) const
            << " lastError=" << lastReload_.lastError << '\n'
            << "lastUnload: reached=" << lastUnload_.reached
            << " lastError=" << lastUnload_.lastError << '\n';
-    if (amsiIpcAdapter_) {
-        const auto adapterStatus = amsiIpcAdapter_->GetStatus();
-        output << "amsiIpc.lifecycleState: " << adapterStatus.lifecycleState << '\n'
-               << "amsiIpc.ruleRequests: " << adapterStatus.ruleRequests << '\n'
-               << "amsiIpc.eventReceived: " << adapterStatus.eventReceived << '\n'
-               << "amsiIpc.statusReceived: " << adapterStatus.statusReceived << '\n'
-               << "amsiIpc.lastReload: delivered=" << lastAdapterReload_.delivered
-               << " acked=" << lastAdapterReload_.acked
-               << " lastError=" << lastAdapterReload_.error << '\n'
-               << "amsiIpc.lastUnload: delivered=" << lastAdapterUnload_.delivered
-               << " acked=" << lastAdapterUnload_.acked
-               << " lastError=" << lastAdapterUnload_.error << '\n';
+    if (amsiIpcModule_) {
+        const auto moduleStatus = amsiIpcModule_->GetStatus();
+        output << "amsiIpc.moduleStarted: " << (moduleStatus.started ? "yes" : "no") << '\n'
+               << "amsiIpc.policyEnabled: " << (moduleStatus.policyEnabled ? "yes" : "no") << '\n'
+               << "amsiIpc.policyVersion: " << moduleStatus.policyVersion << '\n'
+               << "amsiIpc.lifecycleState: " << moduleStatus.adapter.lifecycleState << '\n'
+               << "amsiIpc.ruleRequests: " << moduleStatus.adapter.ruleRequests << '\n'
+               << "amsiIpc.eventReceived: " << moduleStatus.adapter.eventReceived << '\n'
+               << "amsiIpc.statusReceived: " << moduleStatus.adapter.statusReceived << '\n'
+               << "amsiIpc.lastReload: delivered=" << moduleStatus.lastReload.delivered
+               << " acked=" << moduleStatus.lastReload.acked
+               << " lastError=" << moduleStatus.lastReload.error << '\n'
+               << "amsiIpc.lastUnload: delivered=" << moduleStatus.lastUnload.delivered
+               << " acked=" << moduleStatus.lastUnload.acked
+               << " lastError=" << moduleStatus.lastUnload.error << '\n';
     }
 }
 

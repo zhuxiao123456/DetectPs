@@ -193,6 +193,10 @@ int main()
                      "status prints AMSI IPC adapter real IPC disabled");
         ok &= Expect(status.str().find("amsiIpc.useProductionPipes: no") != std::string::npos,
                      "status prints AMSI IPC adapter production pipe flag");
+        ok &= Expect(status.str().find("amsiIpc.moduleStarted: yes") != std::string::npos,
+                     "status prints AMSI IPC module started");
+        ok &= Expect(adapterApp.Reload(), "mock AMSI IPC module reload rules completes");
+        ok &= Expect(adapterApp.Unload(), "mock AMSI IPC module unload completes");
         adapterApp.Stop();
         ok &= Expect(!adapterApp.started(), "HostGuardDemoApp stops mock AMSI IPC adapter");
     }
@@ -226,6 +230,19 @@ int main()
     Sleep(100);
     ok &= Expect(ReadFileText(hostguard_demo::DailyJsonlPath(logDir, "rasp-control-status")).find(R"({"pipeStatus":2})") != std::string::npos,
                  "adapter status callback reaches JSONL sink");
+    ok &= Expect(adapterRealApp.Reload(), "real AMSI IPC module reload rules completes");
+    ok &= Expect(adapterRealApp.Unload(), "real AMSI IPC module unload completes");
+
+    HostGuardDemoOptions conflictingLegacyOptions;
+    conflictingLegacyOptions.rulesPath = rulesPath;
+    conflictingLegacyOptions.logDir = logDir;
+    conflictingLegacyOptions.rulesPipeName = adapterRealOptions.rulesPipeName;
+    conflictingLegacyOptions.eventsPipeName = adapterRealOptions.eventsPipeName;
+    conflictingLegacyOptions.controlStatusPipeName = adapterRealOptions.controlStatusPipeName;
+    conflictingLegacyOptions.configPipeName = adapterRealOptions.configPipeName;
+    HostGuardDemoApp conflictingLegacyApp(conflictingLegacyOptions);
+    ok &= Expect(!conflictingLegacyApp.Start(),
+                 "legacy host cannot start on pipe names already owned by adapter module");
     adapterRealApp.Stop();
     ok &= Expect(!adapterRealApp.started(), "HostGuardDemoApp stops real AMSI IPC adapter");
 

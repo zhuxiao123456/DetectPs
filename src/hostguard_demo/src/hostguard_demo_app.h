@@ -1,7 +1,7 @@
 #pragma once
 
 #include "amsi_config_broadcaster.h"
-#include "hostguard_amsi_ipc_adapter.h"
+#include "hostguard_amsi_ipc_module.h"
 
 #include <iosfwd>
 #include <memory>
@@ -62,12 +62,10 @@ private:
     std::string startError_;
     amsi_ipc::AmsiBroadcastResult lastReload_;
     amsi_ipc::AmsiBroadcastResult lastUnload_;
-    hostguard_demo::HostGuardAmsiBroadcastResult lastAdapterReload_;
-    hostguard_demo::HostGuardAmsiBroadcastResult lastAdapterUnload_;
 
     std::unique_ptr<HostGuardFileRuleProvider> ruleProvider_;
     std::unique_ptr<HostGuardJsonlEventSink> eventSink_;
     std::unique_ptr<HostGuardJsonlControlStatusSink> controlStatusSink_;
-    std::unique_ptr<hostguard_demo::HostGuardAmsiIpcAdapter> amsiIpcAdapter_;
+    std::unique_ptr<hostguard_demo::HostGuardAmsiIpcModule> amsiIpcModule_;
     std::unique_ptr<AmsiIpcHost> host_;
 };

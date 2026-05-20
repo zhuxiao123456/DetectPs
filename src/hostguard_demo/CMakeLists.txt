@@ -18,6 +18,7 @@ target_compile_definitions(lua54_static_hostguard_demo PRIVATE LUA_BUILD_AS_DLL=
 set(HOSTGUARD_DEMO_SOURCES
     src/hostguard_demo_options.cpp
     src/hostguard_demo_app.cpp
+    src/hostguard_amsi_ipc_module.cpp
     src/hostguard_file_rule_provider.cpp
     src/hostguard_jsonl_event_sink.cpp
     src/hostguard_jsonl_control_status_sink.cpp
@@ -76,6 +77,12 @@ add_executable(hostguard_amsi_ipc_adapter_tests
     ${HOSTGUARD_IPC_SOURCES}
 )
 
+add_executable(hostguard_amsi_ipc_module_tests
+    tests/hostguard_amsi_ipc_module_tests.cpp
+    ${HOSTGUARD_DEMO_SOURCES}
+    ${HOSTGUARD_IPC_SOURCES}
+)
+
 # Manual/integration target: exercises real Windows named pipes and is intentionally
 # kept separate from the normal adapter unit test executable.
 add_executable(hostguard_amsi_ipc_adapter_runtime_smoke_tests
@@ -88,7 +95,7 @@ add_executable(hostguard_demo_pipe_client
     src/hostguard_pipe_client.cpp
 )
 
-foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_tests hostguard_amsi_ipc_adapter_tests hostguard_amsi_ipc_adapter_runtime_smoke_tests hostguard_demo_pipe_client)
+foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_tests hostguard_amsi_ipc_adapter_tests hostguard_amsi_ipc_module_tests hostguard_amsi_ipc_adapter_runtime_smoke_tests hostguard_demo_pipe_client)
     target_include_directories(${target} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${RASP_SENTRY_NATIVE_DIR}/include"
@@ -119,7 +126,7 @@ foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_
     endif()
 endforeach()
 
-foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_tests hostguard_amsi_ipc_adapter_tests hostguard_amsi_ipc_adapter_runtime_smoke_tests)
+foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_tests hostguard_amsi_ipc_adapter_tests hostguard_amsi_ipc_module_tests hostguard_amsi_ipc_adapter_runtime_smoke_tests)
     target_link_libraries(${target} PRIVATE hostguard_amsi_ipc_adapter)
 endforeach()
 
