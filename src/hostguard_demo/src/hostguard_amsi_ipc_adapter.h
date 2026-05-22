@@ -42,8 +42,8 @@ struct HostGuardAmsiIpcConfig {
     int statusPipeThreads = 4;
 
     std::size_t maxRuleResponseBytes = 4 * 1024 * 1024;
-    std::size_t maxEventBytes = 1024 * 1024;
-    std::size_t maxStatusBytes = 256 * 1024;
+    std::size_t maxEventBytes = 64 * 1024 - 1;
+    std::size_t maxStatusBytes = 64 * 1024 - 1;
 
     std::size_t detectionEventQueueCapacity = 4096;
     std::size_t dllDiagnosticLogQueueCapacity = 8192;
@@ -58,6 +58,8 @@ struct HostGuardAmsiIpcConfig {
     std::uint32_t callbackTimeoutMs = 100;
     std::uint32_t detectionEnqueueTimeoutMs = 50;
     std::uint32_t statusEnqueueTimeoutMs = 50;
+    std::uint32_t dllDiagnosticLogDuplicateWindowMs = 60 * 1000;
+    std::size_t dllDiagnosticLogMaxLineBytes = 4 * 1024;
 
     DetectionQueueFullPolicy detectionQueueFullPolicy = DetectionQueueFullPolicy::WaitThenDrop;
     bool dropDllDiagnosticLogOnQueueFull = true;
@@ -136,6 +138,9 @@ struct HostGuardAmsiIpcStatus {
     std::uint64_t dllDiagnosticLogDropped = 0;
     std::uint64_t unknownEventDropped = 0;
     std::uint64_t statusDropped = 0;
+    std::uint64_t oversizedEventDropped = 0;
+    std::uint64_t oversizedStatusDropped = 0;
+    std::uint64_t dllDiagnosticLogSuppressed = 0;
     std::uint64_t adapterDiagDropped = 0;
 
     std::string lastError;
@@ -259,6 +264,26 @@ public:
         closed_ = true;
         notEmpty_.notify_all();
         notFull_.notify_all();
+    }
+
+    void Clear()
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        items_.clear();
+        bytes_ = 0;
+        notFull_.notify_all();
+    }
+
+    std::size_t Size() const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return items_.size();
+    }
+
+    std::size_t Bytes() const
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return bytes_;
     }
 
 private:
@@ -407,6 +432,8 @@ private:
     void DllDiagnosticLogForwarder();
     void StatusForwarder();
     void AddDiag(const std::string& level, const std::string& component, const std::string& message);
+    void FlushSuppressedDllDiagnosticLogs();
+    bool ShouldForwardDllDiagnosticLog(const HostGuardAmsiEventEnvelope& envelope);
 
     mutable std::mutex mutex_;
     HostGuardAmsiIpcConfig config_;
@@ -418,6 +445,9 @@ private:
     BroadcastTracker broadcastTracker_;
     std::uint64_t nextBroadcastCounter_ = 1;
     bool detectionEnabled_ = true;
+    std::string lastDllDiagKey_;
+    std::chrono::steady_clock::time_point lastDllDiagForwardedAt_{};
+    std::uint64_t suppressedDllDiagCount_ = 0;
 
     BoundedQueue<HostGuardAmsiEventEnvelope> detectionQueue_;
     BoundedQueue<HostGuardAmsiEventEnvelope> dllLogQueue_;

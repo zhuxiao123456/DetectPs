@@ -58,6 +58,14 @@ std::size_t StringBytes(const std::string& value)
     return value.size();
 }
 
+std::string DllDiagnosticLogKey(const HostGuardAmsiEventEnvelope& envelope)
+{
+    if (!envelope.pattern.empty() || !envelope.rawJson.empty()) {
+        return envelope.pattern + "|" + envelope.rawJson;
+    }
+    return envelope.rawJson;
+}
+
 } // namespace
 
 class HostGuardAmsiIpcRuntime {
@@ -469,6 +477,10 @@ void HostGuardAmsiIpcAdapter::Stop()
     if (statusForwarder_.joinable()) {
         statusForwarder_.join();
     }
+    FlushSuppressedDllDiagnosticLogs();
+    detectionQueue_.Clear();
+    dllLogQueue_.Clear();
+    statusQueue_.Clear();
 
     std::lock_guard<std::mutex> lock(mutex_);
     status_.stopping = false;
@@ -679,6 +691,12 @@ bool HostGuardAmsiIpcAdapter::EnqueueRawEventFromIpc(const std::string& rawJson)
         if (!status_.started || status_.stopping) {
             return false;
         }
+        if (rawJson.size() > config_.maxEventBytes) {
+            ++status_.eventReceived;
+            ++status_.oversizedEventDropped;
+            status_.lastError = "event pipe payload exceeds maxEventBytes";
+            return false;
+        }
         ++status_.eventReceived;
     }
 
@@ -768,6 +786,11 @@ bool HostGuardAmsiIpcAdapter::EnqueueStatusFromIpc(const std::string& rawJson)
         if (!status_.started || status_.stopping) {
             return false;
         }
+        if (rawJson.size() > config_.maxStatusBytes) {
+            ++status_.oversizedStatusDropped;
+            status_.lastError = "status pipe payload exceeds maxStatusBytes";
+            return false;
+        }
     }
     bool pushed = false;
     if (config_.statusQueueFullPolicy == QueueFullPolicy::DropImmediately) {
@@ -825,6 +848,9 @@ void HostGuardAmsiIpcAdapter::DllDiagnosticLogForwarder()
 {
     HostGuardAmsiEventEnvelope envelope;
     while (dllLogQueue_.Pop(envelope)) {
+        if (!ShouldForwardDllDiagnosticLog(envelope)) {
+            continue;
+        }
         std::function<void(const HostGuardAmsiEventEnvelope&)> cb;
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -834,6 +860,7 @@ void HostGuardAmsiIpcAdapter::DllDiagnosticLogForwarder()
             cb(envelope);
         }
     }
+    FlushSuppressedDllDiagnosticLogs();
 }
 
 void HostGuardAmsiIpcAdapter::StatusForwarder()
@@ -867,6 +894,47 @@ void HostGuardAmsiIpcAdapter::AddDiag(const std::string& level,
             cb(recent.back());
         }
     }
+}
+
+void HostGuardAmsiIpcAdapter::FlushSuppressedDllDiagnosticLogs()
+{
+    std::uint64_t suppressed = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        suppressed = suppressedDllDiagCount_;
+        suppressedDllDiagCount_ = 0;
+    }
+    if (suppressed > 0) {
+        AddDiag("info", "adapter", "suppressed duplicate DLL diagnostic log count=" + std::to_string(suppressed));
+    }
+}
+
+bool HostGuardAmsiIpcAdapter::ShouldForwardDllDiagnosticLog(const HostGuardAmsiEventEnvelope& envelope)
+{
+    const auto now = std::chrono::steady_clock::now();
+    const std::string key = DllDiagnosticLogKey(envelope);
+    std::uint64_t suppressedToReport = 0;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!lastDllDiagKey_.empty() &&
+            key == lastDllDiagKey_ &&
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDllDiagForwardedAt_).count() <
+                config_.dllDiagnosticLogDuplicateWindowMs) {
+            ++suppressedDllDiagCount_;
+            ++status_.dllDiagnosticLogSuppressed;
+            return false;
+        }
+
+        suppressedToReport = suppressedDllDiagCount_;
+        suppressedDllDiagCount_ = 0;
+        lastDllDiagKey_ = key;
+        lastDllDiagForwardedAt_ = now;
+    }
+
+    if (suppressedToReport > 0) {
+        AddDiag("info", "adapter", "suppressed duplicate DLL diagnostic log count=" + std::to_string(suppressedToReport));
+    }
+    return true;
 }
 
 } // namespace hostguard_demo

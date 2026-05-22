@@ -199,6 +199,49 @@ int main()
 
     {
         HostGuardAmsiIpcConfig config;
+        config.maxEventBytes = 32;
+        config.maxStatusBytes = 32;
+        HostGuardAmsiIpcAdapter adapter;
+        std::string error;
+
+        ok &= Expect(adapter.Init(config, error), "adapter Init succeeds for max payload test");
+        ok &= Expect(adapter.Start(error), "adapter Start succeeds for max payload test");
+        ok &= Expect(!adapter.InjectRawEventForTest(std::string(64, 'e')),
+                     "oversized event payload is rejected before classification");
+        ok &= Expect(!adapter.InjectStatusForTest(std::string(64, 's')),
+                     "oversized status payload is rejected before queueing");
+        ok &= Expect(adapter.GetStatus().oversizedEventDropped == 1,
+                     "oversized event drop is counted");
+        ok &= Expect(adapter.GetStatus().oversizedStatusDropped == 1,
+                     "oversized status drop is counted");
+        adapter.Stop();
+    }
+
+    {
+        HostGuardAmsiIpcConfig config;
+        config.dllDiagnosticLogDuplicateWindowMs = 60 * 1000;
+        HostGuardAmsiIpcAdapter adapter;
+        std::string error;
+        std::atomic<int> logs{0};
+
+        ok &= Expect(adapter.Init(config, error), "adapter Init succeeds for diag suppression test");
+        adapter.SetDllDiagnosticLogCallback([&](const HostGuardAmsiEventEnvelope&) {
+            ++logs;
+        });
+        ok &= Expect(adapter.Start(error), "adapter Start succeeds for diag suppression test");
+        const std::string repeated = R"({"cat":"diag","sensor":"RaspLog","pattern":"amsi-log","desc":"same"})";
+        ok &= Expect(adapter.InjectRawEventForTest(repeated), "first repeated diag submits");
+        ok &= Expect(adapter.InjectRawEventForTest(repeated), "second repeated diag submits");
+        ok &= Expect(WaitUntil([&]() {
+                         const auto status = adapter.GetStatus();
+                         return logs.load() == 1 && status.dllDiagnosticLogSuppressed == 1;
+                     }, 1000),
+                     "duplicate DLL diagnostic log is suppressed in forwarder");
+        adapter.Stop();
+    }
+
+    {
+        HostGuardAmsiIpcConfig config;
         config.detectionEventQueueCapacity = 1;
         config.detectionQueueFullPolicy = DetectionQueueFullPolicy::DropImmediately;
         HostGuardAmsiIpcAdapter adapter;
