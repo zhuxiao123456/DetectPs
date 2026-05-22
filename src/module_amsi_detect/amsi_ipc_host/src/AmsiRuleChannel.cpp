@@ -1,6 +1,9 @@
-#include "amsi_rule_channel.h"
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ * 功能: 听取探针的请�?-> 找仓库（Provider）拿规则 -> 把规则打包发给探�?
+ */
+#include "../include/AmsiRuleChannel.h"
 
-#include <algorithm>
 #include <string>
 
 namespace amsi_ipc {
@@ -52,7 +55,9 @@ void AmsiRuleChannel::HandleClient(HANDLE pipe)
         return;
     }
 
-    FlushFileBuffers(pipe);
+    if (!FlushFileBuffers(pipe)) {
+        return;
+    }
 }
 
 } // namespace amsi_ipc

@@ -42,7 +42,7 @@ namespace Engine {
     void AmsiDetectModule::UnInit()
     {
         UnRegisterPolicyCallback(FEATURE_POLICY_REFRESH);
-        UnRegisterPolicyCallback(MASTER_CMD_DOWNLOAD_AMSI_LIB);
+        UnRegisterTaskletCallback(MASTER_CMD_DOWNLOAD_AMSI_LIB);
 
         if (m_pDetectTask != nullptr) {
             UnRegisterTask(m_pDetectTask->name());
@@ -74,7 +74,7 @@ namespace Engine {
                 InfoLogf(GetLoggerPtr(), "Register amsi_detect_task, rv = %d", rv);
             }
         } else {
-            ErrorLog(GetLoggerPtr(), "Parse amsi detect policy failed.");
+            ErrorLog(GetLoggerPtr(), "Parse amsi detect policy failed, keep existing amsi task if it is running.");
             featurePolicy->SetRecursiveFree();
             delete featurePolicy;
             featurePolicy = nullptr;

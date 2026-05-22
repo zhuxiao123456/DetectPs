@@ -1,11 +1,15 @@
-#include "named_pipe_server_pool.h"
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ * 功能: 基于 Windows 原生 API 的多线程命名管道服务端线程池
+ */
+#include "../include/NamedPipeServerPool.h"
 
-#include "pipe_security.h"
+#include "PipeSecurity.h"
 
 #include <utility>
 
 namespace amsi_ipc {
-
+// 构造函�? 初始化线程池的各项参数，问题: 参数超过了限�?
 NamedPipeServerPool::NamedPipeServerPool(std::wstring pipeName,
                                          int threadCount,
                                          INamedPipeClientHandler& handler,
@@ -15,8 +19,8 @@ NamedPipeServerPool::NamedPipeServerPool(std::wstring pipeName,
                                          DWORD dummyClientAccess)
     : pipeName_(std::move(pipeName)),
       threadCount_(threadCount),
-      handler_(handler),
-      outBufferBytes_(outBufferBytes),
+      handler_(handler),  // 依赖注入。这是一个接口引用，线程池只管建立连接，连上后把句柄交给 handler 去处理具体的业务数据
+      outBufferBytes_(outBufferBytes),  // 读写缓冲区大�?
       inBufferBytes_(inBufferBytes),
       openMode_(openMode),
       dummyClientAccess_(dummyClientAccess),
@@ -37,13 +41,14 @@ bool NamedPipeServerPool::Start()
     }
 
     if (running_.exchange(true)) {
-        return true;
+        return true;  // 原子锁防重入, 保证即使多个线程同时调用 Start()，也只会执行一次真正的启动逻辑
     }
-
+    // 分配空间
     threads_.assign(static_cast<size_t>(threadCount_), INVALID_HANDLE_VALUE);
     bool ok = true;
     for (int i = 0; i < threadCount_; ++i) {
         DWORD tid = 0;
+        // 创建线程，任意一个失败都会返回false
         threads_[static_cast<size_t>(i)] = CreateThread(nullptr, 0, ThreadProc, this, 0, &tid);
         if (threads_[static_cast<size_t>(i)] == nullptr ||
             threads_[static_cast<size_t>(i)] == INVALID_HANDLE_VALUE) {
@@ -54,13 +59,17 @@ bool NamedPipeServerPool::Start()
     return ok;
 }
 
+/*
+ * 安全、优雅地结束所有工作线程，并回收内核对�?
+ */
 void NamedPipeServerPool::Stop()
 {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!running_.exchange(false)) {
         return;
     }
-
+    // 通过一�?for 循环，故意调�?CreateFileW 模拟客户端，主动去连接自己的管道 threadCount_ 次�?
+    // 这会瞬间触发底层的连接事件，唤醒所有阻塞的线程。线程醒来后看到 running_ 已经变成 false，就会乖乖退出循�?
     for (int i = 0; i < threadCount_; ++i) {
         HANDLE dummy = CreateFileW(pipeName_.c_str(),
                                    dummyClientAccess_,
@@ -94,6 +103,7 @@ void NamedPipeServerPool::Stop()
     }
 }
 
+// Windows CreateThread 要求的标准静态回调函�?
 DWORD WINAPI NamedPipeServerPool::ThreadProc(LPVOID param)
 {
     auto* self = static_cast<NamedPipeServerPool*>(param);
@@ -104,17 +114,18 @@ DWORD WINAPI NamedPipeServerPool::ThreadProc(LPVOID param)
     try {
         self->ServerLoop();
     } catch (...) {
-        return 1;
+        return -1;
     }
 
     return 0;
 }
 
+// 功能：循环创建管道实例、等待连接、移交处理、断开连接
 void NamedPipeServerPool::ServerLoop()
 {
     SECURITY_ATTRIBUTES sa = {};
     PACL acl = nullptr;
-    const bool haveSa = MakeAuthenticatedUsersSecurity(&sa, &acl);
+    const bool haveSa = MakeAuthenticatedUsersSecurity(&sa, &acl);  // 安全加固
 
     while (running_.load()) {
         HANDLE pipe = CreateNamedPipeW(pipeName_.c_str(),

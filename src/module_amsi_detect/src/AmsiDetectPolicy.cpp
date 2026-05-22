@@ -4,6 +4,9 @@
 
 #include "AmsiDetectPolicy.h"
 
+#include <algorithm>
+#include <cctype>
+
 #include "StrUtils.h"
 
 #include "AmsiDetectGlobalParam.h"
@@ -80,7 +83,7 @@ namespace Engine {
             if (processPath.empty()) {
                 continue;
             }
-            transform(processPath.begin(), processPath.end(), processPath.begin(), ::tolower);
+            std::transform(processPath.begin(), processPath.end(), processPath.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             InfoLogf1(GetLoggerPtr(), "Get trust proc path(%s).", processPath);
             m_trustProcess.insert(processPath);
         }
