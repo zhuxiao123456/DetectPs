@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "AmsiIpcRuntimeQueue.h"
 #include "AmsiRuleSnapshot.h"
 
 namespace Engine {
@@ -26,6 +27,8 @@ namespace Engine {
         std::string versionPath;
         std::string luaLibPath;
         std::string version;
+
+        AmsiIpcRuntimeQueueConfig queueConfig;
     };
 
     class AmsiIpcRuntime {
@@ -45,6 +48,7 @@ namespace Engine {
         bool Reload(uint32_t timeoutMs, std::string &error);
 
         bool IsRunning() const;
+        AmsiIpcRuntimeStats GetStats() const;
 
     private:
         struct Impl;

@@ -6,7 +6,9 @@ setup_common_path(${PROJECT_NAME} ${ROOT_PATH})
 
 add_library(${TARGET} SHARED
         src/AmsiDetectGlobalParam.cpp
+        src/AmsiIpcPayloadClassifier.cpp
         src/AmsiIpcRuntime.cpp
+        src/AmsiIpcRuntimeQueue.cpp
         src/AmsiPipeSecurity.cpp
         src/AmsiDetectModule.cpp
         src/AmsiDetectPolicy.cpp
