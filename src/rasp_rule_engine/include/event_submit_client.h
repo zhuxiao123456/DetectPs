@@ -38,6 +38,10 @@ struct EventJsonBuildInput {
     std::string ip;
     std::string ua;
     std::string payload;
+    uint32_t    processPid = 0;
+    std::string processName;
+    std::string processPath;
+    std::string scriptContent;
     // Batch 3: parent process summary.
     uint32_t    parentPid = 0;
     std::string parentProcessName;

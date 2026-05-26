@@ -447,6 +447,10 @@ EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& resu
     input.ip = result.ip;
     input.ua = result.ua;
     input.payload = result.payload;
+    input.processPid = result.processPid;
+    input.processName = result.processName;
+    input.processPath = result.processPath;
+    input.scriptContent = result.scriptContent;
     // Batch 3: parent process fields
     input.parentPid = result.parentPid;
     input.parentProcessName = result.parentProcessName;

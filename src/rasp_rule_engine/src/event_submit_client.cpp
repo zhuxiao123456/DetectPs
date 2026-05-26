@@ -100,7 +100,8 @@ EventJsonBuildResult EventJsonBuilder::BuildDetection(const EventJsonBuildInput&
     EventJsonBuildResult result;
     result.decision = input.block ? "block" : "audit";
     result.payload = TruncateUtf8Field(input.payload, kMaxEventPayloadFieldBytes);
-    result.eventTruncated = result.payload.size() != input.payload.size();
+    const std::string scriptContent = TruncateUtf8Field(input.scriptContent, kMaxEventPayloadFieldBytes);
+    result.eventTruncated = result.payload.size() != input.payload.size() || scriptContent.size() != input.scriptContent.size();
 
     const std::string severity = input.severity.empty() ? "High" : input.severity;
     const std::string confidence = input.confidence ? std::to_string(input.confidence) : "70";
@@ -121,6 +122,10 @@ EventJsonBuildResult EventJsonBuilder::BuildDetection(const EventJsonBuildInput&
         << "\"ip\":\"" << JsonEscape(input.ip) << "\","
         << "\"ua\":\"" << JsonEscape(input.ua) << "\","
         << "\"pattern\":\"" << JsonEscape(result.payload) << "\","
+        << "\"processPid\":\"" << input.processPid << "\","
+        << "\"processName\":\"" << JsonEscape(input.processName) << "\","
+        << "\"processPath\":\"" << JsonEscape(input.processPath) << "\","
+        << "\"script_content\":\"" << JsonEscape(scriptContent) << "\","
         << "\"parentPid\":\"" << input.parentPid << "\","
         << "\"parentProcessName\":\"" << JsonEscape(input.parentProcessName) << "\","
         << "\"parentProcessPath\":\"" << JsonEscape(input.parentProcessPath) << "\"}";

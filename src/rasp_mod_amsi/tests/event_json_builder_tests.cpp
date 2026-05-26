@@ -30,6 +30,10 @@ EventJsonBuildInput BaseInput()
     input.ip = "127.0.0.1";
     input.ua = "unit-test";
     input.payload = "IEX \"payload\"\n中文";
+    input.processPid = 4321;
+    input.processName = "powershell.exe";
+    input.processPath = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+    input.scriptContent = "Get-Process";
     return input;
 }
 
@@ -120,6 +124,10 @@ int main()
             "\"ip\":\"127.0.0.1\","
             "\"ua\":\"unit-test\","
             "\"pattern\":\"IEX \\\"payload\\\"\\n中文\","
+            "\"processPid\":\"4321\","
+            "\"processName\":\"powershell.exe\","
+            "\"processPath\":\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\","
+            "\"script_content\":\"Get-Process\","
             "\"parentPid\":\"0\","
             "\"parentProcessName\":\"\","
             "\"parentProcessPath\":\"\"}";
@@ -139,6 +147,12 @@ int main()
         if (!Expect(fields["sev"] == input.severity, "canonical severity matches"))
             return 1;
         if (!Expect(fields["pattern"] == input.payload, "canonical payload matches"))
+            return 1;
+        if (!Expect(fields["processPid"] == "4321", "canonical process pid matches"))
+            return 1;
+        if (!Expect(fields["processPath"] == input.processPath, "canonical process path matches"))
+            return 1;
+        if (!Expect(fields["script_content"] == input.scriptContent, "canonical script content matches"))
             return 1;
     }
 

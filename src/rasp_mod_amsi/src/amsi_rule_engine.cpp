@@ -34,6 +34,15 @@
 #define DEFAULT_CONFIDENCE 70
 
 namespace {
+constexpr size_t kMaxScriptContentEventBytes = 8 * 1024;
+
+std::string TruncateForEventField(const std::string& value, size_t maxBytes)
+{
+    if (value.size() <= maxBytes)
+        return value;
+    return value.substr(0, maxBytes);
+}
+
 
 uint32_t ParseUint32OrZero(const std::string& value)
 {
@@ -678,6 +687,10 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     uint32_t parentPid = 0;
     std::string parentProcessName;
     std::string parentProcessPath;
+    uint32_t processPid = 0;
+    std::string processName;
+    std::string processPath;
+    std::string scriptContent;
     for (const auto &f: ctx.fields) {
         if (f.name == "parentPid") {
             parentPid = ParseUint32OrZero(f.value);
@@ -685,6 +698,14 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             parentProcessName = f.value;
         } else if (f.name == "parentProcessPath") {
             parentProcessPath = f.value;
+        } else if (f.name == "processPid") {
+            processPid = ParseUint32OrZero(f.value);
+        } else if (f.name == "processName") {
+            processName = f.value;
+        } else if (f.name == "processPath") {
+            processPath = f.value;
+        } else if (f.name == "script_content") {
+            scriptContent = f.value;
         }
     }
 
@@ -834,6 +855,10 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
         // url/method carry contentName/appName so SendDetectionEvent JSONL is complete
         r.contentName = contentName;
         r.appName = appName;
+        r.processPid = processPid;
+        r.processName = processName;
+        r.processPath = processPath;
+        r.scriptContent = scriptContent;
         // Batch 3: parent process fields
         r.parentPid = parentPid;
         r.parentProcessName = parentProcessName;
@@ -893,6 +918,10 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
     };
     if (scanContext.process) {
         const ProcessContextSnapshot& process = *scanContext.process;
+        ctx.fields.push_back({"processPid", std::to_string(process.currentPid)});
+        ctx.fields.push_back({"processName", process.currentProcessName});
+        ctx.fields.push_back({"processPath", process.currentProcessPath});
+
         ctx.fields.push_back({"parentPid", std::to_string(process.parentPid)});
         ctx.fields.push_back({"parentProcessName", process.parentProcessName});
         ctx.fields.push_back({"parentProcessPath", process.parentProcessPath});
@@ -903,6 +932,7 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
     NormalizedScriptInput normalized = m_inputNormalizer.Normalize(sample, sampleLen);
     if (!normalized.normalized.empty()) {
         ctx.fields.push_back({"body", normalized.normalized, true});
+        ctx.fields.push_back({"script_content", TruncateForEventField(normalized.normalized, kMaxScriptContentEventBytes)});
         char msg[256];
         snprintf(msg, sizeof(msg),
                  "[RaspAmsi][normalizer] rawLen=%zu normalizedLen=%zu truncated=%d utf16=%d b64=%d nulls=%d\n",

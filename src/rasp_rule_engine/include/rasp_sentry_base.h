@@ -59,6 +59,11 @@ struct RaspEvalResult
     std::string ip;       // IIS7: client IP;         AMSI: ""
     std::string ua;       // IIS7: User-Agent header; AMSI: ""
     int confidence;  // 置信度
+    // Current process and script evidence for AMSI detection events.
+    uint32_t    processPid = 0;
+    std::string processName;
+    std::string processPath;
+    std::string scriptContent;
     // Batch 3: parent process summary.
     uint32_t    parentPid = 0;
     std::string parentProcessName;
