@@ -46,22 +46,39 @@ std::string EscapeLegacyDiagJson(std::string_view text)
 
 } // namespace
 
+const char* SeverityToString(RaspDiagSeverity severity)
+{
+    switch (severity) {
+    case RaspDiagSeverity::Debug:
+        return "debug";
+    case RaspDiagSeverity::Warning:
+        return "warning";
+    case RaspDiagSeverity::Error:
+        return "error";
+    case RaspDiagSeverity::Info:
+    default:
+        return "info";
+    }
+}
+
 LegacyDiagJsonBuildResult LegacyDiagJsonBuilder::Build(const LegacyDiagJsonBuildInput& input) const
 {
     const std::string desc = EscapeLegacyDiagJson(input.message);
+    const char* severity = SeverityToString(input.severity);
 
     char line[2048] = {};
     const int written = std::snprintf(
         line,
         sizeof(line),
         "{\"id\":\"%s\",\"ts\":\"%s\","
-        "\"sev\":\"info\",\"act\":\"audit\",\"cat\":\"diag\","
+        "\"sev\":\"%s\",\"act\":\"audit\",\"cat\":\"diag\","
         "\"mod\":\"%s\",\"sensor\":\"RaspLog\","
         "\"rule\":\"\",\"desc\":\"%s\","
         "\"method\":\"\",\"url\":\"\",\"ip\":\"\",\"ua\":\"\","
         "\"pattern\":\"%s\",\"payload\":\"\"}",
         input.id.c_str(),
         input.timestamp.c_str(),
+        severity,
         input.module.c_str(),
         desc.c_str(),
         input.pattern.c_str());

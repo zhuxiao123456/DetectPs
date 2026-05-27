@@ -38,7 +38,7 @@
 #include "../include/legacy_pipe_event_transport.h"
 
 // =========================================================================
-// 处理所有与 rasp_sentry（外部守护进程）的 IPC 通信、无锁环形日志队列、以及极轻量级的 JSON 解析
+// 处理所有与 rasp_sentry（外部守护进程）�?IPC 通信、无锁环形日志队列、以及极轻量级的 JSON 解析
 // =========================================================================
 static INIT_ONCE s_logCsOnce = INIT_ONCE_STATIC_INIT;
 
@@ -90,7 +90,7 @@ static bool BuildCurrentUserConfigPipeSecurityAttributes(SECURITY_ATTRIBUTES& sa
 static BOOL WINAPI LogCsInit(INIT_ONCE*, PVOID, PVOID*)
 {
     // NOTE: Each RaspSentryBase instance owns its own CRITICAL_SECTION (m_logCs)
-    // and HANDLE (m_logEvent) — this INIT_ONCE is just a one-time initializer flag
+    // and HANDLE (m_logEvent) �?this INIT_ONCE is just a one-time initializer flag
     // per process. Actual per-instance init happens in EnsureLogCsInit().
     return TRUE;
 }
@@ -105,16 +105,29 @@ void RaspSentryBase::EnsureLogCsInit()
 }
 
 // =========================================================================
-// Log() — public; thread-safe; writes to OutputDebugString AND ring buffer.
+// Log() �?public; thread-safe; writes to OutputDebugString AND ring buffer.
 // =========================================================================
 
 void RaspSentryBase::Log(const char* fmt, ...) const
 {
-    char buf[1024];
     va_list va;
     va_start(va, fmt);
-    int n = vsnprintf(buf, sizeof(buf), fmt, va);
+    VLogWithSeverity(RaspDiagSeverity::Info, fmt, va);
     va_end(va);
+}
+
+void RaspSentryBase::LogWithSeverity(RaspDiagSeverity severity, const char* fmt, ...) const
+{
+    va_list va;
+    va_start(va, fmt);
+    VLogWithSeverity(severity, fmt, va);
+    va_end(va);
+}
+
+void RaspSentryBase::VLogWithSeverity(RaspDiagSeverity severity, const char* fmt, va_list ap) const
+{
+    char buf[1024];
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
 
     if (n >= (int)sizeof(buf))
     {
@@ -131,26 +144,26 @@ void RaspSentryBase::Log(const char* fmt, ...) const
 
     OutputDebugStringA(buf);
 
-    // Cast away const — ring buffer mutation is logically non-observable to callers.
-    const_cast<RaspSentryBase*>(this)->EnqueueLog(buf);
+    // Cast away const - ring buffer mutation is logically non-observable to callers.
+    const_cast<RaspSentryBase*>(this)->EnqueueLog(buf, severity);
 }
 /*
- * 功能：极低开销的无锁/自旋锁日志记录
- * 流程：Log 写入环形数组（如果满了就覆盖最老的）-> 触发 m_logEvent -> 后台线程 LogForwardThreadProc 醒来 ->
- * 拼装为 JSON -> 通过命名管道 \\.\pipe\amsi_detect_events 发出
- * Mark: 日志限制长度(防止恶意日志填满缓冲区)
+ * 功能：极低开销的无�?自旋锁日志记�?
+ * 流程：Log 写入环形数组（如果满了就覆盖最老的�?> 触发 m_logEvent -> 后台线程 LogForwardThreadProc 醒来 ->
+ * 拼装�?JSON -> 通过命名管道 \\.\pipe\amsi_detect_events 发出
+ * Mark: 日志限制长度(防止恶意日志填满缓冲�?
 */
-void RaspSentryBase::EnqueueLog(const char* text)
+void RaspSentryBase::EnqueueLog(const char* text, RaspDiagSeverity severity)
 {
     EnsureLogCsInit();
     EnterCriticalSection(&m_logCs);
-    PushLogEntryLocked(text);
+    PushLogEntryLocked(text, severity);
     LeaveCriticalSection(&m_logCs);
 
     if (m_logEvent) SetEvent(m_logEvent);
 }
 
-void RaspSentryBase::PushLogEntryLocked(const char* text)
+void RaspSentryBase::PushLogEntryLocked(const char* text, RaspDiagSeverity severity)
 {
     if (m_logCount >= kLogQueueCap)
         m_logTail = (m_logTail + 1) % kLogQueueCap;   // evict oldest
@@ -159,17 +172,19 @@ void RaspSentryBase::PushLogEntryLocked(const char* text)
 
     int slot = (int)(m_logHead % kLogQueueCap);
     strncpy_s(m_logQueue[slot].text, sizeof(m_logQueue[slot].text), text, _TRUNCATE);
+    m_logQueue[slot].severity = severity;
     m_logHead = (m_logHead + 1) % kLogQueueCap;
 }
 
-// 调用方必须已经持有 m_logCs。
-bool RaspSentryBase::PopLogEntryLocked(char* out, size_t outSize)
+// 调用方必须已经持�?m_logCs�?
+bool RaspSentryBase::PopLogEntryLocked(char* out, size_t outSize, RaspDiagSeverity& severityOut)
 {
     bool hasItem = (m_logCount > 0);
     if (hasItem)
     {
         int slot = (int)(m_logTail % kLogQueueCap);
         strncpy_s(out, outSize, m_logQueue[slot].text, _TRUNCATE);
+        severityOut = m_logQueue[slot].severity;
         m_logTail = (m_logTail + 1) % kLogQueueCap;
         InterlockedDecrement(&m_logCount);
     }
@@ -177,7 +192,7 @@ bool RaspSentryBase::PopLogEntryLocked(char* out, size_t outSize)
 }
 
 // =========================================================================
-// Base64 decoder — 可以添加一个输入、输出长度限制（防止dos攻击）
+// Base64 decoder �?可以添加一个输入、输出长度限制（防止dos攻击�?
 // =========================================================================
 bool RaspSentryBase::Base64Decode(const std::string& input, std::string& output)
 {
@@ -215,7 +230,7 @@ bool RaspSentryBase::Base64Decode(const std::string& input, std::string& output)
 }
 
 // =========================================================================
-// ConnectSentry — 在启动时，连接命名管道，发送 GET_ALL_RULES，阻塞读取并拉取完整的安全策略 JSON
+// ConnectSentry �?在启动时，连接命名管道，发�?GET_ALL_RULES，阻塞读取并拉取完整的安全策�?JSON
 // =========================================================================
 
 bool RaspSentryBase::ConnectSentry(std::string& jsonOut, std::string& libSourceOut)
@@ -283,7 +298,7 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
 
     // Pre-extract the lib source so callers (SentryRetryThreadProc, Initialize)
     // can pass it directly to ParseAndSwap. ParseAndSwap re-parses the JSON to
-    // build its typed snapshot — the double parse is acceptable at init/reload time.
+    // build its typed snapshot �?the double parse is acceptable at init/reload time.
     libSourceOut.clear();
     std::vector<std::unique_ptr<RaspRuleBase>> dummy;
     ParseRulesJson(response, libSourceOut, dummy, &metadataOut);
@@ -297,7 +312,7 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
  * 递归解析检查项数组
  * */
 // =========================================================================
-// ParseRulesJson — base-field parser
+// ParseRulesJson �?base-field parser
 // =========================================================================
 
 void RaspSentryBase::ParseRuleExtension(const std::string& /*key*/,
@@ -309,7 +324,7 @@ void RaspSentryBase::ParseRuleExtension(const std::string& /*key*/,
 }
 
 /*
- * 轻量级流式 JSON 解析器、避免引入巨大的第三方 JSON 库
+ * 轻量级流�?JSON 解析器、避免引入巨大的第三�?JSON �?
  * */
 bool RaspSentryBase::ParseRulesJson(
     const std::string&                          json,
@@ -577,9 +592,10 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
         for (;;)
         {
             char entryText[1024] = {};
+            RaspDiagSeverity entrySeverity = RaspDiagSeverity::Info;
 
             EnterCriticalSection(&self->m_logCs);
-            bool hasItem = self->PopLogEntryLocked(entryText, sizeof(entryText));
+            bool hasItem = self->PopLogEntryLocked(entryText, sizeof(entryText), entrySeverity);
             LeaveCriticalSection(&self->m_logCs);
 
             if (!hasItem) break;
@@ -590,6 +606,7 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
             input.module = self->ModuleName();
             input.pattern = self->LogEventPattern();
             input.message = entryText;
+            input.severity = entrySeverity;
 
             LegacyDiagJsonBuildResult built = LegacyDiagJsonBuilder().Build(input);
             const std::string& compactJson = built.compactJson;
@@ -641,8 +658,9 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
     while (self->m_running.load()) {
         HANDLE hPipe = CreateConfigPipe();
         if (hPipe == INVALID_HANDLE_VALUE) {
-            self->Log("[%s] ConfigPipeThread: CreateNamedPipeW failed GLE=%lu - retrying in 1s",
-                      self->ModuleName(), GetLastError());
+            self->LogWithSeverity(RaspDiagSeverity::Warning,
+                                  "[%s] ConfigPipeThread: CreateNamedPipeW failed GLE=%lu - retrying in 1s",
+                                  self->ModuleName(), GetLastError());
             Sleep(1000);
             continue;
         }
@@ -756,7 +774,7 @@ void RaspSentryBase::Initialize()
     // Initialize() override if needed. Here we set a default no-op proxy that
     // derived classes replace in their own Initialize before calling base.
     // (IIS7 and AMSI both set the proxy before calling base Initialize via
-    //  the existing pattern — see their OnBeginInit hooks.)
+    //  the existing pattern �?see their OnBeginInit hooks.)
 
     Log("[%s] Initialize: starting - all config via rasp_sentry IPC", ModuleName());
 

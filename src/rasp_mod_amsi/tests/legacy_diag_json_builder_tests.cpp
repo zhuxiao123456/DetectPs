@@ -53,6 +53,20 @@ int main()
     {
         LegacyDiagJsonBuilder builder;
         LegacyDiagJsonBuildInput input = BaseInput();
+        input.severity = RaspDiagSeverity::Warning;
+        LegacyDiagJsonBuildResult result = builder.Build(input);
+
+        if (!Expect(result.compactJson.find("\"sev\":\"warning\"") != std::string::npos,
+                    "explicit warning severity is emitted as canonical warning"))
+            return 1;
+        if (!Expect(result.compactJson.find("\"cat\":\"diag\"") != std::string::npos,
+                    "warning severity does not change diag category"))
+            return 1;
+    }
+
+    {
+        LegacyDiagJsonBuilder builder;
+        LegacyDiagJsonBuildInput input = BaseInput();
         input.message = "quote \" slash \\ newline\n carriage\r tab\t";
         LegacyDiagJsonBuildResult result = builder.Build(input);
 

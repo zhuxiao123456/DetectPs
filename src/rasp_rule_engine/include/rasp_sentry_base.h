@@ -1,6 +1,6 @@
 #pragma once
 // =========================================================================
-// rasp_sentry_base.h — Abstract base class shared by all RASP native modules.
+// rasp_sentry_base.h �?Abstract base class shared by all RASP native modules.
 //
 // Provides once-written infrastructure:
 //   - Ring-buffer diagnostic log  (RaspLog -> amsi_detect_events pipe)
@@ -13,14 +13,14 @@
 //   - Initialize() / Shutdown()   (lifecycle)
 //   - virtual Evaluate()          (sensor-dispatch entry point)
 //
-// Each module (IIS7, AMSI, …) provides:
-//   - AllocRule()       — virtual factory; return module's derived RaspRuleBase type
-//   - ParseAndSwap()    — build snapshot from parsed rules, precompile Lua
-//   - OnReloadSignal()  — retries ConnectSentry + ParseAndSwap (called by ConfigPipeThread)
-//   - ParseRuleExtension() — fills module-specific fields for each unrecognised JSON key
-//   - Evaluate()        — applies module-specific C++ guards + Lua; returns results
-//   - ModuleName()      — "rasp_mod_iis7" / "rasp_mod_amsi"
-//   - LogEventPattern() — "iis7-log" / "amsi-log"
+// Each module (IIS7, AMSI, �? provides:
+//   - AllocRule()       �?virtual factory; return module's derived RaspRuleBase type
+//   - ParseAndSwap()    �?build snapshot from parsed rules, precompile Lua
+//   - OnReloadSignal()  �?retries ConnectSentry + ParseAndSwap (called by ConfigPipeThread)
+//   - ParseRuleExtension() �?fills module-specific fields for each unrecognised JSON key
+//   - Evaluate()        �?applies module-specific C++ guards + Lua; returns results
+//   - ModuleName()      �?"rasp_mod_iis7" / "rasp_mod_amsi"
+//   - LogEventPattern() �?"iis7-log" / "amsi-log"
 // =========================================================================
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -29,6 +29,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <cstdarg>
 #include <string>
 #include <vector>
 #include <memory>
@@ -38,6 +39,7 @@
 #include "rasp_lua_engine.h"
 #include "rasp_rule_base.h"
 #include "async_event_queue.h"
+#include "legacy_diag_json_builder.h"
 #include "rule_json_parser.h"
 
 // ── RaspEvalResult ────────────────────────────────────────────────────────
@@ -58,7 +60,7 @@ struct RaspEvalResult
     std::string appName;   // IIS7: HTTP verb;         AMSI: appName (UTF-8)
     std::string ip;       // IIS7: client IP;         AMSI: ""
     std::string ua;       // IIS7: User-Agent header; AMSI: ""
-    int confidence;  // 置信度
+    int confidence;  // 置信�?
     // Current process and script evidence for AMSI detection events.
     uint32_t    processPid = 0;
     std::string processName;
@@ -83,11 +85,13 @@ public:
     void Initialize();
     void Shutdown();
 
-    // Diagnostic log — thread-safe; enqueues to ring buffer; drains async to sentry pipe.
+    // Diagnostic log �?thread-safe; enqueues to ring buffer; drains async to sentry pipe.
     // Module .cpp keeps a thin RaspLog(fmt,...) free function that calls g_engine->Log().
     void Log(const char* fmt, ...) const;
+    void LogWithSeverity(RaspDiagSeverity severity, const char* fmt, ...) const;
+    void VLogWithSeverity(RaspDiagSeverity severity, const char* fmt, va_list ap) const;
 
-    // Unified evaluation entry point — each module implements for its sensor set.
+    // Unified evaluation entry point �?each module implements for its sensor set.
     // Returns all matched rules (multi-rule firing supported). Called by each module's
     // public-facing method after building RaspLuaContext from request/scan data.
     virtual std::vector<RaspEvalResult> Evaluate(
@@ -116,7 +120,7 @@ protected:
 
     // Parse GET_ALL_RULES response JSON.
     // Accumulates globalLibrariesBase64 into libSourceOut.
-    // Allocates rule objects via AllocRule() (virtual factory — derived class may
+    // Allocates rule objects via AllocRule() (virtual factory �?derived class may
     // return module-specific subtype). For each unrecognised JSON key, calls
     // ParseRuleExtension(key, &parser, *rule) so derived classes can fill extra fields.
     // The allocated objects are owned by the returned unique_ptr vector.
@@ -127,24 +131,24 @@ protected:
         RuleBundleMetadata*                          metadataOut = nullptr,
         std::vector<std::string>*                    trustProcessOut = nullptr);
 
-    // Virtual factory — override to return module-specific derived type.
+    // Virtual factory �?override to return module-specific derived type.
     // Default returns new RaspRuleBase().
     // The returned pointer is stored in a unique_ptr<RaspRuleBase>; the downcast
     // in ParseRuleExtension is safe because the actual object is the derived type.
     virtual RaspRuleBase* AllocRule() const { return new RaspRuleBase(); }
 
     // Called by ParseRulesJson for each JSON key not handled by the base parser.
-    // parserPtr is Parser* — cast and call read_*/skip_value() to consume the value.
+    // parserPtr is Parser* �?cast and call read_*/skip_value() to consume the value.
     // baseRule's actual runtime type is whatever AllocRule() returned, so a downcast
     // to the derived type is safe.
-    // Default: skip the value (no-op — AMSI needs no override).
+    // Default: skip the value (no-op �?AMSI needs no override).
     virtual void ParseRuleExtension(const std::string& key,
                                     void*              parserPtr,
                                     RaspRuleBase&      rule);
 
     // Fire-and-forget JSONL detection event to \\.\pipe\amsi_detect_events.
     // Non-blocking: returns immediately if pipe unavailable (event silently dropped).
-    // Replaces amsi_event_sender::SendAmsiEvent() — used by all modules.
+    // Replaces amsi_event_sender::SendAmsiEvent() �?used by all modules.
     void SendDetectionEvent(const RaspEvalResult& result) const;
     EnqueueResult TrySubmitDetectionEvent(const RaspEvalResult& result) const;
 
@@ -163,17 +167,17 @@ protected:
     void SetActiveRuleMetadataForStatus(const RuleBundleMetadata& metadata);
     RuleBundleMetadata ActiveRuleMetadataForStatus() const;
 
-    // Called after ConnectSentry() succeeds — module parses JSON into its typed
+    // Called after ConnectSentry() succeeds �?module parses JSON into its typed
     // snapshot, precompiles Lua scripts, and swaps atomically.
     // Returns false if JSON is unparseable (snapshot left unchanged).
     virtual bool ParseAndSwap(const std::string& json,
                               const std::string& libSource) = 0;
 
-    // Called by ConfigPipeThread on 0x01 signal — module retries ConnectSentry
+    // Called by ConfigPipeThread on 0x01 signal �?module retries ConnectSentry
     // and calls ParseAndSwap(); keeps existing snapshot if sentry unavailable.
     virtual void OnReloadSignal() = 0;
 
-    // Called by ConfigPipeThread on 0x02 signal — module stops scanning and
+    // Called by ConfigPipeThread on 0x02 signal �?module stops scanning and
     // unloads the DLL from the host process.  Default: no-op (IIS module ignores
     // the unload signal; only AMSI overrides this).
     virtual void OnUnloadSignal() {}
@@ -190,7 +194,10 @@ protected:
 private:
     // ── Ring buffer (diagnostic log) ──────────────────────────────────────
     static const int kLogQueueCap = 256;
-    struct LogEntry { char text[1024]; };
+    struct LogEntry {
+        char text[1024];
+        RaspDiagSeverity severity = RaspDiagSeverity::Info;
+    };
     LogEntry         m_logQueue[kLogQueueCap]{};
     volatile LONG    m_logHead        = 0;
     volatile LONG    m_logTail        = 0;
@@ -201,17 +208,17 @@ private:
     volatile bool    m_logThreadAlive = false;
 
     void EnsureLogCsInit();
-    void EnqueueLog(const char* text);
+    void EnqueueLog(const char* text, RaspDiagSeverity severity);
     // Requires m_logCs to be held by caller.
-    void PushLogEntryLocked(const char* text);
+    void PushLogEntryLocked(const char* text, RaspDiagSeverity severity);
     // Requires m_logCs to be held by caller.
     // out must point to a writable buffer with outSize > 0.
-    bool PopLogEntryLocked(char* out, size_t outSize);
+    bool PopLogEntryLocked(char* out, size_t outSize, RaspDiagSeverity& severityOut);
 
     // ── Background threads ────────────────────────────────────────────────
     HANDLE m_logThread    = INVALID_HANDLE_VALUE;
     HANDLE m_configThread = INVALID_HANDLE_VALUE;
-    // Unconditional for all modules — active polling handles AMSI processes
+    // Unconditional for all modules �?active polling handles AMSI processes
     // that start before rasp_sentry (passive reload signal would never reach them).
     HANDLE m_retryThread  = INVALID_HANDLE_VALUE;
     mutable AsyncEventSink m_eventSink;
