@@ -29,8 +29,9 @@ namespace Engine {
 
     private:
         bool InitPath();
-        void StartCheck();
+        int StartCheck();
         bool CheckFileIsExist();
+        bool ReadAndDescramblingFile(const std::string &srcFilePath, std::string &content);
         bool StartAmsiIpc(const AmsiRuleSnapshot &snapshot, std::string &error);
         void StopAmsiIpcIfStarted();
         void FailStartAndRequestDownload(const std::string &reason);
@@ -39,6 +40,10 @@ namespace Engine {
         void FirstDownloadPackage();
         void UpgradeDownloadPackage();
         bool DecompressPackage(const std::string &destDir);
+        bool ScramblingRules();
+        bool TraverseDirAndScrambling(const std::string &srcDir);
+        void SaveRules();
+        void ClearTmpDirAndSendFailedReason(const std::string &reason);
         bool SaveAmsiLibVersion();
         bool GetAmsiLibVersion();
 

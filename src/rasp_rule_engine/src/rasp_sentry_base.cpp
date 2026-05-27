@@ -635,16 +635,14 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
 
     self->Log("[%s] ConfigPipeThread: started", self->ModuleName());
 
-    SECURITY_ATTRIBUTES sa = { sizeof(sa), nullptr, FALSE };
-    PSECURITY_DESCRIPTOR configSd = nullptr;
-    std::wstring configPipeSddl;
-    if (!BuildCurrentUserConfigPipeSecurityAttributes(sa, configSd, configPipeSddl)) {
-        self->Log("[%s] ConfigPipeThread: Fatal - failed to build secure SD GLE=%lu",
-                  self->ModuleName(), GetLastError());
-        return 0;
-    }
-    self->Log("[%s] ConfigPipeThread: using SDDL %ls",
-              self->ModuleName(), configPipeSddl.c_str());
+    SECURITY_DESCRIPTOR sd = {};
+    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
+    SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE); // NULL DACL = allow all.
+
+    SECURITY_ATTRIBUTES sa = {};
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = &sd;
+    sa.bInheritHandle = FALSE;
 
     auto CreateConfigPipe = [&sa]() -> HANDLE {
         return CreateNamedPipeW(
@@ -711,7 +709,6 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
             self->OnResumeDetectionSignal();
         }
     }
-    LocalFree(configSd);
     self->Log("[%s] ConfigPipeThread: exiting", self->ModuleName());
     return 0;
 }

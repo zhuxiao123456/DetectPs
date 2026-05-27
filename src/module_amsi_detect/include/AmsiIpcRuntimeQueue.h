@@ -1,5 +1,7 @@
 //
-// Created by Codex on 2026/5/22.
+// Created by z00840245 on 2026/5/22.
+// 定义了队列配置参数结构体（AmsiIpcRuntimeQueueConfig）、全局运行时统计状态结构体（AmsiIpcRuntimeStats）
+// 数据传输载荷信封（RuntimePayloadEnvelope）、核心的线程安全有界队列类（BoundedPayloadQueue）
 //
 
 #ifndef CSA_ENGINE_AMSI_IPC_RUNTIME_QUEUE_H
@@ -15,24 +17,8 @@
 #include "AmsiIpcPayloadClassifier.h"
 
 namespace Engine {
-
-    struct AmsiIpcRuntimeQueueConfig {
-        size_t maxPayloadBytes = 64 * 1024 - 1;
-
-        size_t detectionQueueCapacity = 4096;
-        size_t detectionQueueMaxBytes = 64 * 1024 * 1024;
-        uint32_t detectionEnqueueTimeoutMs = 50;
-
-        size_t dllDiagnosticLogQueueCapacity = 2048;
-        size_t dllDiagnosticLogQueueMaxBytes = 16 * 1024 * 1024;
-        size_t dllDiagnosticLogMaxLineBytes = 4 * 1024;
-        uint32_t dllDiagnosticDuplicateWindowMs = 60 * 1000;
-
-        size_t statusQueueCapacity = 1024;
-        size_t statusQueueMaxBytes = 16 * 1024 * 1024;
-        uint32_t statusEnqueueTimeoutMs = 50;
-    };
-
+    // 运行时统计状态结构体: 用于安全探针的健康度检测与性能监控;
+    // 内部记录了引擎生命周期状态（initialized、running 等）、三大队列各自的接收数/丢弃数计数器以及当前队列的实时大小与内存占用
     struct AmsiIpcRuntimeStats {
         bool initialized = false;
         bool running = false;
@@ -50,6 +36,15 @@ namespace Engine {
         uint64_t unknownEventReceived = 0;
         uint64_t oversizedPayloadDropped = 0;
 
+        uint64_t lastReloadReached = 0;
+        uint64_t lastReloadLastError = 0;
+        uint64_t lastPauseReached = 0;
+        uint64_t lastPauseLastError = 0;
+        uint64_t lastResumeReached = 0;
+        uint64_t lastResumeLastError = 0;
+        uint64_t lastUnloadReached = 0;
+        uint64_t lastUnloadLastError = 0;
+
         size_t detectionQueueSize = 0;
         size_t detectionQueueBytes = 0;
         size_t dllDiagQueueSize = 0;
@@ -60,21 +55,22 @@ namespace Engine {
         std::string lastError;
         bool degraded = false;
     };
-
+    // 数据载荷信封: 进入队列的统一数据单元
     struct RuntimePayloadEnvelope {
-        AmsiIpcPayloadKind kind = AmsiIpcPayloadKind::UnknownEvent;
-        std::string rawJson;
-        uint64_t receivedTimeMs = 0;
+        AmsiIpcPayloadKind kind = AmsiIpcPayloadKind::UnknownEvent;  // 通过关键字段匹配类型
+        std::string rawJson;  // 原始字符串
+        uint64_t receivedTimeMs = 0;  // 时间戳
     };
 
     class BoundedPayloadQueue {
     public:
-        BoundedPayloadQueue();
-        BoundedPayloadQueue(size_t capacity, size_t maxBytes);
+        BoundedPayloadQueue();  // 创建一个未指定容量边界的空队列（默认容量和字节限制均为 0，不可直接使用，需后续调用 Reset）
+        BoundedPayloadQueue(size_t capacity, size_t maxBytes);  // 队列元素个数和总容量大小
 
-        void Reset(size_t capacity, size_t maxBytes);
-        bool Push(RuntimePayloadEnvelope item, uint32_t timeoutMs, bool waitWhenFull);
-        bool TryPush(RuntimePayloadEnvelope item);
+        void Reset(size_t capacity, size_t maxBytes);  // 重置队列状态、引擎配置热更新、重启服务时使用
+        // 生产者接口: 数据入队
+        bool Push(RuntimePayloadEnvelope &&item, uint32_t timeoutMs, bool waitWhenFull);
+        bool TryPush(RuntimePayloadEnvelope &&item);
         bool Pop(RuntimePayloadEnvelope &out);
         void Stop();
         void StopAndDrop();
@@ -84,6 +80,7 @@ namespace Engine {
         size_t Bytes() const;
 
     private:
+        // 评估当前队列状态是否能放得下某个特定大小的新元素。由于带 Locked 后缀，内部不加锁，必须由调用者在持有 mutex_ 的安全区域内调用
         bool CanPushLocked(size_t itemBytes) const;
 
         mutable std::mutex mutex_;

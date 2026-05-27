@@ -1,5 +1,5 @@
 //
-// Created by Codex on 2026/5/21.
+// Created by z00840245 on 2026/5/21.
 //
 
 #ifndef CSA_ENGINE_AMSI_IPC_RUNTIME_H
@@ -13,7 +13,7 @@
 #include "AmsiRuleSnapshot.h"
 
 namespace Engine {
-
+    // 控制运行时的行为开关。包含 RASP 启动校验标志（是否强制要求 dll 存在、是否允许 Lua 库缺失）以及相关的物理路径和有界队列配置对象
     struct AmsiIpcRuntimeConfig {
         bool amsiIpcEnabled = true;
         bool enableRealIpc = true;
@@ -27,8 +27,13 @@ namespace Engine {
         std::string versionPath;
         std::string luaLibPath;
         std::string version;
+    };
 
-        AmsiIpcRuntimeQueueConfig queueConfig;
+    struct AmsiIpcBroadcastSummary {
+        std::string command;
+        uint32_t reached = 0;
+        uint32_t lastError = 0;
+        uint32_t timeoutMs = 0;
     };
 
     class AmsiIpcRuntime {
@@ -44,11 +49,14 @@ namespace Engine {
         bool Stop(uint32_t timeoutMs, std::string &error);
 
         bool PauseDetection(uint32_t timeoutMs, std::string &error);
+        bool ResumeDetection(uint32_t timeoutMs, std::string &error);
+        bool Unload(uint32_t timeoutMs, std::string &error);
         bool UpdateRules(const AmsiRuleSnapshot &snapshot, std::string &error);
         bool Reload(uint32_t timeoutMs, std::string &error);
 
         bool IsRunning() const;
         AmsiIpcRuntimeStats GetStats() const;
+        AmsiIpcBroadcastSummary GetLastBroadcastSummary(const std::string &command) const;
 
     private:
         struct Impl;

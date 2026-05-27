@@ -8,6 +8,7 @@
 
 #include "AmsiDetectPolicy.h"
 #include "AmsiDetectGlobalParam.h"
+#include "AmsiGlobalConf.h"
 
 namespace Engine {
     using namespace Framework;
@@ -28,6 +29,8 @@ namespace Engine {
     int AmsiDetectModule::Init()
     {
         InfoLogf1(GetLoggerPtr(), "Init module(%s).", MODULE_NAME_AMSI_DETECT);
+
+        AmsiGlobalConfRef.ParseAmsiConf();
 
         RegisterPolicyCallback(FEATURE_POLICY_REFRESH,
                                new PolicyCallback<AmsiDetectModule>(this, &AmsiDetectModule::RefreshFeaturePolicy, false));
@@ -74,7 +77,7 @@ namespace Engine {
                 InfoLogf(GetLoggerPtr(), "Register amsi_detect_task, rv = %d", rv);
             }
         } else {
-            ErrorLog(GetLoggerPtr(), "Parse amsi detect policy failed, keep existing amsi task if it is running.");
+            ErrorLog(GetLoggerPtr(), "Parse amsi detect policy failed.");
             featurePolicy->SetRecursiveFree();
             delete featurePolicy;
             featurePolicy = nullptr;
