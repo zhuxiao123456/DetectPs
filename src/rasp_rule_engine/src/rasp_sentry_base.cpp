@@ -41,6 +41,7 @@
 // 处理所有与 rasp_sentry（外部守护进程）�?IPC 通信、无锁环形日志队列、以及极轻量级的 JSON 解析
 // =========================================================================
 static INIT_ONCE s_logCsOnce = INIT_ONCE_STATIC_INIT;
+static std::atomic<long> s_hostLivenessThreads{0};
 
 static bool BuildCurrentUserConfigPipeSecurityAttributes(SECURITY_ATTRIBUTES& sa,
                                                          PSECURITY_DESCRIPTOR& sd,
@@ -87,6 +88,64 @@ static bool BuildCurrentUserConfigPipeSecurityAttributes(SECURITY_ATTRIBUTES& sa
     return true;
 }
 
+
+bool RaspSentryBase::AnyHostLivenessThreadRunning()
+{
+    return s_hostLivenessThreads.load(std::memory_order_acquire) > 0;
+}
+
+void RaspSentryBase::MarkHostAlive(bool alive)
+{
+    m_hostAlive.store(alive, std::memory_order_release);
+}
+
+void RaspSentryBase::MarkRuleSnapshotReady(bool ready)
+{
+    m_ruleSnapshotReady.store(ready, std::memory_order_release);
+}
+
+void RaspSentryBase::MarkDetectionPausedByHostState(bool paused)
+{
+    m_hostDetectionPaused.store(paused, std::memory_order_release);
+}
+
+bool RaspSentryBase::IsHostAlive() const
+{
+    return m_hostAlive.load(std::memory_order_acquire);
+}
+
+bool RaspSentryBase::IsRuleSnapshotReady() const
+{
+    return m_ruleSnapshotReady.load(std::memory_order_acquire);
+}
+
+bool RaspSentryBase::ShouldBypassScanFast() const
+{
+    if (!m_running.load(std::memory_order_acquire))
+        return true;
+    if (m_hostDetectionPaused.load(std::memory_order_acquire))
+        return true;
+    if (!m_hostAlive.load(std::memory_order_acquire))
+        return true;
+    if (!m_ruleSnapshotReady.load(std::memory_order_acquire))
+        return true;
+    return false;
+}
+
+bool RaspSentryBase::ProbeRulePipe() const
+{
+    return WaitNamedPipeW(L"\\\\.\\pipe\\amsi_detect_rules", m_probeTimeoutMs) == TRUE;
+}
+
+void RaspSentryBase::SleepHostLivenessInterruptible(DWORD sleepMs) const
+{
+    DWORD elapsed = 0;
+    while (!m_hostLivenessStop.load(std::memory_order_acquire) && elapsed < sleepMs) {
+        DWORD slice = (sleepMs - elapsed) > 100 ? 100 : (sleepMs - elapsed);
+        Sleep(slice);
+        elapsed += slice;
+    }
+}
 static BOOL WINAPI LogCsInit(INIT_ONCE*, PVOID, PVOID*)
 {
     // NOTE: Each RaspSentryBase instance owns its own CRITICAL_SECTION (m_logCs)
@@ -624,6 +683,77 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
 }
 
 // =========================================================================
+// HostLivenessThreadProc - fail-open when Host/rule pipe disappears.
+// =========================================================================
+
+DWORD WINAPI RaspSentryBase::HostLivenessThreadProc(LPVOID param)
+{
+    auto* self = static_cast<RaspSentryBase*>(param);
+    self->m_hostLivenessRunning.store(true, std::memory_order_release);
+    s_hostLivenessThreads.fetch_add(1, std::memory_order_acq_rel);
+
+    DWORD consecutiveFailures = 0;
+    DWORD firstFailureTick = 0;
+    bool graceLogged = false;
+    bool lostLogged = false;
+
+    while (!self->m_hostLivenessStop.load(std::memory_order_acquire) &&
+           self->m_running.load(std::memory_order_acquire)) {
+        const bool ok = self->ProbeRulePipe();
+        const DWORD now = GetTickCount();
+
+        if (ok) {
+            consecutiveFailures = 0;
+            firstFailureTick = 0;
+            graceLogged = false;
+            lostLogged = false;
+
+            const bool wasAlive = self->m_hostAlive.exchange(true, std::memory_order_acq_rel);
+            if (!wasAlive) {
+                self->Log("[%s] Host rule pipe visible again, waiting reload/resume before detection resumes",
+                          self->ModuleName());
+            }
+
+            self->SleepHostLivenessInterruptible(self->m_probeIntervalMs);
+            continue;
+        }
+
+        if (consecutiveFailures == 0) {
+            firstFailureTick = now;
+            if (!graceLogged) {
+                self->LogWithSeverity(RaspDiagSeverity::Debug,
+                                      "[%s] Host liveness probe failed, entering grace period",
+                                      self->ModuleName());
+                graceLogged = true;
+            }
+        }
+
+        ++consecutiveFailures;
+        const bool exceededFailures = consecutiveFailures >= self->m_maxConsecutiveFailures;
+        const bool exceededGrace = firstFailureTick != 0 &&
+                                   static_cast<DWORD>(now - firstFailureTick) >= self->m_hostLostGraceMs;
+
+        if (exceededFailures && exceededGrace) {
+            self->m_hostAlive.store(false, std::memory_order_release);
+            self->m_hostDetectionPaused.store(true, std::memory_order_release);
+            self->m_ruleSnapshotReady.store(false, std::memory_order_release);
+
+            if (!lostLogged) {
+                self->LogWithSeverity(RaspDiagSeverity::Warning,
+                                      "[%s] Host liveness lost, pause AMSI detection until host reload/resume",
+                                      self->ModuleName());
+                lostLogged = true;
+            }
+        }
+
+        self->SleepHostLivenessInterruptible(self->m_probeIntervalMs);
+    }
+
+    s_hostLivenessThreads.fetch_sub(1, std::memory_order_acq_rel);
+    self->m_hostLivenessRunning.store(false, std::memory_order_release);
+    return 0;
+}
+// =========================================================================
 // ConfigPipeThreadProc - server on \\.\pipe\amsi_detect_config
 // Dark period of 600ms after handling prevents BroadcastReload reconnect loop.
 // (See AMSI ConfigPipeThread comments for full explanation.)
@@ -737,7 +867,10 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
         RuleBundleMetadata requestedMetadata;
         if (self->ConnectSentry(json, lib, requestedMetadata) && self->ParseAndSwap(json, lib)) {
             self->SetActiveRuleMetadataForStatus(requestedMetadata);
-            self->Log("[%s] SentryRetryThread: rules loaded - exiting", self->ModuleName());
+            self->MarkHostAlive(true);
+            self->MarkRuleSnapshotReady(true);
+            self->MarkDetectionPausedByHostState(true);
+            self->Log("[%s] SentryRetryThread: rules loaded - waiting resume before detection resumes", self->ModuleName());
             self->SendRuleLoadResult(true, 0, "", requestedMetadata);
             break;
         }
@@ -756,6 +889,10 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
 void RaspSentryBase::Initialize()
 {
     m_running.store(true);
+    m_hostLivenessStop.store(false, std::memory_order_release);
+    m_hostAlive.store(false, std::memory_order_release);
+    m_hostDetectionPaused.store(true, std::memory_order_release);
+    m_ruleSnapshotReady.store(false, std::memory_order_release);
     EnsureLogCsInit();
     m_eventSink.Start([this](const AsyncEvent& event) {
         return SendDetectionEventSyncWorkerOnly(event);
@@ -783,11 +920,17 @@ void RaspSentryBase::Initialize()
     if (loaded)
     {
         SetActiveRuleMetadataForStatus(requestedMetadata);
+        MarkHostAlive(true);
+        MarkRuleSnapshotReady(true);
+        MarkDetectionPausedByHostState(false);
         Log("[%s] Initialize: rules loaded from sentry", ModuleName());
         SendRuleLoadResult(true, 0, "", requestedMetadata);
     }
     else
     {
+        MarkHostAlive(false);
+        MarkRuleSnapshotReady(false);
+        MarkDetectionPausedByHostState(true);
         SendRuleLoadResult(false,
                            connected ? 3 : 1,
                            connected ? "initial rule load failed" : "rules pipe unavailable",
@@ -798,24 +941,35 @@ void RaspSentryBase::Initialize()
     }
 
     m_configThread = CreateThread(nullptr, 0, ConfigPipeThreadProc, this, 0, nullptr);
+    m_hostLivenessThread = CreateThread(nullptr, 0, HostLivenessThreadProc, this, 0, nullptr);
+    if (m_hostLivenessThread == INVALID_HANDLE_VALUE || m_hostLivenessThread == nullptr) {
+        MarkHostAlive(false);
+        MarkRuleSnapshotReady(false);
+        MarkDetectionPausedByHostState(true);
+        LogWithSeverity(RaspDiagSeverity::Warning,
+                        "[%s] Initialize: failed to start host liveness watcher GLE=%lu - detection paused",
+                        ModuleName(), GetLastError());
+        m_hostLivenessThread = INVALID_HANDLE_VALUE;
+    }
     m_logThread    = CreateThread(nullptr, 0, LogForwardThreadProc,  this, 0, nullptr);
 
-    Log("[%s] Initialize: ConfigPipeThread + LogForwardThread started", ModuleName());
+    Log("[%s] Initialize: ConfigPipeThread + HostLivenessThread + LogForwardThread started", ModuleName());
 }
 
 void RaspSentryBase::Shutdown()
 {
-    m_running.store(false);
+    m_running.store(false, std::memory_order_release);
+    m_hostLivenessStop.store(true, std::memory_order_release);
+    m_hostDetectionPaused.store(true, std::memory_order_release);
+    m_ruleSnapshotReady.store(false, std::memory_order_release);
     m_eventSink.Stop(std::chrono::milliseconds(1000));
 
-    // 1. Drain log thread first (final flush before other threads close)
-    m_logThreadAlive = false;
-    if (m_logEvent) SetEvent(m_logEvent);
-    if (m_logThread != INVALID_HANDLE_VALUE)
+    // 1. Stop host liveness watcher before draining logs so its final messages flush.
+    if (m_hostLivenessThread != INVALID_HANDLE_VALUE)
     {
-        WaitForSingleObject(m_logThread, 3000);
-        CloseHandle(m_logThread);
-        m_logThread = INVALID_HANDLE_VALUE;
+        WaitForSingleObject(m_hostLivenessThread, 3000);
+        CloseHandle(m_hostLivenessThread);
+        m_hostLivenessThread = INVALID_HANDLE_VALUE;
     }
 
     // 2. Stop retry thread (exits within 100ms of m_running=false)
@@ -836,5 +990,15 @@ void RaspSentryBase::Shutdown()
         WaitForSingleObject(m_configThread, 2000);
         CloseHandle(m_configThread);
         m_configThread = INVALID_HANDLE_VALUE;
+    }
+
+    // 4. Drain log thread last (final flush after other background threads stop)
+    m_logThreadAlive = false;
+    if (m_logEvent) SetEvent(m_logEvent);
+    if (m_logThread != INVALID_HANDLE_VALUE)
+    {
+        WaitForSingleObject(m_logThread, 3000);
+        CloseHandle(m_logThread);
+        m_logThread = INVALID_HANDLE_VALUE;
     }
 }

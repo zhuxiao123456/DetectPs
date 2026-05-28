@@ -84,6 +84,8 @@ class RaspSentryBase
 public:
     void Initialize();
     void Shutdown();
+    bool ShouldBypassScanFast() const;
+    static bool AnyHostLivenessThreadRunning();
 
     // Diagnostic log �?thread-safe; enqueues to ring buffer; drains async to sentry pipe.
     // Module .cpp keeps a thin RaspLog(fmt,...) free function that calls g_engine->Log().
@@ -102,6 +104,15 @@ protected:
     // ── Shared state ─────────────────────────────────────────────────────
     RaspLuaEngine     m_luaEngine;
     std::atomic<bool> m_running{false};
+    std::atomic<bool> m_hostAlive{false};
+    std::atomic<bool> m_hostDetectionPaused{true};
+    std::atomic<bool> m_ruleSnapshotReady{false};
+
+    void MarkHostAlive(bool alive);
+    void MarkRuleSnapshotReady(bool ready);
+    void MarkDetectionPausedByHostState(bool paused);
+    bool IsHostAlive() const;
+    bool IsRuleSnapshotReady() const;
 
     // ── IPC ──────────────────────────────────────────────────────────────
     // Connect to \\.\pipe\amsi_detect_rules, send GET_ALL_RULES\n, read response.
@@ -221,6 +232,13 @@ private:
     // Unconditional for all modules �?active polling handles AMSI processes
     // that start before rasp_sentry (passive reload signal would never reach them).
     HANDLE m_retryThread  = INVALID_HANDLE_VALUE;
+    HANDLE m_hostLivenessThread = INVALID_HANDLE_VALUE;
+    std::atomic<bool> m_hostLivenessStop{false};
+    std::atomic<bool> m_hostLivenessRunning{false};
+    DWORD m_probeIntervalMs = 2000;
+    DWORD m_probeTimeoutMs = 200;
+    DWORD m_maxConsecutiveFailures = 3;
+    DWORD m_hostLostGraceMs = 6000;
     mutable AsyncEventSink m_eventSink;
     mutable std::mutex m_ruleMetadataMutex;
     RuleBundleMetadata m_activeRuleMetadata;
@@ -228,4 +246,7 @@ private:
     static DWORD WINAPI LogForwardThreadProc(LPVOID param);
     static DWORD WINAPI ConfigPipeThreadProc(LPVOID param);
     static DWORD WINAPI SentryRetryThreadProc(LPVOID param);
+    static DWORD WINAPI HostLivenessThreadProc(LPVOID param);
+    bool ProbeRulePipe() const;
+    void SleepHostLivenessInterruptible(DWORD sleepMs) const;
 };

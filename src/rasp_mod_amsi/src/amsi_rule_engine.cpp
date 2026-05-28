@@ -492,6 +492,9 @@ size_t AmsiRuleEngine::ActiveRuleCountForStatus() const {
 */
 void AmsiRuleEngine::OnReloadSignal() {
     EngineRuntime& runtime = GetAmsiEngineRuntime();
+    runtime.PauseDetection();
+    MarkDetectionPausedByHostState(true);
+    MarkRuleSnapshotReady(false);
     if (!runtime.CanAttemptReload()) {
         runtime.EmitTelemetry("reload_rejected", "state_not_reloadable");
         SendRuleLoadResult(false, 4, "reload rejected: state not reloadable");
@@ -522,7 +525,11 @@ void AmsiRuleEngine::OnReloadSignal() {
                            connectedOnce ? 3 : 1,
                            connectedOnce ? "reload build snapshot failed" : "reload rules pipe unavailable",
                            requestedMetadata);
-        Log("[RaspAmsi] OnReloadSignal: sentry unavailable after 3 attempts - keeping snapshot");
+        MarkHostAlive(false);
+        MarkRuleSnapshotReady(false);
+        MarkDetectionPausedByHostState(true);
+        LogWithSeverity(RaspDiagSeverity::Warning,
+                        "[RaspAmsi] Reload failed, AMSI detection remains paused");
         return;
     }
 
@@ -535,8 +542,12 @@ void AmsiRuleEngine::OnReloadSignal() {
 
     PublishSnapshot(next, effectiveLib);
     SetActiveRuleMetadataForStatus(requestedMetadata);
-    guard.Complete(true, "published");
+    MarkHostAlive(true);
+    MarkRuleSnapshotReady(true);
+    MarkDetectionPausedByHostState(true);
+    guard.Complete(true, "published_waiting_resume");
     SendRuleLoadResult(true, 0, "", requestedMetadata);
+    Log("[RaspAmsi] Reload succeeded, waiting resume before AMSI detection resumes");
     return;
 
 #if 0
@@ -644,12 +655,25 @@ void AmsiRuleEngine::OnUnloadSignal() {
 void AmsiRuleEngine::OnPauseDetectionSignal()
 {
     Log("[RaspAmsi] OnPauseDetectionSignal: detection paused");
+    MarkDetectionPausedByHostState(true);
     GetAmsiEngineRuntime().PauseDetection();
 }
 
 void AmsiRuleEngine::OnResumeDetectionSignal()
 {
-    Log("[RaspAmsi] OnResumeDetectionSignal: detection resumed");
+    if (!IsHostAlive()) {
+        LogWithSeverity(RaspDiagSeverity::Warning,
+                        "[RaspAmsi] Resume ignored because host is not alive");
+        return;
+    }
+    if (!IsRuleSnapshotReady()) {
+        LogWithSeverity(RaspDiagSeverity::Warning,
+                        "[RaspAmsi] Resume ignored because rule snapshot is not ready");
+        return;
+    }
+
+    MarkDetectionPausedByHostState(false);
+    Log("[RaspAmsi] AMSI detection resumed");
     GetAmsiEngineRuntime().ResumeDetection();
 }
 

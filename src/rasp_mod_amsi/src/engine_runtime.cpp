@@ -151,9 +151,10 @@ ScanGuard EngineRuntime::TryEnterScan()
     long active = 0;
     const bool pausedAtEntry = m_detectionPaused.load(std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(m_mutex);
-    // Pause/resume is an entry gate: scans that already hold a guard continue;
-    // the next scan entrance observes the pause bit and returns NoMatch upstream.
-    if (pausedAtEntry ||
+    const bool bypassAtEntry = m_engine && m_engine->ShouldBypassScanFast();
+    // Pause/resume and Host liveness are entry gates: scans that already hold a
+    // guard continue; the next scan entrance observes the gate and returns NoMatch.
+    if (pausedAtEntry || bypassAtEntry ||
         (m_state != EngineState::Ready && m_state != EngineState::Reloading) || !m_engine) {
         rejected = true;
         rejectedState = m_state;

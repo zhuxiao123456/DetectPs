@@ -239,4 +239,8 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv) {
     return g_factory.QueryInterface(riid, ppv);
 }
 
-STDAPI DllCanUnloadNow() { return S_FALSE; }
+STDAPI DllCanUnloadNow() {
+    if (RaspSentryBase::AnyHostLivenessThreadRunning())
+        return S_FALSE;
+    return S_FALSE;
+}
