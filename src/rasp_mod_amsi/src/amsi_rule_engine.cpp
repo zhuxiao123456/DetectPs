@@ -492,11 +492,14 @@ size_t AmsiRuleEngine::ActiveRuleCountForStatus() const {
 */
 void AmsiRuleEngine::OnReloadSignal() {
     EngineRuntime& runtime = GetAmsiEngineRuntime();
+    const bool wasPaused = m_hostDetectionPaused.load(std::memory_order_acquire);
+    const bool waitResumeAfterHostLost = IsWaitingResumeAfterHostLost();
     runtime.PauseDetection();
     MarkDetectionPausedByHostState(true);
     MarkRuleSnapshotReady(false);
     if (!runtime.CanAttemptReload()) {
         runtime.EmitTelemetry("reload_rejected", "state_not_reloadable");
+        MarkWaitingResumeAfterHostLost(true);
         SendRuleLoadResult(false, 4, "reload rejected: state not reloadable");
         return;
     }
@@ -528,6 +531,7 @@ void AmsiRuleEngine::OnReloadSignal() {
         MarkHostAlive(false);
         MarkRuleSnapshotReady(false);
         MarkDetectionPausedByHostState(true);
+        MarkWaitingResumeAfterHostLost(true);
         LogWithSeverity(RaspDiagSeverity::Warning,
                         "[RaspAmsi] Reload failed, AMSI detection remains paused");
         return;
@@ -536,6 +540,7 @@ void AmsiRuleEngine::OnReloadSignal() {
     auto guard = runtime.TryEnterReload("reload_signal");
     if (!guard.IsActive()) {
         runtime.EmitTelemetry("reload_rejected", "shutdown_or_state_changed");
+        MarkWaitingResumeAfterHostLost(true);
         SendRuleLoadResult(false, 4, "reload rejected: shutdown or state changed", requestedMetadata);
         return;
     }
@@ -544,10 +549,24 @@ void AmsiRuleEngine::OnReloadSignal() {
     SetActiveRuleMetadataForStatus(requestedMetadata);
     MarkHostAlive(true);
     MarkRuleSnapshotReady(true);
-    MarkDetectionPausedByHostState(true);
-    guard.Complete(true, "published_waiting_resume");
+    if (waitResumeAfterHostLost) {
+        MarkDetectionPausedByHostState(true);
+        guard.Complete(true, "published_waiting_resume");
+        SendRuleLoadResult(true, 0, "", requestedMetadata);
+        Log("[RaspAmsi] Reload succeeded after host lost, waiting resume before AMSI detection resumes");
+        return;
+    }
+
+    MarkDetectionPausedByHostState(wasPaused);
+    if (wasPaused) {
+        guard.Complete(true, "published_preserve_paused");
+        Log("[RaspAmsi] Reload succeeded, detection remains paused");
+    } else {
+        runtime.ResumeDetection();
+        guard.Complete(true, "published_preserve_running");
+        Log("[RaspAmsi] Reload succeeded, preserving active detection state");
+    }
     SendRuleLoadResult(true, 0, "", requestedMetadata);
-    Log("[RaspAmsi] Reload succeeded, waiting resume before AMSI detection resumes");
     return;
 
 #if 0
@@ -662,17 +681,20 @@ void AmsiRuleEngine::OnPauseDetectionSignal()
 void AmsiRuleEngine::OnResumeDetectionSignal()
 {
     if (!IsHostAlive()) {
+        MarkWaitingResumeAfterHostLost(true);
         LogWithSeverity(RaspDiagSeverity::Warning,
                         "[RaspAmsi] Resume ignored because host is not alive");
         return;
     }
     if (!IsRuleSnapshotReady()) {
+        MarkWaitingResumeAfterHostLost(true);
         LogWithSeverity(RaspDiagSeverity::Warning,
                         "[RaspAmsi] Resume ignored because rule snapshot is not ready");
         return;
     }
 
     MarkDetectionPausedByHostState(false);
+    MarkWaitingResumeAfterHostLost(false);
     Log("[RaspAmsi] AMSI detection resumed");
     GetAmsiEngineRuntime().ResumeDetection();
 }

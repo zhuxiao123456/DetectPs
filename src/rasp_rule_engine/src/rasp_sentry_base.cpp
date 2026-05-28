@@ -109,6 +109,11 @@ void RaspSentryBase::MarkDetectionPausedByHostState(bool paused)
     m_hostDetectionPaused.store(paused, std::memory_order_release);
 }
 
+void RaspSentryBase::MarkWaitingResumeAfterHostLost(bool waiting)
+{
+    m_waitingResumeAfterHostLost.store(waiting, std::memory_order_release);
+}
+
 bool RaspSentryBase::IsHostAlive() const
 {
     return m_hostAlive.load(std::memory_order_acquire);
@@ -117,6 +122,11 @@ bool RaspSentryBase::IsHostAlive() const
 bool RaspSentryBase::IsRuleSnapshotReady() const
 {
     return m_ruleSnapshotReady.load(std::memory_order_acquire);
+}
+
+bool RaspSentryBase::IsWaitingResumeAfterHostLost() const
+{
+    return m_waitingResumeAfterHostLost.load(std::memory_order_acquire);
 }
 
 bool RaspSentryBase::ShouldBypassScanFast() const
@@ -870,6 +880,7 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
             self->MarkHostAlive(true);
             self->MarkRuleSnapshotReady(true);
             self->MarkDetectionPausedByHostState(true);
+            self->MarkWaitingResumeAfterHostLost(true);
             self->Log("[%s] SentryRetryThread: rules loaded - waiting resume before detection resumes", self->ModuleName());
             self->SendRuleLoadResult(true, 0, "", requestedMetadata);
             break;
@@ -893,6 +904,7 @@ void RaspSentryBase::Initialize()
     m_hostAlive.store(false, std::memory_order_release);
     m_hostDetectionPaused.store(true, std::memory_order_release);
     m_ruleSnapshotReady.store(false, std::memory_order_release);
+    m_waitingResumeAfterHostLost.store(false, std::memory_order_release);
     EnsureLogCsInit();
     m_eventSink.Start([this](const AsyncEvent& event) {
         return SendDetectionEventSyncWorkerOnly(event);
@@ -923,6 +935,7 @@ void RaspSentryBase::Initialize()
         MarkHostAlive(true);
         MarkRuleSnapshotReady(true);
         MarkDetectionPausedByHostState(false);
+        MarkWaitingResumeAfterHostLost(false);
         Log("[%s] Initialize: rules loaded from sentry", ModuleName());
         SendRuleLoadResult(true, 0, "", requestedMetadata);
     }
@@ -931,6 +944,7 @@ void RaspSentryBase::Initialize()
         MarkHostAlive(false);
         MarkRuleSnapshotReady(false);
         MarkDetectionPausedByHostState(true);
+        MarkWaitingResumeAfterHostLost(true);
         SendRuleLoadResult(false,
                            connected ? 3 : 1,
                            connected ? "initial rule load failed" : "rules pipe unavailable",
@@ -946,6 +960,7 @@ void RaspSentryBase::Initialize()
         MarkHostAlive(false);
         MarkRuleSnapshotReady(false);
         MarkDetectionPausedByHostState(true);
+        MarkWaitingResumeAfterHostLost(true);
         LogWithSeverity(RaspDiagSeverity::Warning,
                         "[%s] Initialize: failed to start host liveness watcher GLE=%lu - detection paused",
                         ModuleName(), GetLastError());
@@ -962,6 +977,7 @@ void RaspSentryBase::Shutdown()
     m_hostLivenessStop.store(true, std::memory_order_release);
     m_hostDetectionPaused.store(true, std::memory_order_release);
     m_ruleSnapshotReady.store(false, std::memory_order_release);
+    m_waitingResumeAfterHostLost.store(true, std::memory_order_release);
     m_eventSink.Stop(std::chrono::milliseconds(1000));
 
     // 1. Stop host liveness watcher before draining logs so its final messages flush.

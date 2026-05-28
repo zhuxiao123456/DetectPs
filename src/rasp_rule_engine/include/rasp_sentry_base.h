@@ -107,12 +107,15 @@ protected:
     std::atomic<bool> m_hostAlive{false};
     std::atomic<bool> m_hostDetectionPaused{true};
     std::atomic<bool> m_ruleSnapshotReady{false};
+    std::atomic<bool> m_waitingResumeAfterHostLost{false};
 
     void MarkHostAlive(bool alive);
     void MarkRuleSnapshotReady(bool ready);
     void MarkDetectionPausedByHostState(bool paused);
+    void MarkWaitingResumeAfterHostLost(bool waiting);
     bool IsHostAlive() const;
     bool IsRuleSnapshotReady() const;
+    bool IsWaitingResumeAfterHostLost() const;
 
     // ── IPC ──────────────────────────────────────────────────────────────
     // Connect to \\.\pipe\amsi_detect_rules, send GET_ALL_RULES\n, read response.
