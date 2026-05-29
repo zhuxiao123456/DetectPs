@@ -550,10 +550,12 @@ void AmsiRuleEngine::OnReloadSignal() {
     MarkHostAlive(true);
     MarkRuleSnapshotReady(true);
     if (waitResumeAfterHostLost) {
-        MarkDetectionPausedByHostState(true);
-        guard.Complete(true, "published_waiting_resume");
+        MarkDetectionPausedByHostState(false);
+        MarkWaitingResumeAfterHostLost(false);
+        runtime.ResumeDetection();
+        guard.Complete(true, "published_recovered_after_host_lost");
         SendRuleLoadResult(true, 0, "", requestedMetadata);
-        Log("[RaspAmsi] Reload succeeded after host lost, waiting resume before AMSI detection resumes");
+        Log("[RaspAmsi] Reload succeeded after host lost - detection resumed");
         return;
     }
 

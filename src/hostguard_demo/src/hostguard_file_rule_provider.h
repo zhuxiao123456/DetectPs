@@ -2,6 +2,7 @@
 
 #include "amsi_rule_provider.h"
 
+#include <cstdint>
 #include <shared_mutex>
 #include <string>
 
@@ -16,15 +17,21 @@ public:
     void InvalidateRuleCache() override;
 
     bool cache_ready() const;
+    bool SetControlState(const std::string& state, std::string& error);
+    std::string control_state() const;
 
 private:
     std::string GetAllRulesJson();
     std::string GetAmsiRulesJson();
     std::string BuildAllRulesJson() const;
     std::string BuildAmsiRulesJson(const std::string& allRulesJson) const;
+    std::string BuildStateEnvelope(const std::string& rulesJson) const;
+    std::string RuleVersionFromJson(const std::string& rulesJson) const;
 
     std::string rulesPath_;
     mutable std::shared_mutex lock_;
     std::string cachedAllRules_;
     std::string cachedAmsiRules_;
+    std::string controlState_ = "running";
+    std::uint64_t stateRevision_ = 1;
 };

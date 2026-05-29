@@ -37,6 +37,14 @@ int RunHostGuardCommandLoop(HostGuardDemoApp& app)
             app.PrintStatus(std::cout);
             continue;
         }
+        if (command == "state running" || command == "set-state running") {
+            std::cout << (app.SetControlState("running") ? "state running set\n" : "state running failed\n");
+            continue;
+        }
+        if (command == "state unload" || command == "set-state unload") {
+            std::cout << (app.SetControlState("unload") ? "state unload set\n" : "state unload failed\n");
+            continue;
+        }
         if (command == "reload") {
             std::cout << (app.Reload() ? "reload sent\n" : "reload failed\n");
             continue;

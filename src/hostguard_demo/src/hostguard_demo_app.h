@@ -53,6 +53,7 @@ public:
     bool PauseDetection();
     bool ResumeDetection();
     bool Unload();
+    bool SetControlState(const std::string& state);
     void PrintStatus(std::ostream& output) const;
 
     bool started() const;

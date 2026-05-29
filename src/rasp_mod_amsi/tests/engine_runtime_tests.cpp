@@ -34,10 +34,23 @@ bool Expect(bool condition, const char* message)
     return condition;
 }
 
+class RuntimeReadyAmsiRuleEngine : public AmsiRuleEngine
+{
+public:
+    RuntimeReadyAmsiRuleEngine()
+    {
+        m_running.store(true, std::memory_order_release);
+        MarkHostAlive(true);
+        MarkRuleSnapshotReady(true);
+        MarkDetectionPausedByHostState(false);
+        MarkWaitingResumeAfterHostLost(false);
+    }
+};
+
 std::unique_ptr<EngineRuntime> MakeRuntime()
 {
     return std::make_unique<EngineRuntime>(
-        []() { return std::make_unique<AmsiRuleEngine>(); },
+        []() { return std::make_unique<RuntimeReadyAmsiRuleEngine>(); },
         [](AmsiRuleEngine&) { return true; });
 }
 

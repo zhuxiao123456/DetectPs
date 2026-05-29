@@ -148,11 +148,22 @@ int main()
     amsi_ipc::AmsiRuleResponse response;
     std::string error;
     ok &= Expect(provider.BuildRulesResponse("GET_RULES", response, error), "GET_RULES succeeds");
+    ok &= Expect(response.json.find(R"("state":"running")") != std::string::npos,
+                 "GET_RULES returns running state envelope");
     ok &= Expect(response.json.find("amsi-1") != std::string::npos, "GET_RULES includes AMSI rule");
     ok &= Expect(response.json.find("other-1") == std::string::npos, "GET_RULES filters non-AMSI rule");
 
     ok &= Expect(provider.BuildRulesResponse("GET_ALL_RULES", response, error), "GET_ALL_RULES succeeds");
+    ok &= Expect(response.json.find(R"("rules":)") != std::string::npos,
+                 "GET_ALL_RULES returns rules field in state envelope");
     ok &= Expect(response.json.find("other-1") != std::string::npos, "GET_ALL_RULES includes full rule set");
+    ok &= Expect(provider.SetControlState("unload", error), "provider accepts unload state");
+    ok &= Expect(provider.BuildRulesResponse("GET_ALL_RULES", response, error), "GET_ALL_RULES succeeds in unload state");
+    ok &= Expect(response.json.find(R"("state":"unload")") != std::string::npos,
+                 "GET_ALL_RULES returns unload state envelope");
+    ok &= Expect(response.json.find("other-1") == std::string::npos,
+                 "unload state response does not expose rule payload");
+    ok &= Expect(provider.SetControlState("running", error), "provider returns to running state");
 
     {
         std::ofstream rules(rulesPath, std::ios::binary);
@@ -224,7 +235,7 @@ int main()
         HostGuardDemoApp commandApp(commandOptions);
         ok &= Expect(commandApp.Start(), "HostGuardDemoApp starts for command loop policy test");
 
-        std::istringstream input("pause-detection\nstatus\nresume-detection\nquit\n");
+        std::istringstream input("state unload\nstatus\nstate running\npause-detection\nstatus\nresume-detection\nquit\n");
         std::ostringstream output;
         auto* oldInput = std::cin.rdbuf(input.rdbuf());
         auto* oldOutput = std::cout.rdbuf(output.rdbuf());
@@ -233,6 +244,12 @@ int main()
         std::cout.rdbuf(oldOutput);
 
         ok &= Expect(commandResult == 0, "command loop exits successfully");
+        ok &= Expect(output.str().find("state unload set") != std::string::npos,
+                     "command loop accepts state unload command");
+        ok &= Expect(output.str().find("controlState: unload") != std::string::npos,
+                     "command loop status shows unload state");
+        ok &= Expect(output.str().find("state running set") != std::string::npos,
+                     "command loop accepts state running command");
         ok &= Expect(output.str().find("pause-detection sent") != std::string::npos,
                      "command loop accepts pause-detection command");
         ok &= Expect(output.str().find("amsiIpc.policyEnabled: no") != std::string::npos,

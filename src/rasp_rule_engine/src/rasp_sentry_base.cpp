@@ -43,6 +43,62 @@
 static INIT_ONCE s_logCsOnce = INIT_ONCE_STATIC_INIT;
 static std::atomic<long> s_hostLivenessThreads{0};
 
+namespace {
+
+struct HostStateEnvelope {
+    bool present = false;
+    std::string state;
+    std::string stateVersion;
+    std::string ruleVersion;
+    std::string rulesJson;
+};
+
+bool TryParseHostStateEnvelope(const std::string& response, HostStateEnvelope& envelope)
+{
+    envelope = HostStateEnvelope{};
+    RuleJsonParser::Parser parser(response.data(), response.size());
+    if (!parser.consume('{')) {
+        return false;
+    }
+
+    while (!parser.peek('}') && parser.ok()) {
+        std::string key;
+        if (!parser.read_string(key) || !parser.consume(':')) {
+            return false;
+        }
+
+        if (key == "state") {
+            if (!parser.read_string(envelope.state)) {
+                parser.skip_value();
+            }
+        } else if (key == "stateVersion") {
+            if (!parser.read_string(envelope.stateVersion)) {
+                parser.skip_value();
+            }
+        } else if (key == "ruleVersion") {
+            if (!parser.read_string(envelope.ruleVersion)) {
+                parser.skip_value();
+            }
+        } else if (key == "rules") {
+            parser.skip_ws();
+            const char* begin = parser.p;
+            parser.skip_value();
+            const char* end = parser.p;
+            if (end > begin) {
+                envelope.rulesJson.assign(begin, static_cast<size_t>(end - begin));
+            }
+        } else {
+            parser.skip_value();
+        }
+
+        parser.consume(',');
+    }
+
+    envelope.present = !envelope.state.empty();
+    return envelope.present;
+}
+
+} // namespace
 static bool BuildCurrentUserConfigPipeSecurityAttributes(SECURITY_ATTRIBUTES& sa,
                                                          PSECURITY_DESCRIPTOR& sd,
                                                          std::wstring& sddlOut)
@@ -363,14 +419,49 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
 
     Log("[%s] ConnectSentry: received %lu bytes - parsing", ModuleName(), bytesRead);
 
+    RuleBundleMetadata envelopeMetadata;
+    HostStateEnvelope envelope;
+    if (TryParseHostStateEnvelope(response, envelope)) {
+        if (envelope.state == "unload") {
+            Log("[%s] ConnectSentry: host state=unload - entering inert mode", ModuleName());
+            OnUnloadSignal();
+            return false;
+        }
+        if (envelope.state != "running") {
+            LogWithSeverity(RaspDiagSeverity::Warning,
+                            "[%s] ConnectSentry: unsupported host state=%s",
+                            ModuleName(), envelope.state.c_str());
+            return false;
+        }
+        if (envelope.rulesJson.empty()) {
+            LogWithSeverity(RaspDiagSeverity::Warning,
+                            "[%s] ConnectSentry: host state envelope missing rules",
+                            ModuleName());
+            return false;
+        }
+        response = envelope.rulesJson;
+        envelopeMetadata.version = envelope.ruleVersion;
+        Log("[%s] ConnectSentry: host state=running stateVersion=%s ruleVersion=%s",
+            ModuleName(), envelope.stateVersion.c_str(), envelope.ruleVersion.c_str());
+    }
+
     jsonOut = response;
 
     // Pre-extract the lib source so callers (SentryRetryThreadProc, Initialize)
     // can pass it directly to ParseAndSwap. ParseAndSwap re-parses the JSON to
-    // build its typed snapshot â€?the double parse is acceptable at init/reload time.
+    // build its typed snapshot. If a state envelope supplied ruleVersion, keep it
+    // as metadata when the inner rules JSON does not carry a version field.
     libSourceOut.clear();
     std::vector<std::unique_ptr<RaspRuleBase>> dummy;
-    ParseRulesJson(response, libSourceOut, dummy, &metadataOut);
+    RuleBundleMetadata parsedMetadata;
+    ParseRulesJson(response, libSourceOut, dummy, &parsedMetadata);
+    metadataOut = parsedMetadata;
+    if (metadataOut.version.empty()) {
+        metadataOut.version = envelopeMetadata.version;
+    }
+    if (metadataOut.hash.empty()) {
+        metadataOut.hash = envelopeMetadata.hash;
+    }
 
     Log("[%s] ConnectSentry: %zu rule(s) found, lib=%zu bytes, version=%zu bytes, hash=%zu bytes",
         ModuleName(), dummy.size(), libSourceOut.size(), metadataOut.version.size(), metadataOut.hash.size());
@@ -879,9 +970,9 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
             self->SetActiveRuleMetadataForStatus(requestedMetadata);
             self->MarkHostAlive(true);
             self->MarkRuleSnapshotReady(true);
-            self->MarkDetectionPausedByHostState(true);
-            self->MarkWaitingResumeAfterHostLost(true);
-            self->Log("[%s] SentryRetryThread: rules loaded - waiting resume before detection resumes", self->ModuleName());
+            self->MarkDetectionPausedByHostState(false);
+            self->MarkWaitingResumeAfterHostLost(false);
+            self->Log("[%s] SentryRetryThread: rules loaded - detection resumed", self->ModuleName());
             self->SendRuleLoadResult(true, 0, "", requestedMetadata);
             break;
         }

@@ -5,6 +5,7 @@
 #include <cstring>
 #include <fstream>
 #include <mutex>
+#include <sstream>
 
 using json = nlohmann::json;
 
@@ -18,11 +19,11 @@ bool HostGuardFileRuleProvider::BuildRulesResponse(const std::string& command,
                                                    std::string& error)
 {
     if (_stricmp(command.c_str(), "GET_RULES") == 0) {
-        out.json = GetAmsiRulesJson();
+        out.json = BuildStateEnvelope(GetAmsiRulesJson());
         return true;
     }
     if (_stricmp(command.c_str(), "GET_ALL_RULES") == 0) {
-        out.json = GetAllRulesJson();
+        out.json = BuildStateEnvelope(GetAllRulesJson());
         return true;
     }
 
@@ -41,6 +42,27 @@ bool HostGuardFileRuleProvider::cache_ready() const
 {
     std::shared_lock<std::shared_mutex> guard(lock_);
     return !cachedAllRules_.empty() || !cachedAmsiRules_.empty();
+}
+
+bool HostGuardFileRuleProvider::SetControlState(const std::string& state, std::string& error)
+{
+    if (state != "running" && state != "unload") {
+        error = "state must be running or unload";
+        return false;
+    }
+
+    std::unique_lock<std::shared_mutex> guard(lock_);
+    if (controlState_ != state) {
+        controlState_ = state;
+        ++stateRevision_;
+    }
+    return true;
+}
+
+std::string HostGuardFileRuleProvider::control_state() const
+{
+    std::shared_lock<std::shared_mutex> guard(lock_);
+    return controlState_;
 }
 
 std::string HostGuardFileRuleProvider::GetAllRulesJson()
@@ -115,4 +137,45 @@ std::string HostGuardFileRuleProvider::BuildAmsiRulesJson(const std::string& all
     } catch (...) {
         return "[]";
     }
+}
+
+std::string HostGuardFileRuleProvider::BuildStateEnvelope(const std::string& rulesJson) const
+{
+    std::string state;
+    std::uint64_t revision = 0;
+    {
+        std::shared_lock<std::shared_mutex> guard(lock_);
+        state = controlState_;
+        revision = stateRevision_;
+    }
+
+    json rules = json::object();
+    try {
+        rules = json::parse(rulesJson);
+    } catch (...) {
+        rules = json::object();
+    }
+
+    const std::string ruleVersion = RuleVersionFromJson(rulesJson);
+    std::ostringstream stateVersion;
+    stateVersion << state << "-" << revision;
+
+    json envelope;
+    envelope["state"] = state;
+    envelope["stateVersion"] = stateVersion.str();
+    envelope["ruleVersion"] = ruleVersion;
+    envelope["rules"] = (state == "running") ? rules : json::object();
+    return envelope.dump();
+}
+
+std::string HostGuardFileRuleProvider::RuleVersionFromJson(const std::string& rulesJson) const
+{
+    try {
+        const json root = json::parse(rulesJson);
+        if (root.is_object() && root.contains("version") && root["version"].is_string()) {
+            return root["version"].get<std::string>();
+        }
+    } catch (...) {
+    }
+    return "hostguard-demo-rules";
 }
