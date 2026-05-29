@@ -99,9 +99,11 @@ bool HostGuardDemoApp::Start()
                       NarrowAscii(options_.controlStatusPipeName);
         return false;
     }
-    // Legacy config/control is DLL-listener based: loaded DLL instances create
-    // amsi_detect_config and the Host connects to broadcast 0x01/0x02/0x03/0x04.
-    // Do not treat an existing config pipe as a competing Host server.
+    if (PipeServerExists(options_.configPipeName)) {
+        startError_ = std::string(HostGuardPipeModeName(options_.pipeMode)) +
+                      " config pipe is already served: " + NarrowAscii(options_.configPipeName);
+        return false;
+    }
 
     hostguard_demo::EnsureDirectory(options_.logDir);
 

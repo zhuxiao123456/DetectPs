@@ -9,7 +9,7 @@
 //   - ParseRulesJson()  (base-field recursive-descent parser)
 //   - SendDetectionEvent() (replaces amsi_event_sender::SendAmsiEvent)
 //   - LogForwardThreadProc  (ring-buffer drain -> amsi_detect_events)
-//   - ConfigPipeThreadProc  (reload signal server on amsi_detect_config)
+//   - ConfigPipeThreadProc  (reload signal client on amsi_detect_config)
 //   - SentryRetryThreadProc (polls sentry every 5 s until first load)
 //   - Initialize() / Shutdown()
 // =========================================================================
@@ -99,51 +99,6 @@ bool TryParseHostStateEnvelope(const std::string& response, HostStateEnvelope& e
 }
 
 } // namespace
-static bool BuildCurrentUserConfigPipeSecurityAttributes(SECURITY_ATTRIBUTES& sa,
-                                                         PSECURITY_DESCRIPTOR& sd,
-                                                         std::wstring& sddlOut)
-{
-    sa = { sizeof(sa), nullptr, FALSE };
-    sd = nullptr;
-
-    HANDLE token = nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token))
-        return false;
-
-    DWORD bytes = 0;
-    GetTokenInformation(token, TokenUser, nullptr, 0, &bytes);
-    if (bytes == 0)
-    {
-        CloseHandle(token);
-        return false;
-    }
-
-    std::vector<BYTE> tokenBuffer(bytes);
-    if (!GetTokenInformation(token, TokenUser, tokenBuffer.data(), bytes, &bytes))
-    {
-        CloseHandle(token);
-        return false;
-    }
-    CloseHandle(token);
-
-    auto* tokenUser = reinterpret_cast<TOKEN_USER*>(tokenBuffer.data());
-    LPWSTR userSid = nullptr;
-    if (!ConvertSidToStringSidW(tokenUser->User.Sid, &userSid))
-        return false;
-
-    sddlOut = L"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;";
-    sddlOut += userSid;
-    sddlOut += L")";
-    LocalFree(userSid);
-
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            sddlOut.c_str(), SDDL_REVISION_1, &sd, nullptr))
-        return false;
-
-    sa.lpSecurityDescriptor = sd;
-    return true;
-}
-
 
 bool RaspSentryBase::AnyHostLivenessThreadRunning()
 {
@@ -855,92 +810,68 @@ DWORD WINAPI RaspSentryBase::HostLivenessThreadProc(LPVOID param)
     return 0;
 }
 // =========================================================================
-// ConfigPipeThreadProc - server on \\.\pipe\amsi_detect_config
-// Dark period of 600ms after handling prevents BroadcastReload reconnect loop.
-// (See AMSI ConfigPipeThread comments for full explanation.)
+// ConfigPipeThreadProc - client of \\.\pipe\amsi_detect_config.
+// Host owns the config pipe server; this thread reconnects after each signal.
 // =========================================================================
 
 DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
 {
     auto* self = static_cast<RaspSentryBase*>(param);
 
-    self->Log("[%s] ConfigPipeThread: started", self->ModuleName());
-
-    SECURITY_DESCRIPTOR sd = {};
-    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
-    SetSecurityDescriptorDacl(&sd, TRUE, nullptr, FALSE); // NULL DACL = allow all.
-
-    SECURITY_ATTRIBUTES sa = {};
-    sa.nLength = sizeof(sa);
-    sa.lpSecurityDescriptor = &sd;
-    sa.bInheritHandle = FALSE;
-
-    auto CreateConfigPipe = [&sa]() -> HANDLE {
-        return CreateNamedPipeW(
-            L"\\\\.\\pipe\\amsi_detect_config",
-            PIPE_ACCESS_INBOUND,
-            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
-            PIPE_UNLIMITED_INSTANCES,
-            0, 1, 0, &sa);
-    };
+    self->Log("[%s] ConfigPipeClientThread: started", self->ModuleName());
 
     while (self->m_running.load()) {
-        HANDLE hPipe = CreateConfigPipe();
-        if (hPipe == INVALID_HANDLE_VALUE) {
-            self->LogWithSeverity(RaspDiagSeverity::Warning,
-                                  "[%s] ConfigPipeThread: CreateNamedPipeW failed GLE=%lu - retrying in 1s",
-                                  self->ModuleName(), GetLastError());
-            Sleep(1000);
+        if (!WaitNamedPipeW(L"\\\\.\\pipe\\amsi_detect_config", 500)) {
+            self->SleepHostLivenessInterruptible(500);
             continue;
         }
 
-        BOOL connected = ConnectNamedPipe(hPipe, nullptr);
-        DWORD connectErr = connected ? 0 : GetLastError();
-        if (!self->m_running.load())
-        {
-            DisconnectNamedPipe(hPipe);
-            CloseHandle(hPipe);
-            break;
-        }
-        if (!connected && connectErr != ERROR_PIPE_CONNECTED)
-        {
-            self->Log("[%s] ConfigPipeThread: ConnectNamedPipe failed GLE=%lu",
-                      self->ModuleName(), connectErr);
-            CloseHandle(hPipe);
+        HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_config",
+                                   GENERIC_READ,
+                                   0,
+                                   nullptr,
+                                   OPEN_EXISTING,
+                                   0,
+                                   nullptr);
+        if (hPipe == INVALID_HANDLE_VALUE) {
+            self->SleepHostLivenessInterruptible(500);
             continue;
         }
 
         BYTE signal = 0;
         DWORD readBytes = 0;
-        ReadFile(hPipe, &signal, 1, &readBytes, nullptr);
-        DisconnectNamedPipe(hPipe);
+        const BOOL readOk = ReadFile(hPipe, &signal, 1, &readBytes, nullptr);
         CloseHandle(hPipe);
+        if (!self->m_running.load()) {
+            break;
+        }
+        if (!readOk || readBytes != 1) {
+            self->SleepHostLivenessInterruptible(200);
+            continue;
+        }
 
-        self->Log("[%s] ConfigPipeThread: signal=0x%02X (readBytes=%lu)",
+        self->Log("[%s] ConfigPipeClientThread: signal=0x%02X (readBytes=%lu)",
                   self->ModuleName(), static_cast<unsigned>(signal), readBytes);
 
         if (signal == 0x01 && self->m_running.load()) {
-            self->Log("[%s] ConfigPipeThread: reload signal - pulling updated rules",
+            self->Log("[%s] ConfigPipeClientThread: reload signal - pulling updated rules",
                       self->ModuleName());
             self->OnReloadSignal();
-
-            if (self->m_running.load())
-                Sleep(600);
         } else if (signal == 0x02) {
-            self->Log("[%s] ConfigPipeThread: unload signal - calling OnUnloadSignal()",
+            self->Log("[%s] ConfigPipeClientThread: unload signal - calling OnUnloadSignal()",
                       self->ModuleName());
             self->OnUnloadSignal();
         } else if (signal == 0x03) {
-            self->Log("[%s] ConfigPipeThread: pause detection signal - disabling scan entry",
+            self->Log("[%s] ConfigPipeClientThread: pause detection signal - disabling scan entry",
                       self->ModuleName());
             self->OnPauseDetectionSignal();
         } else if (signal == 0x04) {
-            self->Log("[%s] ConfigPipeThread: resume detection signal - enabling scan entry",
+            self->Log("[%s] ConfigPipeClientThread: resume detection signal - enabling scan entry",
                       self->ModuleName());
             self->OnResumeDetectionSignal();
         }
     }
-    self->Log("[%s] ConfigPipeThread: exiting", self->ModuleName());
+    self->Log("[%s] ConfigPipeClientThread: exiting", self->ModuleName());
     return 0;
 }
 // =========================================================================
@@ -1087,13 +1018,9 @@ void RaspSentryBase::Shutdown()
         m_retryThread = INVALID_HANDLE_VALUE;
     }
 
-    // 3. Unblock ConnectNamedPipe with a dummy client, then wait
+    // 3. Stop config client thread. It wakes from bounded WaitNamedPipe/read retry loops.
     if (m_configThread != INVALID_HANDLE_VALUE)
     {
-        HANDLE hDummy = CreateFileW(L"\\\\.\\pipe\\amsi_detect_config",
-                                    GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-        if (hDummy != INVALID_HANDLE_VALUE) CloseHandle(hDummy);
-
         WaitForSingleObject(m_configThread, 2000);
         CloseHandle(m_configThread);
         m_configThread = INVALID_HANDLE_VALUE;

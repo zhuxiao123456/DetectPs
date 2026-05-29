@@ -74,6 +74,7 @@ private:
         EventCollector,
         ControlStatusCollector,
         RuleServer,
+        ConfigBroadcaster,
         ConfigWatcher,
         AmsiStagingWatcher,
     };
@@ -90,6 +91,7 @@ private:
     std::unique_ptr<amsi_ipc::AmsiControlStatusChannel> injectedControlStatusChannel_;
     std::unique_ptr<amsi_ipc::NamedPipeServerPool> injectedControlStatusPipePool_;
     std::unique_ptr<RuleServer> ruleServer_;
+    std::unique_ptr<amsi_ipc::AmsiConfigBroadcaster> configBroadcaster_;
     std::unique_ptr<ConfigWatcher> configWatcher_;
     std::unique_ptr<AmsiStagingWatcher> stagingWatcher_;
 };
