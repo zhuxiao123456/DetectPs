@@ -492,7 +492,6 @@ size_t AmsiRuleEngine::ActiveRuleCountForStatus() const {
 */
 void AmsiRuleEngine::OnReloadSignal() {
     EngineRuntime& runtime = GetAmsiEngineRuntime();
-    const bool wasPaused = m_hostDetectionPaused.load(std::memory_order_acquire);
     const bool waitResumeAfterHostLost = IsWaitingResumeAfterHostLost();
     runtime.PauseDetection();
     MarkDetectionPausedByHostState(true);
@@ -559,15 +558,11 @@ void AmsiRuleEngine::OnReloadSignal() {
         return;
     }
 
-    MarkDetectionPausedByHostState(wasPaused);
-    if (wasPaused) {
-        guard.Complete(true, "published_preserve_paused");
-        Log("[RaspAmsi] Reload succeeded, detection remains paused");
-    } else {
-        runtime.ResumeDetection();
-        guard.Complete(true, "published_preserve_running");
-        Log("[RaspAmsi] Reload succeeded, preserving active detection state");
-    }
+    MarkDetectionPausedByHostState(false);
+    MarkWaitingResumeAfterHostLost(false);
+    runtime.ResumeDetection();
+    guard.Complete(true, "published_running");
+    Log("[RaspAmsi] Reload succeeded - detection resumed");
     SendRuleLoadResult(true, 0, "", requestedMetadata);
     return;
 
