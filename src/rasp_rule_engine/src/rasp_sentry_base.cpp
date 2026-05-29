@@ -820,10 +820,22 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
 
     self->Log("[%s] ConfigPipeClientThread: started", self->ModuleName());
 
+    bool configPipeWasVisible = false;
     while (self->m_running.load()) {
         if (!WaitNamedPipeW(L"\\\\.\\pipe\\amsi_detect_config", 500)) {
+            if (configPipeWasVisible) {
+                self->LogWithSeverity(RaspDiagSeverity::Warning,
+                                      "[%s] ConfigPipeClientThread: host config pipe unavailable - waiting",
+                                      self->ModuleName());
+                configPipeWasVisible = false;
+            }
             self->SleepHostLivenessInterruptible(500);
             continue;
+        }
+        if (!configPipeWasVisible) {
+            self->Log("[%s] ConfigPipeClientThread: host config pipe visible - connecting",
+                      self->ModuleName());
+            configPipeWasVisible = true;
         }
 
         HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_config",
