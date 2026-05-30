@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "AmsiIpcRuntime.h"
+
 namespace Engine {
 
     class AmsiDetectDllManager {
@@ -29,7 +31,7 @@ namespace Engine {
         bool UnregisterAmsiProvider();
         
         // 更新dll（返回详细状态码）.
-        int UpdateAmsiDll(const std::string &stagingDllPath);
+        int UpdateAmsiDll(const std::string &stagingDllPath, std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime);
 
     private:
         int BroadcastUnloadSignal();

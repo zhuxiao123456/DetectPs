@@ -29,6 +29,7 @@
 #include <cctype>
 #include <functional>
 #include <mutex>
+#include <sstream>
 #include <thread>
 #include <utility>
 
@@ -47,16 +48,38 @@ namespace Engine {
         const uint32_t kDiagDroppedSummaryIntervalMs = 60 * 1000;
 
         /**
-         * ¼Ì³Ğ×Ô amsi_ipc::IAmsiRuleProvider¡£ÄÚ²¿·â×°ÁË»¥³âËøºÍ¹æÔò¿ìÕÕ AmsiRuleSnapshot¡£
-         * µ±¹ÜµÀÊÕµ½Ì½Õë·¢À´µÄ GET_RULES »ò GET_ALL_RULES ÃüÁîÊ±£¬¸ºÔğ°²È«µØ´ÓÄÚ´æÖĞÌáÈ¡¶ÔÓ¦µÄ JSON ÎÄ±¾·µ»Ø¸øÌ½Õë
+         * Runtime rule provider backed by the in-memory AmsiRuleSnapshot.
          */
+        std::string JsonEscapeForAmsiState(const std::string &value) {
+            std::ostringstream oss;
+            for (const char ch: value) {
+                switch (ch) {
+                    case '\\': oss << "\\\\"; break;
+                    case '"': oss << "\\\""; break;
+                    case '\b': oss << "\\b"; break;
+                    case '\f': oss << "\\f"; break;
+                    case '\n': oss << "\\n"; break;
+                    case '\r': oss << "\\r"; break;
+                    case '\t': oss << "\\t"; break;
+                    default: oss << ch; break;
+                }
+            }
+            return oss.str();
+        }
+
+        std::string BuildUpgradeUnloadingRulesJson(const std::string &stateVersion, const std::string &ruleVersion) {
+            std::ostringstream oss;
+            oss << "{\"desiredRuntimeState\":\"unloading\",\"state\":\"unload\",\"stateVersion\":\""
+                << JsonEscapeForAmsiState(stateVersion)
+                << "\",\"ruleVersion\":\""
+                << JsonEscapeForAmsiState(ruleVersion)
+                << "\",\"rules\":{}}";
+            return oss.str();
+        }
+
         class RuntimeRuleProvider final : public amsi_ipc::IAmsiRuleProvider {
         public:
-            bool UpdateSnapshot(const AmsiRuleSnapshot &snapshot, std::string &error) {
-                if (snapshot.allRulesJson.empty()) {
-                    error = "all rules json is empty";
-                    return false;
-                }
+            bool UpdateSnapshot(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error) {
                 if (snapshot.amsiRulesJson.empty()) {
                     error = "amsi rules json is empty";
                     return false;
@@ -76,17 +99,11 @@ namespace Engine {
                                     amsi_ipc::AmsiRuleResponse &out,
                                     std::string &error) override {
                 std::lock_guard<std::mutex> lock(mutex_);
-                if (command == "GET_RULES") {
+                if (command == "GET_ALL_RULES") {
                     out.json = snapshot_.amsiRulesJson;
                     error.clear();
                     return !out.json.empty();
                 }
-                if (command == "GET_ALL_RULES") {
-                    out.json = snapshot_.allRulesJson;
-                    error.clear();
-                    return !out.json.empty();
-                }
-
                 error = "unsupported rules command: " + command;
                 return false;
             }
@@ -95,12 +112,12 @@ namespace Engine {
 
         private:
             std::mutex mutex_;
-            AmsiRuleSnapshot snapshot_;
+            AmsiDetect::AmsiRuleSnapshot snapshot_;
         };
 
         /**
-         * ±ê×¼µÄ Sink »Øµ÷ÊÊÅäÆ÷¡£Í¨¹ı½ÓÊÕÒ»¸ö lambda ±í´ïÊ½£¨onEvent_ / onStatus_£©£¬
-         * °Ñµ×²ã³éÏóµÄ¹ÜµÀ»Øµ÷Êı¾İÒ»À¿×Ó½ÓÈëµ½ÔËĞĞÊ±Ö÷ÀàµÄ SubmitEventPayload
+         * æ ‡å‡†çš„ Sink å›è°ƒé€‚é…å™¨ã€‚é€šè¿‡æ¥æ”¶ä¸€ä¸ª lambda è¡¨è¾¾å¼ï¼ˆonEvent_ / onStatus_ï¼‰ï¼Œ
+         * æŠŠåº•å±‚æŠ½è±¡çš„ç®¡é“å›è°ƒæ•°æ®ä¸€æ½å­æ¥å…¥åˆ°è¿è¡Œæ—¶ä¸»ç±»çš„ SubmitEventPayload
          */
         class RuntimeEventSink final : public amsi_ipc::IAmsiEventSink {
         public:
@@ -261,6 +278,11 @@ namespace Engine {
             Error
         };
 
+        /**
+         * ä»åŸå§‹çš„ JSON å­—ç¬¦ä¸²ä¸­æå–å‡ºæ­£ç¡®çš„æ—¥å¿—çº§åˆ«
+         * @param payload åŒ…å«å®Œæ•´æ—¥å¿—æ•°æ®çš„ JSON æ ¼å¼å­—ç¬¦ä¸²çš„å¸¸é‡å¼•ç”¨
+         * @return  è§£æå‡ºçš„æšä¸¾å€¼ã€‚å¦‚æœè§£æå¤±è´¥ï¼Œé»˜è®¤è¿”å› DllDiagLogLevel::Info
+         */
         DllDiagLogLevel ParseDllDiagLogLevel(const std::string &payload) {
             std::string severity;
             if (!ExtractJsonStringField(payload, "sev", severity)) {
@@ -283,15 +305,21 @@ namespace Engine {
             return DllDiagLogLevel::Info;
         }
 
+        /**
+         * å®é™…æ—¥å¿—ç¼–å†™
+         * @param level  é¢„å…ˆè§£æå¥½çš„æ—¥å¿—çº§åˆ«
+         * @param rawLen  åŸå§‹æ—¥å¿—è´Ÿè½½çš„é•¿åº¦
+         * @param line  å®é™…è¦è®°å½•çš„æ—¥å¿—æ–‡æœ¬æˆ–å®Œæ•´çš„ JSON å­—ç¬¦ä¸²
+         */
         void WriteDllDiagnosticLog(DllDiagLogLevel level,
                                    size_t rawLen,
                                    const std::string &line) {
             switch (level) {
                 case DllDiagLogLevel::Debug:
                     DebugLogf(AmsiDetect::GetLoggerPtr(),
-                               "Recv amsi dll diagnostic payload rawLen=%lu payload: %s.",
-                               static_cast<unsigned long>(rawLen),
-                               line);
+                              "Recv amsi dll diagnostic payload rawLen=%lu payload: %s.",
+                              static_cast<unsigned long>(rawLen),
+                              line);
                     break;
                 case DllDiagLogLevel::Warning:
                     WarningLogf2(AmsiDetect::GetLoggerPtr(),
@@ -318,7 +346,9 @@ namespace Engine {
 
     struct AmsiIpcRuntime::Impl {
         AmsiIpcRuntimeConfig config;
-        AmsiRuleSnapshot snapshot;
+        AmsiDetect::AmsiRuleSnapshot snapshot;
+        AmsiDetect::AmsiRuleSnapshot preUpgradeSnapshot;
+        bool hasPreUpgradeSnapshot = false;
 
         std::unique_ptr<RuntimeRuleProvider> ruleProvider;
         std::unique_ptr<RuntimeEventSink> eventSink;
@@ -379,8 +409,8 @@ namespace Engine {
         AmsiIpcBroadcastSummary lastUnloadBroadcast;
 
         /**
-         * ÒÔÑÏ¸ñÏà·´µÄË³ĞòÊÍ·ÅËùÓĞµÄ¹ÜµÀ³Ø£¨Pool£©¡¢Í¨ĞÅÍ¨µÀ£¨Channel£©¡¢Êı¾İ½ÓÊÕ²Û£¨Sink£©ºÍ¹æÔòÌá¹©Õß£¬
-         * ·ÀÖ¹¶àÏß³Ì»·¾³ÏÂ¾ä±úÊÍ·ÅÊ±Òı·¢Ğü¿ÕÖ¸Õë±ÀÀ£
+         * ä»¥ä¸¥æ ¼ç›¸åçš„é¡ºåºé‡Šæ”¾æ‰€æœ‰çš„ç®¡é“æ± ï¼ˆPoolï¼‰ã€é€šä¿¡é€šé“ï¼ˆChannelï¼‰ã€æ•°æ®æ¥æ”¶æ§½ï¼ˆSinkï¼‰å’Œè§„åˆ™æä¾›è€…ï¼Œ
+         * é˜²æ­¢å¤šçº¿ç¨‹ç¯å¢ƒä¸‹å¥æŸ„é‡Šæ”¾æ—¶å¼•å‘æ‚¬ç©ºæŒ‡é’ˆå´©æºƒ
          */
         void ResetRuntimeObjects() {
             acceptingPayload.store(false);
@@ -427,6 +457,7 @@ namespace Engine {
                 lastUnloadBroadcast = summary;
             }
         }
+
         bool StopDeadlineReached() const {
             return stopDeadlineMs != 0 && NowMs() >= stopDeadlineMs;
         }
@@ -453,18 +484,20 @@ namespace Engine {
         }
 
         /*
-         * ¸ù¾İµ±Ç°µÄ config.queueConfig ±ß½ç²ÎÊı£¬ÖØÖÃÄÚ²¿Èı´ó Bounded ×èÈû¶ÓÁĞ£¨¼ì²â¡¢Õï¶Ï¡¢×´Ì¬£©
-         * µÄÈİÁ¿ºÍÄÚ´æÏŞÖÆ£¬²¢½« stopped_ ×´Ì¬¸´Î»
+         * æ ¹æ®å½“å‰çš„ config.queueConfig è¾¹ç•Œå‚æ•°ï¼Œé‡ç½®å†…éƒ¨ä¸‰å¤§ Bounded é˜»å¡é˜Ÿåˆ—ï¼ˆæ£€æµ‹ã€è¯Šæ–­ã€çŠ¶æ€ï¼‰
+         * çš„å®¹é‡å’Œå†…å­˜é™åˆ¶ï¼Œå¹¶å°† stopped_ çŠ¶æ€å¤ä½
          */
         void ResetQueues() {
-            detectionQueue.Reset(AmsiGlobalConfRef.GetDetectionQueueCapacity(), AmsiGlobalConfRef.GetDetectionQueueMaxBytes());
-            dllDiagQueue.Reset(AmsiGlobalConfRef.GetDllDiagnosticLogQueueCapacity(), AmsiGlobalConfRef.GetDllDiagnosticLogQueueMaxBytes());
+            detectionQueue.Reset(AmsiGlobalConfRef.GetDetectionQueueCapacity(),
+                                 AmsiGlobalConfRef.GetDetectionQueueMaxBytes());
+            dllDiagQueue.Reset(AmsiGlobalConfRef.GetDllDiagnosticLogQueueCapacity(),
+                               AmsiGlobalConfRef.GetDllDiagnosticLogQueueMaxBytes());
             statusQueue.Reset(AmsiGlobalConfRef.GetStatusQueueCapacity(), AmsiGlobalConfRef.GetStatusQueueMaxBytes());
         }
 
         /**
-         * À­Æğ 3 ¸öºóÌ¨¶ÀÁ¢µÄ¹¤×÷ÕßÏß³Ì£¨detectionWorker, dllDiagWorker, statusWorker£©
-         * ·Ö±ğ¶ÀÁ¢Ïû·Ñ¶ÔÓ¦µÄ×èÈû¶ÓÁĞ£¬ÊµÏÖÏß³Ì¸ôÀë
+         * æ‹‰èµ· 3 ä¸ªåå°ç‹¬ç«‹çš„å·¥ä½œè€…çº¿ç¨‹ï¼ˆdetectionWorker, dllDiagWorker, statusWorkerï¼‰
+         * åˆ†åˆ«ç‹¬ç«‹æ¶ˆè´¹å¯¹åº”çš„é˜»å¡é˜Ÿåˆ—ï¼Œå®ç°çº¿ç¨‹éš”ç¦»
          */
         void StartWorkers() {
             stopping.store(false);
@@ -476,9 +509,9 @@ namespace Engine {
         }
 
         /**
-         * Í£Ö¹ËùÓĞÒì²½¹¤×÷Ïß³Ì¡£Ê×ÏÈ½« stopping ×´Ì¬ÖÃÎª true£¬È»ºóÇ¿ÖÆÖĞÖ¹Èı´ó¶ÓÁĞµÄ×èÈû×´Ì¬£¨»½ĞÑËùÓĞ¿¨ÔÚ Pop/Push µÄÏß³Ì£©
-         * Í¨¹ı join() µÈ´ı 3 ¸öÏß³Ì°²È«°²È«ÍË³¡£¬×îºóÖ´ĞĞ Clear() ÊÍ·ÅÄÚ´æ
-         * @param timeoutMs  ÔÊĞíµÈ´ıÏß³ÌÍË³öµÄ³¬Ê±Ê±¼äÉÏÏŞ
+         * åœæ­¢æ‰€æœ‰å¼‚æ­¥å·¥ä½œçº¿ç¨‹ã€‚é¦–å…ˆå°† stopping çŠ¶æ€ç½®ä¸º trueï¼Œç„¶åå¼ºåˆ¶ä¸­æ­¢ä¸‰å¤§é˜Ÿåˆ—çš„é˜»å¡çŠ¶æ€ï¼ˆå”¤é†’æ‰€æœ‰å¡åœ¨ Pop/Push çš„çº¿ç¨‹ï¼‰
+         * é€šè¿‡ join() ç­‰å¾… 3 ä¸ªçº¿ç¨‹å®‰å…¨å®‰å…¨é€€åœºï¼Œæœ€åæ‰§è¡Œ Clear() é‡Šæ”¾å†…å­˜
+         * @param timeoutMs  å…è®¸ç­‰å¾…çº¿ç¨‹é€€å‡ºçš„è¶…æ—¶æ—¶é—´ä¸Šé™
          */
         void StopQueuesAndWorkers(uint32_t timeoutMs) {
             stopping.store(true);
@@ -533,8 +566,8 @@ namespace Engine {
         }
 
         /**
-         * ½ÓÊÕÀ´×ÔÊÂ¼ş¹ÜµÀµÄÔ­Ê¼ JSON¡£Ê×ÏÈÖ´ĞĞ·À·ÀÓùĞÔ´ó°üÀ¹½Ø£¨Èç¹ûµ¥°ü´óĞ¡³¬¹ı AmsiGlobalConfRef.GetMaxPayloadBytes() ÔòÖ±½Ó¶ªÆú£©¡£
-         * Ëæºóµ÷ÓÃÖ®Ç°·ÖÎö¹ıµÄ ClassifyAmsiEventPayload ½øĞĞ·ÖÀà
+         * æ¥æ”¶æ¥è‡ªäº‹ä»¶ç®¡é“çš„åŸå§‹ JSONã€‚é¦–å…ˆæ‰§è¡Œé˜²é˜²å¾¡æ€§å¤§åŒ…æ‹¦æˆªï¼ˆå¦‚æœå•åŒ…å¤§å°è¶…è¿‡ AmsiGlobalConfRef.GetMaxPayloadBytes() åˆ™ç›´æ¥ä¸¢å¼ƒï¼‰ã€‚
+         * éšåè°ƒç”¨ä¹‹å‰åˆ†æè¿‡çš„ ClassifyAmsiEventPayload è¿›è¡Œåˆ†ç±»
          * @param payload
          */
         void SubmitEventPayload(const std::string &payload) {
@@ -551,14 +584,14 @@ namespace Engine {
                 detectionReceived.fetch_add(1);
                 const bool ok = detectionQueue.Push(
                         MakeEnvelope(kind, payload),
-                       AmsiGlobalConfRef.GetDetectionEnqueueTimeoutMs(),
+                        AmsiGlobalConfRef.GetDetectionEnqueueTimeoutMs(),
                         true);
                 if (!ok) {
                     detectionDropped.fetch_add(1);
                 }
                 return;
             }
-            // Ô­×Ó¼ÆÊı +1£¬µ÷ÓÃ dllDiagQueue.TryPush ·Ç×èÈûÍ¶µİ£¬ÂúÁË¾ÍÖ±½Ó¼ÆÈë dllDiagDropped
+            // åŸå­è®¡æ•° +1ï¼Œè°ƒç”¨ dllDiagQueue.TryPush éé˜»å¡æŠ•é€’ï¼Œæ»¡äº†å°±ç›´æ¥è®¡å…¥ dllDiagDropped
             if (kind == AmsiIpcPayloadKind::DllDiagnosticLog) {
                 dllDiagReceived.fetch_add(1);
                 if (!dllDiagQueue.TryPush(MakeEnvelope(kind, payload))) {
@@ -576,7 +609,7 @@ namespace Engine {
         }
 
         /**
-         * ½ÓÊÕ×´Ì¬¹ÜµÀµÄĞÄÌøÊı¾İ£¬·ÀÓù´ó°üºó£¬Ö±½ÓÍ¶µİ½ø statusQueue¡£Èç¹û¶ÓÁĞÂúµ¼ÖÂÊ§°Ü£¬Ôò±ê¼ÇÒıÇæ×´Ì¬Îª Degraded£¨½µ¼¶£©
+         * æ¥æ”¶çŠ¶æ€ç®¡é“çš„å¿ƒè·³æ•°æ®ï¼Œé˜²å¾¡å¤§åŒ…åï¼Œç›´æ¥æŠ•é€’è¿› statusQueueã€‚å¦‚æœé˜Ÿåˆ—æ»¡å¯¼è‡´å¤±è´¥ï¼Œåˆ™æ ‡è®°å¼•æ“çŠ¶æ€ä¸º Degradedï¼ˆé™çº§ï¼‰
          * @param payload
          */
         void SubmitStatusPayload(const std::string &payload) {
@@ -628,9 +661,9 @@ namespace Engine {
         }
 
         /**
-         * ÎªÁË·ÀÖ¹×¢Èëµ½¼¸°Ù¸ö½ø³ÌÀïµÄ hss_amsi.dll ²úÉú·è¿ñµÄË¢ÆÁÈÕÖ¾£¨ÀıÈçÓÉÓÚÄ³¸öÒµÎñËÀÑ­»·´¥·¢µÄ´óÁ¿ÏàÍ¬´íÎó£©
-         * ¸Ãº¯ÊıÊµÏÖÁË»ùÓÚÊ±¼ä´°¿ÚµÄÈÕÖ¾È¥ÖØËã·¨; ÌáÈ¡ÈÕÖ¾ÖĞµÄ pattern ºÍ desc ×é³ÉÎ¨Ò» Key¡£Èç¹ûµ±Ç° Key ÓëÉÏÒ»´Î£¨lastDiagKey£©ÏàÍ¬£¬
-         * ÇÒÊ±¼ä¼ä¸ôĞ¡ÓÚÅäÖÃµÄ dllDiagnosticDuplicateWindowMs£¬Ôò²»ÔÙÂäÅÌ£¬¶øÊÇÖ±½ÓÔ­×ÓÀÛ¼Ó suppressedDuplicateDiag ¼ÆÊıÆ÷
+         * ä¸ºäº†é˜²æ­¢æ³¨å…¥åˆ°å‡ ç™¾ä¸ªè¿›ç¨‹é‡Œçš„ hss_amsi.dll äº§ç”Ÿç–¯ç‹‚çš„åˆ·å±æ—¥å¿—ï¼ˆä¾‹å¦‚ç”±äºæŸä¸ªä¸šåŠ¡æ­»å¾ªç¯è§¦å‘çš„å¤§é‡ç›¸åŒé”™è¯¯ï¼‰
+         * è¯¥å‡½æ•°å®ç°äº†åŸºäºæ—¶é—´çª—å£çš„æ—¥å¿—å»é‡ç®—æ³•; æå–æ—¥å¿—ä¸­çš„ pattern å’Œ desc ç»„æˆå”¯ä¸€ Keyã€‚å¦‚æœå½“å‰ Key ä¸ä¸Šä¸€æ¬¡ï¼ˆlastDiagKeyï¼‰ç›¸åŒï¼Œ
+         * ä¸”æ—¶é—´é—´éš”å°äºé…ç½®çš„ dllDiagnosticDuplicateWindowMsï¼Œåˆ™ä¸å†è½ç›˜ï¼Œè€Œæ˜¯ç›´æ¥åŸå­ç´¯åŠ  suppressedDuplicateDiag è®¡æ•°å™¨
          * @param payload
          */
         void LogDllDiagnosticPayload(const std::string &payload) {
@@ -655,8 +688,8 @@ namespace Engine {
 
         /**
          * DetectionWorkerLoop() / DllDiagWorkerLoop() / StatusWorkerLoop()
-         * Ïß³ÌÑ­»·×´Ì¬»ú: Í¨¹ı queue.Pop(item) ¹ÒÆğµÈ´ı¡£Ò»µ©ÓĞÊı¾İ£¬¾Í½«Æä·´ĞòÁĞ»¯»òÕßµ÷ÓÃ TruncateForLog ½øĞĞ½Ø¶Ï
-         * £¨·ÀÖ¹µ¥ĞĞÈÕÖ¾¹ı³¤»÷´©ÈÕÖ¾×é¼ş£©£¬Ëæºóµ÷ÓÃ InfoLogf2 Ğ´Èë±¾µØÎïÀí´ÅÅÌÈÕÖ¾ÎÄ¼ş
+         * çº¿ç¨‹å¾ªç¯çŠ¶æ€æœº: é€šè¿‡ queue.Pop(item) æŒ‚èµ·ç­‰å¾…ã€‚ä¸€æ—¦æœ‰æ•°æ®ï¼Œå°±å°†å…¶ååºåˆ—åŒ–æˆ–è€…è°ƒç”¨ TruncateForLog è¿›è¡Œæˆªæ–­
+         * ï¼ˆé˜²æ­¢å•è¡Œæ—¥å¿—è¿‡é•¿å‡»ç©¿æ—¥å¿—ç»„ä»¶ï¼‰ï¼Œéšåè°ƒç”¨ InfoLogf2 å†™å…¥æœ¬åœ°ç‰©ç†ç£ç›˜æ—¥å¿—æ–‡ä»¶
          */
         void DetectionWorkerLoop() {
             RuntimePayloadEnvelope item;
@@ -715,11 +748,11 @@ namespace Engine {
     }
 
     /**
-     * ¹«¿ª½Ó¿Ú: ÔËĞĞÊ±³õÊ¼»¯¡£ÑéÖ¤Ïà¹ØµÄ²ßÂÔ¿ª¹Ø£¨Èç amsiIpcEnabled ±ØĞëÎª true£©¡£
-     * ÅäÖÃ»ù´¡ÔËĞĞÉÏÏÂÎÄ£¬ÖØÖÃ×´Ì¬±êÖ¾¡£´ËÊ±²»»á´´½¨¹ÜµÀ£¬Ö»ÊÇ´¦ÓÚ¾ÍĞ÷×´Ì¬
-     * @param config  ÒıÇæÅäÖÃ²ÎÊı¶ÔÏó
-     * @param error  ´«³ö´íÎóĞÅÏ¢
-     * @return  Èç¹ûÎ´ÆôÓÃ IPC »ò²»ºÏ¹æ·µ»Ø false£¬³É¹¦·µ»Ø true
+     * å…¬å¼€æ¥å£: è¿è¡Œæ—¶åˆå§‹åŒ–ã€‚éªŒè¯ç›¸å…³çš„ç­–ç•¥å¼€å…³ï¼ˆå¦‚ amsiIpcEnabled å¿…é¡»ä¸º trueï¼‰ã€‚
+     * é…ç½®åŸºç¡€è¿è¡Œä¸Šä¸‹æ–‡ï¼Œé‡ç½®çŠ¶æ€æ ‡å¿—ã€‚æ­¤æ—¶ä¸ä¼šåˆ›å»ºç®¡é“ï¼Œåªæ˜¯å¤„äºå°±ç»ªçŠ¶æ€
+     * @param config  å¼•æ“é…ç½®å‚æ•°å¯¹è±¡
+     * @param error  ä¼ å‡ºé”™è¯¯ä¿¡æ¯
+     * @return  å¦‚æœæœªå¯ç”¨ IPC æˆ–ä¸åˆè§„è¿”å› falseï¼ŒæˆåŠŸè¿”å› true
      */
     bool AmsiIpcRuntime::Init(const AmsiIpcRuntimeConfig &config, std::string &error) {
         if (!config.amsiIpcEnabled) {
@@ -752,21 +785,21 @@ namespace Engine {
     }
 
     /**
-     * Ò»¼üÆô¶¯ÒıÇæ
-     * @param snapshot  µ±Ç°µÄ¹æÔò¿â¿ìÕÕ£¨°üº¬È«Á¿ÕıÔò JSON£©
-     * @param error  ´«³ö´íÎóÔ­Òò
-     * @return  ÈÎºÎÒ»¸ö¹ÜµÀ³ØÆô¶¯Ê§°Ü¾ù»á´¥·¢È«Á¿»Ø¹öÏú»Ù²¢·µ»Ø false
+     * ä¸€é”®å¯åŠ¨å¼•æ“
+     * @param snapshot  å½“å‰çš„è§„åˆ™åº“å¿«ç…§ï¼ˆåŒ…å«å…¨é‡æ­£åˆ™ JSONï¼‰
+     * @param error  ä¼ å‡ºé”™è¯¯åŸå› 
+     * @return  ä»»ä½•ä¸€ä¸ªç®¡é“æ± å¯åŠ¨å¤±è´¥å‡ä¼šè§¦å‘å…¨é‡å›æ»šé”€æ¯å¹¶è¿”å› false
      */
-    bool AmsiIpcRuntime::Start(const AmsiRuleSnapshot &snapshot, std::string &error) {
+    bool AmsiIpcRuntime::Start(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error) {
         if (!m_impl->initialized.load()) {
             error = "amsi ipc runtime is not initialized";
             return false;
         }
         if (m_impl->running.load()) {
-            return UpdateRules(snapshot, error);  // Ğ£Ñé: ÒÑÔÚÔËĞĞÔòÖ±½ÓÖØÔØ¹æÔò
+            return UpdateRules(snapshot, error);  // æ ¡éªŒ: å·²åœ¨è¿è¡Œåˆ™ç›´æ¥é‡è½½è§„åˆ™
         }
 
-        // µ÷ÓÃ ResetQueues() ºÍ StartWorkers() À­ÆğÏû·Ñ¶Ë
+        // è°ƒç”¨ ResetQueues() å’Œ StartWorkers() æ‹‰èµ·æ¶ˆè´¹ç«¯
         m_impl->ruleProvider.reset(new RuntimeRuleProvider());
         if (!m_impl->ruleProvider->UpdateSnapshot(snapshot, error)) {
             m_impl->ResetRuntimeObjects();
@@ -774,8 +807,8 @@ namespace Engine {
         }
         m_impl->ResetQueues();
         m_impl->StartWorkers();
-        // µ÷ÓÃ PipeHasExistingServer ¼ì²éÕâ 3 ¸ö¹ÜµÀµÄÃû×ÖÊÇ·ñÔÚ Windows ÏµÍ³ÖĞÒÑ¾­±»ÆäËûÈËÕ¼ÓÃÁË¡£
-        // Èç¹û±»Õ¼ÓÃÁË£¨ËµÃ÷¿ÉÄÜ´æÔÚ¶ñÒâµÄ·ÂÃ°¹ÜµÀ»òÕßÎ´ÇåÀí¸É¾»µÄ½©Ê¬·şÎñ£©£¬ÎªÁË°²È«¾Ü¾øÆô¶¯£¬·ÀÖ¹Êı¾İĞ¹Â¶
+        // è°ƒç”¨ PipeHasExistingServer æ£€æŸ¥è¿™ 3 ä¸ªç®¡é“çš„åå­—æ˜¯å¦åœ¨ Windows ç³»ç»Ÿä¸­å·²ç»è¢«å…¶ä»–äººå ç”¨äº†ã€‚
+        // å¦‚æœè¢«å ç”¨äº†ï¼ˆè¯´æ˜å¯èƒ½å­˜åœ¨æ¶æ„çš„ä»¿å†’ç®¡é“æˆ–è€…æœªæ¸…ç†å¹²å‡€çš„åƒµå°¸æœåŠ¡ï¼‰ï¼Œä¸ºäº†å®‰å…¨æ‹’ç»å¯åŠ¨ï¼Œé˜²æ­¢æ•°æ®æ³„éœ²
         if (PipeHasExistingServer(kRulesPipeName)) {
             error = "production rules pipe already has a server";
             m_impl->StopQueuesAndWorkers(3000);
@@ -811,13 +844,16 @@ namespace Engine {
         m_impl->statusChannel.reset(new amsi_ipc::AmsiControlStatusChannel(*m_impl->statusSink));
 
         m_impl->rulePool.reset(
-                new amsi_ipc::NamedPipeServerPool(kRulesPipeName, AmsiGlobalConfRef.GetRulePipeNums(), *m_impl->ruleChannel));
+                new amsi_ipc::NamedPipeServerPool(kRulesPipeName, AmsiGlobalConfRef.GetRulePipeNums(),
+                                                  *m_impl->ruleChannel));
         m_impl->eventPool.reset(
-                new amsi_ipc::NamedPipeServerPool(kEventsPipeName, AmsiGlobalConfRef.GetEventPipeThreads(), *m_impl->eventChannel));
+                new amsi_ipc::NamedPipeServerPool(kEventsPipeName, AmsiGlobalConfRef.GetEventPipeThreads(),
+                                                  *m_impl->eventChannel));
         m_impl->statusPool.reset(
-                new amsi_ipc::NamedPipeServerPool(kControlStatusPipeName, AmsiGlobalConfRef.GetStatusPipeThreads(), *m_impl->statusChannel));
+                new amsi_ipc::NamedPipeServerPool(kControlStatusPipeName, AmsiGlobalConfRef.GetStatusPipeThreads(),
+                                                  *m_impl->statusChannel));
 
-        // Á¬Ğøµ÷ÓÃ 3 ¸ö Pool µÄ Start()£¬ÕıÊ½Ïò Windows ÄÚºË¼¤»î¹ÜµÀ¼àÌı¡¢´ËÊ±ÄÜ×¥µ½Êı¾İ
+        // è¿ç»­è°ƒç”¨ 3 ä¸ª Pool çš„ Start()ï¼Œæ­£å¼å‘ Windows å†…æ ¸æ¿€æ´»ç®¡é“ç›‘å¬ã€æ­¤æ—¶èƒ½æŠ“åˆ°æ•°æ®
         if (!m_impl->rulePool->Start()) {
             error = "start rules pipe failed";
             m_impl->StopPools();
@@ -841,21 +877,30 @@ namespace Engine {
         }
 
         m_impl->broadcaster.reset(new amsi_ipc::AmsiConfigBroadcaster(kConfigPipeName));
+        if (!m_impl->broadcaster->Start()) {
+            error = "start config notify pipe failed";
+            m_impl->StopPools();
+            m_impl->StopQueuesAndWorkers(3000);
+            m_impl->ResetRuntimeObjects();
+            return false;
+        }
+        InfoLog(AmsiDetect::GetLoggerPtr(), "Amsi config notify server started on amsi_detect_config.");
+
         m_impl->acceptingPayload.store(true);
         m_impl->snapshot = snapshot;
+        m_impl->hasPreUpgradeSnapshot = false;
         m_impl->pipeStarted.store(true);
         m_impl->running.store(true);
 
-        InfoLogf2(AmsiDetect::GetLoggerPtr(), "Amsi ipc runtime started, rule version=%s hash=%s.",
-                  snapshot.version, snapshot.hash);
+        InfoLogf1(AmsiDetect::GetLoggerPtr(), "Amsi ipc runtime started, rule version=%s.", snapshot.version);
         error.clear();
         return true;
     }
 
     /**
-     * ÒÀ´Î¹Ø±Õ¹ÜµÀ·şÎñ³Ø£¨²»ÔÙ½ÓÊÕĞÂÁ¬½Ó£©£¬ÅÅ¿Õ²¢ÖÕÖ¹ºóÌ¨¹¤×÷Ïß³Ì£¬ÊÍ·ÅËùÓĞµÄ»¥³âËøÓëµ×²ã¾ä±ú¡£¸Ãº¯ÊıÔÚÎö¹¹º¯ÊıÖĞÒ²»á±»Ä¬ÈÏµ÷ÓÃ
-     * @param timeoutMs  ĞíÅÅ¿Õ²ĞÓàÊı¾İµÄ×î´óÓÅÑÅµÈ´ıÊ±¼ä
-     * @param error  ³É¹¦·µ»Ø true
+     * ä¾æ¬¡å…³é—­ç®¡é“æœåŠ¡æ± ï¼ˆä¸å†æ¥æ”¶æ–°è¿æ¥ï¼‰ï¼Œæ’ç©ºå¹¶ç»ˆæ­¢åå°å·¥ä½œçº¿ç¨‹ï¼Œé‡Šæ”¾æ‰€æœ‰çš„äº’æ–¥é”ä¸åº•å±‚å¥æŸ„ã€‚è¯¥å‡½æ•°åœ¨ææ„å‡½æ•°ä¸­ä¹Ÿä¼šè¢«é»˜è®¤è°ƒç”¨
+     * @param timeoutMs  è®¸æ’ç©ºæ®‹ä½™æ•°æ®çš„æœ€å¤§ä¼˜é›…ç­‰å¾…æ—¶é—´
+     * @param error  æˆåŠŸè¿”å› true
      * @return
      */
     bool AmsiIpcRuntime::Stop(uint32_t timeoutMs, std::string &error) {
@@ -876,8 +921,8 @@ namespace Engine {
     }
 
     /**
-     * µ±Ö÷·şÎñĞèÒªÁ¢¼´ÈÃËùÓĞÌ½Õë¡°ÔİÍ£¼ì²â¡±Ê±µ÷ÓÃ,²ßÂÔ¹Ø±Õ
-     * @param timeoutMs  µ¥´Î¹ã²¥Á¬½ÓÃ¿Ò»¸ö½ø³ÌµÄ³¬Ê±Ê±¼ä£¬·ÀÖ¹±»Ä³¸öËÀËøµÄ½©Ê¬½ø³ÌÍÏ¿å
+     * å½“ä¸»æœåŠ¡éœ€è¦ç«‹å³è®©æ‰€æœ‰æ¢é’ˆâ€œæš‚åœæ£€æµ‹â€æ—¶è°ƒç”¨,ç­–ç•¥å…³é—­
+     * @param timeoutMs  å•æ¬¡å¹¿æ’­è¿æ¥æ¯ä¸€ä¸ªè¿›ç¨‹çš„è¶…æ—¶æ—¶é—´ï¼Œé˜²æ­¢è¢«æŸä¸ªæ­»é”çš„åƒµå°¸è¿›ç¨‹æ‹–å®
      * @param error
      * @return
      */
@@ -916,6 +961,7 @@ namespace Engine {
                    static_cast<unsigned long>(timeoutMs));
         return BroadcastSucceeded(result, error);
     }
+
     // Best-effort unload broadcast. Current wire protocol does not provide reliable ack.
     bool AmsiIpcRuntime::Unload(uint32_t timeoutMs, std::string &error) {
         if (!m_impl->running.load() || !m_impl->broadcaster) {
@@ -936,12 +982,12 @@ namespace Engine {
     }
 
     /**
-     * ÓĞĞÂµÄÌØÕ÷¿â»òÕß±¾µØĞŞ¸ÄÁËÕıÔò¹æÔòµÄÊ±ºò£¬µ÷ÓÃ¸Ã½Ó¿Ú; Ëü»á¼ÓËø²¢¸üĞÂ ruleProvider ÖĞµÄ¿ìÕÕÄÚÈİ
-     * @param snapshot  ĞÂµÄ¹æÔòÌØÕ÷¿â¿ìÕÕ
-     * @param error ±¨´íĞÅÏ¢
-     * @return ³É¹¦·µ»Ø true
+     * æœ‰æ–°çš„ç‰¹å¾åº“æˆ–è€…æœ¬åœ°ä¿®æ”¹äº†æ­£åˆ™è§„åˆ™çš„æ—¶å€™ï¼Œè°ƒç”¨è¯¥æ¥å£; å®ƒä¼šåŠ é”å¹¶æ›´æ–° ruleProvider ä¸­çš„å¿«ç…§å†…å®¹
+     * @param snapshot  æ–°çš„è§„åˆ™ç‰¹å¾åº“å¿«ç…§
+     * @param error æŠ¥é”™ä¿¡æ¯
+     * @return æˆåŠŸè¿”å› true
      */
-    bool AmsiIpcRuntime::UpdateRules(const AmsiRuleSnapshot &snapshot, std::string &error) {
+    bool AmsiIpcRuntime::UpdateRules(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error) {
         if (!m_impl->initialized.load()) {
             error = "amsi ipc runtime is not initialized";
             return false;
@@ -952,6 +998,52 @@ namespace Engine {
         }
 
         m_impl->snapshot = snapshot;
+        m_impl->hasPreUpgradeSnapshot = false;
+        error.clear();
+        return true;
+    }
+
+    bool AmsiIpcRuntime::EnterUpgradeUnloadingState(const std::string &stateVersion, std::string &error) {
+        if (!m_impl->initialized.load()) {
+            error = "amsi ipc runtime is not initialized";
+            return false;
+        }
+
+        AmsiDetect::AmsiRuleSnapshot unloadingSnapshot;
+        unloadingSnapshot.version = !m_impl->snapshot.version.empty() ? m_impl->snapshot.version : m_impl->config.version;
+        if (unloadingSnapshot.version.empty()) {
+            unloadingSnapshot.version = "unknown";
+        }
+        const std::string effectiveStateVersion = stateVersion.empty() ? ("upgrade-" + unloadingSnapshot.version) : stateVersion;
+        unloadingSnapshot.amsiRulesJson = BuildUpgradeUnloadingRulesJson(effectiveStateVersion, unloadingSnapshot.version);
+
+        if (!m_impl->hasPreUpgradeSnapshot) {
+            m_impl->preUpgradeSnapshot = m_impl->snapshot;
+            m_impl->hasPreUpgradeSnapshot = true;
+        }
+        if (m_impl->ruleProvider && !m_impl->ruleProvider->UpdateSnapshot(unloadingSnapshot, error)) {
+            return false;
+        }
+        m_impl->snapshot = unloadingSnapshot;
+        error.clear();
+        return true;
+    }
+
+    bool AmsiIpcRuntime::RestorePreUpgradeSnapshot(std::string &error) {
+        if (!m_impl->initialized.load()) {
+            error = "amsi ipc runtime is not initialized";
+            return false;
+        }
+        if (!m_impl->hasPreUpgradeSnapshot) {
+            error.clear();
+            return true;
+        }
+        AmsiDetect::AmsiRuleSnapshot restoreSnapshot = m_impl->preUpgradeSnapshot;
+        if (m_impl->ruleProvider && !m_impl->ruleProvider->UpdateSnapshot(restoreSnapshot, error)) {
+            return false;
+        }
+        m_impl->snapshot = restoreSnapshot;
+        m_impl->hasPreUpgradeSnapshot = false;
         error.clear();
         return true;
     }
@@ -973,13 +1065,14 @@ namespace Engine {
                    static_cast<unsigned long>(timeoutMs));
         return BroadcastSucceeded(result, error);
     }
+
     bool AmsiIpcRuntime::IsRunning() const {
         return m_impl && m_impl->running.load();
     }
 
     /**
-     * ÊÕ¼¯µ±Ç°ÔËĞĞÊ±µÄÈ«Á¿Ô­×Ó¼ÆÊıÆ÷×´Ì¬£¬²¢ÊµÊ±¶ÁÈ¡Èı´óÓĞ½ç¶ÓÁĞµ±Ç°µÄÔªËØ¸öÊı£¨Size()£©ºÍÄÚ´æÕ¼ÓÃ£¨Bytes()£©
-     * ´ò°ü³É¾²Ì¬½á¹¹Ìå·µ»Ø¸øÉÏ²ã¼à¿ØÄ£¿é»òÎ¬»¤Ïß³Ì¡£
+     * æ”¶é›†å½“å‰è¿è¡Œæ—¶çš„å…¨é‡åŸå­è®¡æ•°å™¨çŠ¶æ€ï¼Œå¹¶å®æ—¶è¯»å–ä¸‰å¤§æœ‰ç•Œé˜Ÿåˆ—å½“å‰çš„å…ƒç´ ä¸ªæ•°ï¼ˆSize()ï¼‰å’Œå†…å­˜å ç”¨ï¼ˆBytes()ï¼‰
+     * æ‰“åŒ…æˆé™æ€ç»“æ„ä½“è¿”å›ç»™ä¸Šå±‚ç›‘æ§æ¨¡å—æˆ–ç»´æŠ¤çº¿ç¨‹ã€‚
      * @return
      */
     AmsiIpcRuntimeStats AmsiIpcRuntime::GetStats() const {

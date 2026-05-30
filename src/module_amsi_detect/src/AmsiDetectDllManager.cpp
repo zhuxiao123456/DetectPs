@@ -19,6 +19,19 @@ namespace Engine {
     using namespace SDK;
     using namespace AmsiDetect;
 
+    namespace {
+        const int kUpgradeUnloadBroadcastCycles = 3;
+        const uint32_t kUpgradeUnloadBroadcastTimeoutMs = 1000;
+        const DWORD kUpgradeUnloadSettleMs = 3000;
+
+        std::string BuildUpgradeStateVersion(const std::string &stagingDllHash)
+        {
+            if (stagingDllHash.empty()) {
+                return "upgrade-unknown";
+            }
+            return "upgrade-" + stagingDllHash.substr(0, std::min<size_t>(stagingDllHash.size(), 16));
+        }
+    }
     AmsiDetectDllManager::AmsiDetectDllManager(const std::string &amsiDllFilePath)
         : m_amsiDllFilePath(amsiDllFilePath)
     {
@@ -56,7 +69,7 @@ namespace Engine {
     }
 
     // 更新dll（返回详细状态码）.
-    int AmsiDetectDllManager::UpdateAmsiDll(const std::string &stagingDllPath)
+    int AmsiDetectDllManager::UpdateAmsiDll(const std::string &stagingDllPath, std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime)
     {
         std::string usingDllHash;
         if (FileUtils::GetFileSha256(m_amsiDllFilePath, usingDllHash) != 0) {
@@ -74,12 +87,29 @@ namespace Engine {
         }
 
         InfoLogf4(GetLoggerPtr(), "(%s)-hash(%s) (%s)-hash(%s) is not consistent, start update...", m_amsiDllFilePath, usingDllHash, stagingDllPath, stagingDllHash);
-        // 广播卸载信号到配置管道.
-        int pipeResult = BroadcastUnloadSignal();
-        // 等待 drain-ack 确认,  固定等待1000ms.
-        if (pipeResult > 0) {
-            InfoLog(GetLoggerPtr(), "Waiting for drain ACK...");
-            Sleep(1000);  // todo  bool ackReceived = WaitForDrainAck(reached, kDrainTimeoutMs);
+
+        bool enteredUnloadingState = false;
+        if (m_amsiIpcRuntime != nullptr) {
+            std::string error;
+            const std::string stateVersion = BuildUpgradeStateVersion(stagingDllHash);
+            if (!m_amsiIpcRuntime->EnterUpgradeUnloadingState(stateVersion, error)) {
+                WarningLogf1(GetLoggerPtr(), "Enter amsi upgrade unloading state failed: %s.", error);
+            } else {
+                enteredUnloadingState = true;
+                InfoLogf1(GetLoggerPtr(), "Amsi upgrade unloading state entered: %s.", stateVersion);
+            }
+
+            for (int i = 0; i < kUpgradeUnloadBroadcastCycles; ++i) {
+                error.clear();
+                if (!m_amsiIpcRuntime->Unload(kUpgradeUnloadBroadcastTimeoutMs, error)) {
+                    WarningLogf2(GetLoggerPtr(), "Broadcast amsi unload during dll update attempt=%d failed: %s.", i + 1, error);
+                }
+                const AmsiIpcBroadcastSummary summary = m_amsiIpcRuntime->GetLastBroadcastSummary("unload");
+                InfoLogf2(GetLoggerPtr(), "Dll update unload broadcast attempt=%d reached=%lu.",
+                          i + 1, static_cast<unsigned long>(summary.reached));
+                Sleep(1000);
+            }
+            Sleep(kUpgradeUnloadSettleMs);
         }
 
         std::wstring wStagedPath = StrUtils::Utf8ToUtf16(stagingDllPath);
@@ -104,6 +134,12 @@ namespace Engine {
             return UPDATE_SUCCESS_REBOOT;  // 重启后替换成功.
         } else {
             ErrorLog (GetLoggerPtr(), "Reboot scheduling also failed.");
+            if (enteredUnloadingState && m_amsiIpcRuntime != nullptr) {
+                std::string restoreError;
+                if (!m_amsiIpcRuntime->RestorePreUpgradeSnapshot(restoreError)) {
+                    WarningLogf1(GetLoggerPtr(), "Restore amsi ipc running snapshot after dll update failure failed: %s.", restoreError);
+                }
+            }
             return UPDATE_FAILED;  // 完全失败.
         }
     }

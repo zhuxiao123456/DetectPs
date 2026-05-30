@@ -10,7 +10,7 @@
 //   - SendDetectionEvent() (replaces amsi_event_sender::SendAmsiEvent)
 //   - LogForwardThreadProc  (ring-buffer drain -> amsi_detect_events)
 //   - ConfigPipeThreadProc  (reload signal client on amsi_detect_config)
-//   - SentryRetryThreadProc (polls sentry every 5 s until first load)
+//   - SentryRetryThreadProc (actively polls sentry for state/rule updates)
 //   - Initialize() / Shutdown()
 // =========================================================================
 
@@ -48,6 +48,7 @@ namespace {
 struct HostStateEnvelope {
     bool present = false;
     std::string state;
+    std::string desiredRuntimeState;
     std::string stateVersion;
     std::string ruleVersion;
     std::string rulesJson;
@@ -69,6 +70,10 @@ bool TryParseHostStateEnvelope(const std::string& response, HostStateEnvelope& e
 
         if (key == "state") {
             if (!parser.read_string(envelope.state)) {
+                parser.skip_value();
+            }
+        } else if (key == "desiredRuntimeState") {
+            if (!parser.read_string(envelope.desiredRuntimeState)) {
                 parser.skip_value();
             }
         } else if (key == "stateVersion") {
@@ -143,6 +148,8 @@ bool RaspSentryBase::IsWaitingResumeAfterHostLost() const
 bool RaspSentryBase::ShouldBypassScanFast() const
 {
     if (!m_running.load(std::memory_order_acquire))
+        return true;
+    if (m_upgradeInert.load(std::memory_order_acquire))
         return true;
     if (m_hostDetectionPaused.load(std::memory_order_acquire))
         return true;
@@ -377,15 +384,30 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
     RuleBundleMetadata envelopeMetadata;
     HostStateEnvelope envelope;
     if (TryParseHostStateEnvelope(response, envelope)) {
-        if (envelope.state == "unload") {
-            Log("[%s] ConnectSentry: host state=unload - entering inert mode", ModuleName());
+        const std::string runtimeState = envelope.desiredRuntimeState.empty()
+                                         ? envelope.state
+                                         : envelope.desiredRuntimeState;
+        if (runtimeState == "unloading" || envelope.state == "unload") {
+            m_upgradeInert.store(true, std::memory_order_release);
+            MarkHostAlive(true);
+            MarkDetectionPausedByHostState(true);
+            MarkRuleSnapshotReady(false);
+            MarkWaitingResumeAfterHostLost(true);
+            LogWithSeverity(RaspDiagSeverity::Warning,
+                            "[%s] ConnectSentry: host requested DLL unloading stateVersion=%s - entering upgrade inert mode",
+                            ModuleName(), envelope.stateVersion.c_str());
             OnUnloadSignal();
             return false;
         }
-        if (envelope.state != "running") {
+        if (m_upgradeInert.load(std::memory_order_acquire)) {
+            Log("[%s] ConnectSentry: ignoring host state=%s because upgrade inert is already set",
+                ModuleName(), runtimeState.c_str());
+            return false;
+        }
+        if (runtimeState != "running") {
             LogWithSeverity(RaspDiagSeverity::Warning,
-                            "[%s] ConnectSentry: unsupported host state=%s",
-                            ModuleName(), envelope.state.c_str());
+                            "[%s] ConnectSentry: unsupported host desiredRuntimeState=%s state=%s",
+                            ModuleName(), runtimeState.c_str(), envelope.state.c_str());
             return false;
         }
         if (envelope.rulesJson.empty()) {
@@ -396,7 +418,7 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
         }
         response = envelope.rulesJson;
         envelopeMetadata.version = envelope.ruleVersion;
-        Log("[%s] ConnectSentry: host state=running stateVersion=%s ruleVersion=%s",
+        Log("[%s] ConnectSentry: host desiredRuntimeState=running stateVersion=%s ruleVersion=%s",
             ModuleName(), envelope.stateVersion.c_str(), envelope.ruleVersion.c_str());
     }
 
@@ -766,7 +788,7 @@ DWORD WINAPI RaspSentryBase::HostLivenessThreadProc(LPVOID param)
 
             const bool wasAlive = self->m_hostAlive.exchange(true, std::memory_order_acq_rel);
             if (!wasAlive) {
-                self->Log("[%s] Host rule pipe visible again, waiting reload/resume before detection resumes",
+                self->Log("[%s] Host rule pipe visible again, waiting active rule poll/reload before detection resumes",
                           self->ModuleName());
             }
 
@@ -870,8 +892,12 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
                       self->ModuleName());
             self->OnReloadSignal();
         } else if (signal == 0x02) {
-            self->Log("[%s] ConfigPipeClientThread: unload signal - calling OnUnloadSignal()",
+            self->Log("[%s] ConfigPipeClientThread: unload signal - entering upgrade inert mode",
                       self->ModuleName());
+            self->m_upgradeInert.store(true, std::memory_order_release);
+            self->MarkDetectionPausedByHostState(true);
+            self->MarkRuleSnapshotReady(false);
+            self->MarkWaitingResumeAfterHostLost(true);
             self->OnUnloadSignal();
         } else if (signal == 0x03) {
             self->Log("[%s] ConfigPipeClientThread: pause detection signal - disabling scan entry",
@@ -887,46 +913,92 @@ DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
     return 0;
 }
 // =========================================================================
-// SentryRetryThreadProc - polls ConnectSentry+ParseAndSwap every 5 s.
-// Exits after first successful load. Enabled unconditionally for all modules
-// (AMSI processes can start before rasp_sentry and would never receive a
-// reload signal because they were not alive when sentry broadcast it).
+// SentryRetryThreadProc - actively polls Host state/rules through amsi_detect_rules.
+// Reload broadcasts are only acceleration hints; this thread is the fallback that
+// lets already-loaded DLLs recover or update when they miss a broadcast.
 // =========================================================================
 
 DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
 {
     auto* self = static_cast<RaspSentryBase*>(param);
-    self->Log("[%s] SentryRetryThread: started - polling every 5s", self->ModuleName());
+    self->Log("[%s] RulePollThread: started - retry=%lums interval=%lums",
+              self->ModuleName(), self->m_rulePollRetryIntervalMs, self->m_rulePollIntervalMs);
 
-    while (self->m_running.load())
+    while (self->m_running.load(std::memory_order_acquire))
     {
-        // 5 s in 100 ms slices so Shutdown() wakes us promptly
-        for (int i = 0; i < 50 && self->m_running.load(); i++)
-            Sleep(100);
+        const bool ready = self->IsRuleSnapshotReady();
+        const bool alive = self->IsHostAlive();
+        const DWORD sleepMs = (ready && alive) ? self->m_rulePollIntervalMs : self->m_rulePollRetryIntervalMs;
+        DWORD elapsed = 0;
+        while (self->m_running.load(std::memory_order_acquire) && elapsed < sleepMs) {
+            if ((ready && alive) && (!self->IsRuleSnapshotReady() || !self->IsHostAlive())) {
+                break;
+            }
+            const DWORD slice = (sleepMs - elapsed) > 100 ? 100 : (sleepMs - elapsed);
+            Sleep(slice);
+            elapsed += slice;
+        }
 
-        if (!self->m_running.load()) break;
+        if (!self->m_running.load(std::memory_order_acquire)) {
+            break;
+        }
 
         std::string json;
         std::string lib;
         RuleBundleMetadata requestedMetadata;
-        if (self->ConnectSentry(json, lib, requestedMetadata) && self->ParseAndSwap(json, lib)) {
+        if (!self->ConnectSentry(json, lib, requestedMetadata)) {
+            if (!self->IsRuleSnapshotReady()) {
+                self->Log("[%s] RulePollThread: host/rules unavailable - detection remains bypassed",
+                          self->ModuleName());
+            }
+            continue;
+        }
+
+        const RuleBundleMetadata activeMetadata = self->ActiveRuleMetadataForStatus();
+        const bool snapshotReady = self->IsRuleSnapshotReady();
+        const bool versionChanged = !requestedMetadata.version.empty() &&
+                                    requestedMetadata.version != activeMetadata.version;
+        const bool hashChanged = !requestedMetadata.hash.empty() &&
+                                 requestedMetadata.hash != activeMetadata.hash;
+        const bool needLoad = !snapshotReady ||
+                              self->IsWaitingResumeAfterHostLost() ||
+                              versionChanged ||
+                              hashChanged;
+
+        self->MarkHostAlive(true);
+        if (!needLoad) {
+            if (self->m_hostDetectionPaused.load(std::memory_order_acquire)) {
+                self->MarkDetectionPausedByHostState(false);
+                self->MarkWaitingResumeAfterHostLost(false);
+                self->Log("[%s] RulePollThread: host running with current rules - detection resumed",
+                          self->ModuleName());
+            }
+            continue;
+        }
+
+        if (self->ParseAndSwap(json, lib)) {
             self->SetActiveRuleMetadataForStatus(requestedMetadata);
-            self->MarkHostAlive(true);
             self->MarkRuleSnapshotReady(true);
             self->MarkDetectionPausedByHostState(false);
             self->MarkWaitingResumeAfterHostLost(false);
-            self->Log("[%s] SentryRetryThread: rules loaded - detection resumed", self->ModuleName());
+            self->Log("[%s] RulePollThread: rules loaded version=%s hash=%s - detection resumed",
+                      self->ModuleName(), requestedMetadata.version.c_str(), requestedMetadata.hash.c_str());
             self->SendRuleLoadResult(true, 0, "", requestedMetadata);
-            break;
+            continue;
         }
 
-        self->Log("[%s] SentryRetryThread: sentry still unavailable", self->ModuleName());
+        self->MarkRuleSnapshotReady(false);
+        self->MarkDetectionPausedByHostState(true);
+        self->MarkWaitingResumeAfterHostLost(true);
+        self->LogWithSeverity(RaspDiagSeverity::Warning,
+                              "[%s] RulePollThread: rule load failed - detection remains bypassed",
+                              self->ModuleName());
+        self->SendRuleLoadResult(false, 3, "active rule poll load failed", requestedMetadata);
     }
 
-    self->Log("[%s] SentryRetryThread: exiting", self->ModuleName());
+    self->Log("[%s] RulePollThread: exiting", self->ModuleName());
     return 0;
 }
-
 // =========================================================================
 // Initialize / Shutdown
 // =========================================================================
@@ -939,6 +1011,7 @@ void RaspSentryBase::Initialize()
     m_hostDetectionPaused.store(true, std::memory_order_release);
     m_ruleSnapshotReady.store(false, std::memory_order_release);
     m_waitingResumeAfterHostLost.store(false, std::memory_order_release);
+    m_upgradeInert.store(false, std::memory_order_release);
     EnsureLogCsInit();
     m_eventSink.Start([this](const AsyncEvent& event) {
         return SendDetectionEventSyncWorkerOnly(event);
@@ -983,9 +1056,16 @@ void RaspSentryBase::Initialize()
                            connected ? 3 : 1,
                            connected ? "initial rule load failed" : "rules pipe unavailable",
                            requestedMetadata);
-        Log("[%s] Initialize: sentry unavailable - pass-through; starting retry thread",
+        Log("[%s] Initialize: sentry unavailable - pass-through; active rule polling will retry",
             ModuleName());
-        m_retryThread = CreateThread(nullptr, 0, SentryRetryThreadProc, this, 0, nullptr);
+    }
+
+    m_retryThread = CreateThread(nullptr, 0, SentryRetryThreadProc, this, 0, nullptr);
+    if (m_retryThread == INVALID_HANDLE_VALUE || m_retryThread == nullptr) {
+        LogWithSeverity(RaspDiagSeverity::Warning,
+                        "[%s] Initialize: failed to start active rule poll thread GLE=%lu",
+                        ModuleName(), GetLastError());
+        m_retryThread = INVALID_HANDLE_VALUE;
     }
 
     m_configThread = CreateThread(nullptr, 0, ConfigPipeThreadProc, this, 0, nullptr);
@@ -1002,7 +1082,7 @@ void RaspSentryBase::Initialize()
     }
     m_logThread    = CreateThread(nullptr, 0, LogForwardThreadProc,  this, 0, nullptr);
 
-    Log("[%s] Initialize: ConfigPipeThread + HostLivenessThread + LogForwardThread started", ModuleName());
+    Log("[%s] Initialize: RulePollThread + ConfigPipeThread + HostLivenessThread + LogForwardThread started", ModuleName());
 }
 
 void RaspSentryBase::Shutdown()

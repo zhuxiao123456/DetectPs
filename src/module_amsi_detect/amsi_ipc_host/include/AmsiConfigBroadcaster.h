@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * 定义了广播通信的“协议”和数据结构
+ * 定义 AMSI config 控制信号广播结构。
  */
 
 #ifndef AMSI_CONFIG_BROADCASTER_H
@@ -9,7 +9,9 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
 #include <string>
+#include <vector>
 
 namespace amsi_ipc {
     // 定义广播通信的控制指令, 强制底层类型为单字节 std::uint8_t, 降低通信开销和复杂度
@@ -30,12 +32,35 @@ namespace amsi_ipc {
     public:
         explicit AmsiConfigBroadcaster(std::wstring configPipeName);
 
+        ~AmsiConfigBroadcaster();
+
+        AmsiConfigBroadcaster(const AmsiConfigBroadcaster &) = delete;
+
+        AmsiConfigBroadcaster &operator=(const AmsiConfigBroadcaster &) = delete;
+
+        bool Start();
+
+        void Stop();
+
         AmsiBroadcastResult Broadcast(AmsiControlSignal signal,
                                       int maxListeners,
                                       std::uint32_t timeoutMs) const;
 
     private:
+        static unsigned long __stdcall AcceptThreadProc(void *param);
+
+        void AcceptLoop();
+
+        void CloseClientsLocked();
+
+        void WakeAcceptThread() const;
+
         std::wstring configPipeName_;
+        void *acceptThread_ = nullptr;
+        void *stopEvent_ = nullptr;
+        mutable std::mutex mutex_;
+        mutable std::vector<void *> clients_;
+        bool running_ = false;
     };
 
 } // namespace amsi_ipc

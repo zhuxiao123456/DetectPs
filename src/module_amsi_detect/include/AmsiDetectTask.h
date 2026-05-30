@@ -31,18 +31,16 @@ namespace Engine {
         bool InitPath();
         int StartCheck();
         bool CheckFileIsExist();
+        bool LoadRuleSnapshot(const std::string &rulePath, const std::string &version, AmsiDetect::AmsiRuleSnapshot &snapshot);
         bool ReadAndDescramblingFile(const std::string &srcFilePath, std::string &content);
-        bool StartAmsiIpc(const AmsiRuleSnapshot &snapshot, std::string &error);
+        bool StartAmsiIpc(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error);
         void StopAmsiIpcIfStarted();
-        void FailStartAndRequestDownload(const std::string &reason);
         void SendAmsiDownloadRequest();
         void HandleAmsiVersionInFeatureUpgradeModule(const std::string &version, bool isSet);
         void FirstDownloadPackage();
         void UpgradeDownloadPackage();
         bool DecompressPackage(const std::string &destDir);
-        bool ScramblingRules();
-        bool TraverseDirAndScrambling(const std::string &srcDir);
-        void SaveRules();
+        bool ScramblingRules(const std::string &srcRulePath, const std::string &saveRulePath);
         void ClearTmpDirAndSendFailedReason(const std::string &reason);
         bool SaveAmsiLibVersion();
         bool GetAmsiLibVersion();
@@ -57,25 +55,22 @@ namespace Engine {
         bool m_isAmsiRegistered{false};
         bool m_lastReloadBroadcastOk{false};
 
-        // µ±Ç°ÓÃÓÚ¼ì²âµÄAMSIÌØÕ÷¿â°æ±¾.
+        // å½“å‰ç”¨äºæ£€æµ‹çš„AMSIç‰¹å¾åº“ç‰ˆæœ¬.
         std::string m_usingAmsiVersion;
-        // µ±Ç°´¦ÀíÖĞµÄAMSIÌØÕ÷¿â°æ±¾£¨ÏÂÔØ³É¹¦£¬¼ÓÔØÖĞ£©.
+        // å½“å‰å¤„ç†ä¸­çš„AMSIç‰¹å¾åº“ç‰ˆæœ¬ï¼ˆä¸‹è½½æˆåŠŸï¼ŒåŠ è½½ä¸­ï¼‰.
         std::string m_handingAmsiVersion;
         std::string m_localRuleHash;
-        std::string m_loadedRuleVersion;
 
         std::string m_amsiDir;
         std::string m_amsiTmpDir;
         std::string m_amsiZipPath;
-        std::string m_amsiRuleDir;
         std::string m_amsiRulePath;
         std::string m_amsiConfPath;
         std::string m_amsiDllFilePath;
-        std::string m_amsiLuaLibPath;
 
         std::unique_ptr<AmsiIpcRuntime> m_amsiIpcRuntime;
 
-        // ±£Ö¤Í¬Ò»Ê±¼äÖ»ÓĞÒ»¸öÏß³Ì²Ù×÷ÌØÕ÷¿â.
+        // ä¿è¯åŒä¸€æ—¶é—´åªæœ‰ä¸€ä¸ªçº¿ç¨‹æ“ä½œç‰¹å¾åº“.
         SDK::LockUtils::MutexLock m_operateAmsiLibLock;
     };
 }

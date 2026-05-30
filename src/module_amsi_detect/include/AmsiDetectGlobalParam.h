@@ -15,6 +15,11 @@ namespace Engine
 {
     namespace AmsiDetect
     {
+        struct AmsiRuleSnapshot {
+            std::string amsiRulesJson;
+            std::string version;
+        };
+
         // module name
         static const std::string MODULE_NAME_AMSI_DETECT = "amsi_detect_module";
 

@@ -161,6 +161,7 @@ std::string HostGuardFileRuleProvider::BuildStateEnvelope(const std::string& rul
     stateVersion << state << "-" << revision;
 
     json envelope;
+    envelope["desiredRuntimeState"] = (state == "unload") ? "unloading" : "running";
     envelope["state"] = state;
     envelope["stateVersion"] = stateVersion.str();
     envelope["ruleVersion"] = ruleVersion;

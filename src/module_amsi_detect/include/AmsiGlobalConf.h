@@ -74,19 +74,19 @@ namespace Engine {
             return m_statusEnqueueTimeoutMs;
         }
 
-        int GetRulePipeNums() const {
+        uint32_t GetRulePipeNums() const {
             return m_rulePipeNums;
         }
 
-        int GetEventPipeThreads() const {
+        uint32_t GetEventPipeThreads() const {
             return m_eventPipeThreads;
         }
 
-        int GetStatusPipeThreads() const {
+        uint32_t GetStatusPipeThreads() const {
             return m_statusPipeThreads;
         }
 
-        uint32_t GetDiagDroppedSummaryIntervalMs() const {
+        size_t GetDiagDroppedSummaryIntervalMs() const {
             return m_diagDroppedSummaryIntervalMs;
         }
 
@@ -111,12 +111,12 @@ namespace Engine {
         uint32_t m_statusEnqueueTimeoutMs = 50;
 
         // IPC 管道线程数配置.
-        size_t m_rulePipeNums = 8;
-        size_t m_eventPipeThreads = 4;
-        size_t m_statusPipeThreads = 2;
+        uint32_t m_rulePipeNums = 8;
+        uint32_t m_eventPipeThreads = 4;
+        uint32_t m_statusPipeThreads = 2;
 
         // DLL 诊断日志 dropped 汇总打印间隔，默认 60 秒.
-        uint32_t m_diagDroppedSummaryIntervalMs = 60 * 1000;
+        size_t m_diagDroppedSummaryIntervalMs = 60 * 1000;
     };
 }
 

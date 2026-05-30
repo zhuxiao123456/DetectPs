@@ -9,8 +9,8 @@
 #include <memory>
 #include <string>
 
+#include "AmsiDetectGlobalParam.h"
 #include "AmsiIpcRuntimeQueue.h"
-#include "AmsiRuleSnapshot.h"
 
 namespace Engine {
     // 控制运行时的行为开关。包含 RASP 启动校验标志（是否强制要求 dll 存在、是否允许 Lua 库缺失）以及相关的物理路径和有界队列配置对象
@@ -18,9 +18,6 @@ namespace Engine {
         bool amsiIpcEnabled = true;
         bool enableRealIpc = true;
         bool useProductionPipes = true;
-        bool requireAmsiDllFile = true;
-        bool requireVersionConf = true;
-        bool allowLuaLibMissing = true;
 
         std::string dllPath;
         std::string rulePath;
@@ -45,13 +42,15 @@ namespace Engine {
         AmsiIpcRuntime &operator=(const AmsiIpcRuntime &) = delete;
 
         bool Init(const AmsiIpcRuntimeConfig &config, std::string &error);
-        bool Start(const AmsiRuleSnapshot &snapshot, std::string &error);
+        bool Start(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error);
         bool Stop(uint32_t timeoutMs, std::string &error);
 
         bool PauseDetection(uint32_t timeoutMs, std::string &error);
         bool ResumeDetection(uint32_t timeoutMs, std::string &error);
         bool Unload(uint32_t timeoutMs, std::string &error);
-        bool UpdateRules(const AmsiRuleSnapshot &snapshot, std::string &error);
+        bool UpdateRules(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error);
+        bool EnterUpgradeUnloadingState(const std::string &stateVersion, std::string &error);
+        bool RestorePreUpgradeSnapshot(std::string &error);
         bool Reload(uint32_t timeoutMs, std::string &error);
 
         bool IsRunning() const;

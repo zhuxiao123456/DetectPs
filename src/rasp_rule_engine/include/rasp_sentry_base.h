@@ -108,6 +108,7 @@ protected:
     std::atomic<bool> m_hostDetectionPaused{true};
     std::atomic<bool> m_ruleSnapshotReady{false};
     std::atomic<bool> m_waitingResumeAfterHostLost{false};
+    std::atomic<bool> m_upgradeInert{false};
 
     void MarkHostAlive(bool alive);
     void MarkRuleSnapshotReady(bool ready);
@@ -242,6 +243,8 @@ private:
     DWORD m_probeTimeoutMs = 200;
     DWORD m_maxConsecutiveFailures = 3;
     DWORD m_hostLostGraceMs = 6000;
+    DWORD m_rulePollIntervalMs = 180000;
+    DWORD m_rulePollRetryIntervalMs = 5000;
     mutable AsyncEventSink m_eventSink;
     mutable std::mutex m_ruleMetadataMutex;
     RuleBundleMetadata m_activeRuleMetadata;

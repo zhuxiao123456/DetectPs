@@ -11,6 +11,8 @@
 #include "../include/AmsiDetectGlobalParam.h"
 #include "JsonUtils.h"
 #include "CryptoCodeUtils.h"
+#include "MsgIdDefine.h"
+#include "ModuleUtils.h"
 
 namespace Engine {
     using namespace SDK;
@@ -51,7 +53,11 @@ namespace Engine {
                 return value[name].asInt();
             }
             if (value[name].isUInt()) {
-                return static_cast<int>(value[name].asUInt());
+                const auto v = value[name].asUInt();
+                if (v > static_cast<unsigned int>((std::numeric_limits<int>::max)())) {
+                    return defaultValue;
+                }
+                return static_cast<int>(v);
             }
             return defaultValue;
         }
@@ -92,13 +98,10 @@ namespace Engine {
             jValue["extend_info"] = extendInfo;
         }
 
-        bool SendAmsiAlarmMsg(const SDK::JsonUtils::JsonValue &alarm,
-                              std::string &error) {
-            (void) error;
+        bool SendAmsiAlarmMsg(const SDK::JsonUtils::JsonValue &alarm) {
             std::string alarmJson = JsonUtils::JsonToString(alarm);
-
-            // Replace this with the production event bus / report path.
-            InfoLogf1(AmsiDetect::GetLoggerPtr(), "AMSI alarm event: %s.", alarmJson);
+            bool ret = SendDataMessage(MSG_ALARM, alarmJson);
+            InfoLogf2(GetLoggerPtr(), "Send amsi alarm (%s), ret(%s).", alarmJson, BOOL_TO_STR(ret));
             return true;
         }
 
@@ -113,7 +116,7 @@ namespace Engine {
 
         SDK::JsonUtils::JsonValue alarm;
         MakeAmsiAlarmMsg(raw, alarm);
-        return SendAmsiAlarmMsg(alarm, error);
+        return SendAmsiAlarmMsg(alarm);
     }
 
 }
