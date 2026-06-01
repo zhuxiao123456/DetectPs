@@ -144,7 +144,9 @@ protected:
         std::string&                                 libSourceOut,
         std::vector<std::unique_ptr<RaspRuleBase>>&  rulesOut,
         RuleBundleMetadata*                          metadataOut = nullptr,
-        std::vector<std::string>*                    trustProcessOut = nullptr);
+        std::vector<std::string>*                    trustProcessOut = nullptr,
+        RaspGlobalMode*                              globalModeOut = nullptr,
+        bool*                                        hasGlobalModeOut = nullptr);
 
     // Virtual factory â€?override to return module-specific derived type.
     // Default returns new RaspRuleBase().
@@ -181,6 +183,9 @@ protected:
                             const RuleBundleMetadata& requestedMetadata) const;
     void SetActiveRuleMetadataForStatus(const RuleBundleMetadata& metadata);
     RuleBundleMetadata ActiveRuleMetadataForStatus() const;
+    static std::string ComputeEffectiveSnapshotHash(const std::string& rulesJson);
+    void SetActiveEffectiveSnapshotHash(const std::string& hash);
+    std::string ActiveEffectiveSnapshotHash() const;
 
     // Called after ConnectSentry() succeeds â€?module parses JSON into its typed
     // snapshot, precompiles Lua scripts, and swaps atomically.
@@ -248,6 +253,7 @@ private:
     mutable AsyncEventSink m_eventSink;
     mutable std::mutex m_ruleMetadataMutex;
     RuleBundleMetadata m_activeRuleMetadata;
+    std::string m_activeEffectiveSnapshotHash;
 
     static DWORD WINAPI LogForwardThreadProc(LPVOID param);
     static DWORD WINAPI ConfigPipeThreadProc(LPVOID param);

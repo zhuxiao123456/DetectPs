@@ -14,6 +14,8 @@ struct RuleParseResult {
     std::string version;
     std::string hash;
     std::vector<std::string> trustProcessPaths;
+    bool hasGlobalMode = false;
+    RaspGlobalMode globalMode = RaspGlobalMode::Block;
     std::string error;
 };
 

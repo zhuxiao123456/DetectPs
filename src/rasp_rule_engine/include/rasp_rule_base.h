@@ -24,6 +24,10 @@ enum class RaspRuleMode {
     Off = 0, Audit = 1, Block = 2
 };
 
+enum class RaspGlobalMode {
+    Block = 0, Audit = 1
+};
+
 // ── RegexCondition ────────────────────────────────────────────────────────
 // Controls how multiple regexChecks are combined:
 //   Any — gate passes when at least one check matches (OR semantics, default).

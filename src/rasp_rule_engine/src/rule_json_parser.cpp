@@ -170,6 +170,19 @@ bool ParseBundleObject(RuleJsonParser::Parser& p,
         } else if (key == "trust_process") {
             if (!p.read_string_array(result.trustProcessPaths))
                 p.skip_value();
+        } else if (key == "globalMode") {
+            std::string mode;
+            if (p.read_string(mode)) {
+                if (mode == "block") {
+                    result.globalMode = RaspGlobalMode::Block;
+                    result.hasGlobalMode = true;
+                } else if (mode == "audit") {
+                    result.globalMode = RaspGlobalMode::Audit;
+                    result.hasGlobalMode = true;
+                }
+            } else {
+                p.skip_value();
+            }
         } else {
             p.skip_value();
         }
@@ -390,6 +403,19 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
         } else if (key == "trust_process") {
             if (!p.read_string_array(result.trustProcessPaths))
                 p.skip_value();
+        } else if (key == "globalMode") {
+            std::string mode;
+            if (p.read_string(mode)) {
+                if (mode == "block") {
+                    result.globalMode = RaspGlobalMode::Block;
+                    result.hasGlobalMode = true;
+                } else if (mode == "audit") {
+                    result.globalMode = RaspGlobalMode::Audit;
+                    result.hasGlobalMode = true;
+                }
+            } else {
+                p.skip_value();
+            }
         } else if (key == "rules") {
             if (!ParseRulesArray(p, result, factory, extensionParser))
                 return result;

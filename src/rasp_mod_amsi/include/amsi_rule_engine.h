@@ -75,6 +75,8 @@ protected:
         std::vector<AmsiRaspRuleConfig> rules;
         std::vector<std::string> trustProcessPaths;
         std::shared_ptr<RaspLuaEngine> luaEngine;
+        bool hasGlobalMode = false;
+        RaspGlobalMode globalMode = RaspGlobalMode::Block;
     };
 
     std::shared_ptr<const RuleSnapshot> BuildNextSnapshot(
@@ -93,6 +95,8 @@ private:
                        const std::string& libSource,
                        RaspLuaEngine& luaEngine);
     void SwapRules(std::vector<AmsiRaspRuleConfig>&& rules);
+    static bool ShouldBlockRule(const RuleSnapshot& snapshot,
+                                const RaspRuleBase& rule);
     std::vector<RaspEvalResult> EvaluateWithScanContext(
         const std::string& sensor,
         const RaspLuaContext& ctx,

@@ -468,7 +468,9 @@ bool RaspSentryBase::ParseRulesJson(
     std::string&                                libSourceOut,
     std::vector<std::unique_ptr<RaspRuleBase>>& rulesOut,
     RuleBundleMetadata*                         metadataOut,
-    std::vector<std::string>*                   trustProcessOut)
+    std::vector<std::string>*                   trustProcessOut,
+    RaspGlobalMode*                             globalModeOut,
+    bool*                                       hasGlobalModeOut)
 {
     class FactoryAdapter final : public IRuleObjectFactory {
     public:
@@ -502,6 +504,10 @@ bool RaspSentryBase::ParseRulesJson(
     }
     if (trustProcessOut)
         *trustProcessOut = std::move(result.trustProcessPaths);
+    if (globalModeOut)
+        *globalModeOut = result.globalMode;
+    if (hasGlobalModeOut)
+        *hasGlobalModeOut = result.hasGlobalMode;
     libSourceOut = std::move(result.libSource);
     rulesOut = std::move(result.rules);
     return result.ok;
@@ -713,6 +719,30 @@ RuleBundleMetadata RaspSentryBase::ActiveRuleMetadataForStatus() const
     return m_activeRuleMetadata;
 }
 
+std::string RaspSentryBase::ComputeEffectiveSnapshotHash(const std::string& rulesJson)
+{
+    uint64_t hash = 1469598103934665603ull;
+    for (unsigned char ch : rulesJson) {
+        hash ^= static_cast<uint64_t>(ch);
+        hash *= 1099511628211ull;
+    }
+
+    char buf[17] = {};
+    std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(hash));
+    return std::string(buf);
+}
+
+void RaspSentryBase::SetActiveEffectiveSnapshotHash(const std::string& hash)
+{
+    std::lock_guard<std::mutex> lock(m_ruleMetadataMutex);
+    m_activeEffectiveSnapshotHash = hash;
+}
+
+std::string RaspSentryBase::ActiveEffectiveSnapshotHash() const
+{
+    std::lock_guard<std::mutex> lock(m_ruleMetadataMutex);
+    return m_activeEffectiveSnapshotHash;
+}
 // =========================================================================
 // LogForwardThreadProc - drains ring buffer to amsi_detect_events as diag events
 // =========================================================================
@@ -955,15 +985,22 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
         }
 
         const RuleBundleMetadata activeMetadata = self->ActiveRuleMetadataForStatus();
+        const std::string requestedEffectiveHash = self->ComputeEffectiveSnapshotHash(json);
+        const std::string activeEffectiveHash = self->ActiveEffectiveSnapshotHash();
         const bool snapshotReady = self->IsRuleSnapshotReady();
         const bool versionChanged = !requestedMetadata.version.empty() &&
                                     requestedMetadata.version != activeMetadata.version;
         const bool hashChanged = !requestedMetadata.hash.empty() &&
                                  requestedMetadata.hash != activeMetadata.hash;
+        const bool effectiveHashMissing = snapshotReady && activeEffectiveHash.empty();
+        const bool effectiveHashChanged = !requestedEffectiveHash.empty() &&
+                                          requestedEffectiveHash != activeEffectiveHash;
         const bool needLoad = !snapshotReady ||
                               self->IsWaitingResumeAfterHostLost() ||
                               versionChanged ||
-                              hashChanged;
+                              hashChanged ||
+                              effectiveHashMissing ||
+                              effectiveHashChanged;
 
         self->MarkHostAlive(true);
         if (!needLoad) {
@@ -978,6 +1015,7 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
 
         if (self->ParseAndSwap(json, lib)) {
             self->SetActiveRuleMetadataForStatus(requestedMetadata);
+            self->SetActiveEffectiveSnapshotHash(requestedEffectiveHash);
             self->MarkRuleSnapshotReady(true);
             self->MarkDetectionPausedByHostState(false);
             self->MarkWaitingResumeAfterHostLost(false);
@@ -1034,11 +1072,13 @@ void RaspSentryBase::Initialize()
     std::string json, lib;
     RuleBundleMetadata requestedMetadata;
     bool connected = ConnectSentry(json, lib, requestedMetadata);
+    const std::string requestedEffectiveHash = connected ? ComputeEffectiveSnapshotHash(json) : std::string();
     bool loaded = connected && ParseAndSwap(json, lib);
 
     if (loaded)
     {
         SetActiveRuleMetadataForStatus(requestedMetadata);
+        SetActiveEffectiveSnapshotHash(requestedEffectiveHash);
         MarkHostAlive(true);
         MarkRuleSnapshotReady(true);
         MarkDetectionPausedByHostState(false);

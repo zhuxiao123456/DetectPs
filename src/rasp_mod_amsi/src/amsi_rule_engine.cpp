@@ -366,7 +366,9 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     std::vector <std::unique_ptr<RaspRuleBase>> rawRules;
     std::string lib;
     std::vector<std::string> rawTrustProcessPaths;
-    if (!ParseRulesJson(json, lib, rawRules, nullptr, &rawTrustProcessPaths) || rawRules.empty()) {
+    RaspGlobalMode globalMode = RaspGlobalMode::Block;
+    bool hasGlobalMode = false;
+    if (!ParseRulesJson(json, lib, rawRules, nullptr, &rawTrustProcessPaths, &globalMode, &hasGlobalMode) || rawRules.empty()) {
         Log("[RaspAmsi] BuildNextSnapshot: no rules parsed");
         return {};
     }
@@ -386,7 +388,17 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     luaEngine->SetLogFn(RaspLuaLog);
     PrecompileAll(configs, effectiveLib, *luaEngine);
     return std::make_shared<RuleSnapshot>(
-        RuleSnapshot{std::move(configs), std::move(trustProcessPaths), std::move(luaEngine)});
+        RuleSnapshot{std::move(configs), std::move(trustProcessPaths), std::move(luaEngine), hasGlobalMode, globalMode});
+}
+
+bool AmsiRuleEngine::ShouldBlockRule(const RuleSnapshot& snapshot,
+                                     const RaspRuleBase& rule)
+{
+    if (rule.IsOff())
+        return false;
+    if (snapshot.hasGlobalMode && snapshot.globalMode == RaspGlobalMode::Audit)
+        return false;
+    return rule.IsBlock();
 }
 
 static const char* ResolveTimeoutDecision(const std::vector<RaspEvalResult>& results,
@@ -506,6 +518,7 @@ void AmsiRuleEngine::OnReloadSignal() {
     bool buildOk = false;
     bool connectedOnce = false;
     RuleBundleMetadata requestedMetadata;
+    std::string requestedEffectiveHash;
     std::shared_ptr<const RuleSnapshot> next;
     std::string effectiveLib;
     for (int attempt = 0; attempt < 3 && !buildOk; attempt++) {
@@ -515,9 +528,15 @@ void AmsiRuleEngine::OnReloadSignal() {
         RuleBundleMetadata attemptMetadata;
         if (ConnectSentry(json, lib, attemptMetadata)) {
             connectedOnce = true;
-            requestedMetadata = attemptMetadata;
+            const std::string attemptEffectiveHash = ComputeEffectiveSnapshotHash(json);
             next = BuildNextSnapshot(json, lib, effectiveLib);
             buildOk = (next != nullptr);
+            if (buildOk) {
+                requestedMetadata = attemptMetadata;
+                requestedEffectiveHash = attemptEffectiveHash;
+            } else {
+                requestedMetadata = attemptMetadata;
+            }
         }
     }
 
@@ -546,6 +565,7 @@ void AmsiRuleEngine::OnReloadSignal() {
 
     PublishSnapshot(next, effectiveLib);
     SetActiveRuleMetadataForStatus(requestedMetadata);
+    SetActiveEffectiveSnapshotHash(requestedEffectiveHash);
     MarkHostAlive(true);
     MarkRuleSnapshotReady(true);
     if (waitResumeAfterHostLost) {
@@ -620,7 +640,7 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
 void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
     std::shared_ptr<const RuleSnapshot> next =
             std::make_shared<RuleSnapshot>(
-                RuleSnapshot{std::move(rules), {}, std::make_shared<RaspLuaEngine>()});
+                RuleSnapshot{std::move(rules), {}, std::make_shared<RaspLuaEngine>(), false, RaspGlobalMode::Block});
     std::atomic_store(&m_snapshot, next);
 }
 
@@ -889,7 +909,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
 
         RaspEvalResult r;
         r.matched = true;
-        r.block = rule.IsBlock();
+        r.block = ShouldBlockRule(*snap, rule);
         r.ruleId = rule.id;
         r.sensor = sensor;
         r.desc = desc;

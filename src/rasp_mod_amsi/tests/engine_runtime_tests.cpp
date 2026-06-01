@@ -60,6 +60,10 @@ public:
     using AmsiRuleEngine::BuildNextSnapshot;
     using AmsiRuleEngine::ParseAndSwap;
 
+    using AmsiRuleEngine::ActiveEffectiveSnapshotHash;
+    using AmsiRuleEngine::ComputeEffectiveSnapshotHash;
+    using AmsiRuleEngine::SetActiveEffectiveSnapshotHash;
+
     bool BuildSnapshotLuaMatches(const std::string& json,
                                  const std::string& libSource,
                                  const std::string& ruleId,
@@ -224,6 +228,18 @@ std::string OneRegexRuleJson(const char* id, const char* pattern)
 {
     return std::string("{\"rules\":[{\"id\":\"") + id +
            "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"split_regex\",\"config\":{\"regexPatterns\":[\"" +
+           pattern + "\"]}}]}";
+}
+
+std::string GlobalModeRegexRuleJson(const char* globalMode,
+                                    const char* ruleMode,
+                                    const char* id,
+                                    const char* pattern)
+{
+    return std::string("{\"globalMode\":\"") + globalMode +
+           "\",\"rules\":[{\"id\":\"" + id +
+           "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"" + ruleMode +
+           "\",\"description\":\"global_mode_regex\",\"config\":{\"regexPatterns\":[\"" +
            pattern + "\"]}}]}";
 }
 
@@ -634,6 +650,87 @@ int main()
                                                  scanContext);
         if (!Expect(matched.ruleMatched && matched.payload == "DownloadString",
                     "nullptr process context does not block body detection"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const std::string auditJson = GlobalModeRegexRuleJson("audit",
+                                                              "block",
+                                                              "global_hash_rule",
+                                                              "amsiutils");
+        const std::string blockJson = GlobalModeRegexRuleJson("block",
+                                                              "block",
+                                                              "global_hash_rule",
+                                                              "amsiutils");
+        const std::string auditHash = engine.ComputeEffectiveSnapshotHash(auditJson);
+        const std::string blockHash = engine.ComputeEffectiveSnapshotHash(blockJson);
+        if (!Expect(!auditHash.empty(), "effective snapshot hash is populated"))
+            return 1;
+        if (!Expect(auditHash != blockHash,
+                    "effective snapshot hash changes when globalMode changes"))
+            return 1;
+        engine.SetActiveEffectiveSnapshotHash(auditHash);
+        if (!Expect(engine.ActiveEffectiveSnapshotHash() == auditHash,
+                    "active effective snapshot hash is stored"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(GlobalModeRegexRuleJson("audit",
+                                                                "block",
+                                                                "global_audit_block_rule",
+                                                                "amsiutils"),
+                                       ""),
+                    "globalMode audit snapshot publishes"))
+            return 1;
+
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "amsiutils",
+                                                 9);
+        if (!Expect(matched.ruleMatched, "globalMode audit still reports matched rules"))
+            return 1;
+        if (!Expect(!matched.block, "globalMode audit downgrades block rule to audit"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(GlobalModeRegexRuleJson("block",
+                                                                "block",
+                                                                "global_block_block_rule",
+                                                                "amsiutils"),
+                                       ""),
+                    "globalMode block snapshot publishes"))
+            return 1;
+
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "amsiutils",
+                                                 9);
+        if (!Expect(matched.ruleMatched && matched.block,
+                    "globalMode block preserves block rule decision"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(GlobalModeRegexRuleJson("block",
+                                                                "audit",
+                                                                "global_block_audit_rule",
+                                                                "amsiutils"),
+                                       ""),
+                    "globalMode block audit-rule snapshot publishes"))
+            return 1;
+
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 "amsiutils",
+                                                 9);
+        if (!Expect(matched.ruleMatched && !matched.block,
+                    "globalMode block preserves audit rule decision"))
             return 1;
     }
 
