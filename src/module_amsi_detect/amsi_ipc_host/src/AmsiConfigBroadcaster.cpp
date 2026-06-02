@@ -109,7 +109,7 @@ namespace amsi_ipc {
                 SetEvent(stopEvent_);
             }
             threads.swap(acceptThreads_);
-            wakeCount = acceptThreadCount_;
+            wakeCount = static_cast<std::uint32_t>(threads.size());
             CloseClientsLocked();
         }
 
@@ -241,10 +241,12 @@ namespace amsi_ipc {
 
     void AmsiConfigBroadcaster::JoinAcceptThreads(std::vector<HANDLE> &threads,
                                                   std::uint32_t wakeCount) const {
+        const std::uint32_t boundedWakeCount = static_cast<std::uint32_t>(
+                std::min<std::size_t>(threads.size(), wakeCount));
         for (HANDLE thread: threads) {
             DWORD wait = WaitForSingleObject(thread, 3000);
             if (wait == WAIT_TIMEOUT) {
-                WakeAcceptThreads(wakeCount);
+                WakeAcceptThreads(boundedWakeCount);
                 wait = WaitForSingleObject(thread, 1000);
             }
             CloseHandle(thread);

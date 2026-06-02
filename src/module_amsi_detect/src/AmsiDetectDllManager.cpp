@@ -85,6 +85,7 @@ namespace Engine {
         std::string usingDllHash;
         if (FileUtils::GetFileSha256(m_amsiDllFilePath, usingDllHash) != 0) {
             ErrorLogf1(GetLoggerPtr(), "Failed to get (%s) hash.", m_amsiDllFilePath);
+            result.code = UPDATE_FAILED;
             return result;
         }
         result.installedDllHash = usingDllHash;
@@ -92,6 +93,7 @@ namespace Engine {
         std::string stagingDllHash;
         if (FileUtils::GetFileSha256(stagingDllPath, stagingDllHash) != 0) {
             ErrorLogf1(GetLoggerPtr(), "Failed to get (%s) hash.", stagingDllPath);
+            result.code = UPDATE_FAILED;
             return result;
         }
         result.targetDllHash = stagingDllHash;
