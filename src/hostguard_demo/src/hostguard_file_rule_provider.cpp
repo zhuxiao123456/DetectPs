@@ -6,6 +6,7 @@
 #include <fstream>
 #include <mutex>
 #include <sstream>
+#include <utility>
 
 using json = nlohmann::json;
 
@@ -63,6 +64,21 @@ std::string HostGuardFileRuleProvider::control_state() const
 {
     std::shared_lock<std::shared_mutex> guard(lock_);
     return controlState_;
+}
+
+void HostGuardFileRuleProvider::SetRequiredDllHash(std::string hash)
+{
+    std::unique_lock<std::shared_mutex> guard(lock_);
+    if (requiredDllHash_ != hash) {
+        requiredDllHash_ = std::move(hash);
+        ++stateRevision_;
+    }
+}
+
+std::string HostGuardFileRuleProvider::required_dll_hash() const
+{
+    std::shared_lock<std::shared_mutex> guard(lock_);
+    return requiredDllHash_;
 }
 
 std::string HostGuardFileRuleProvider::GetAllRulesJson()
@@ -142,10 +158,12 @@ std::string HostGuardFileRuleProvider::BuildAmsiRulesJson(const std::string& all
 std::string HostGuardFileRuleProvider::BuildStateEnvelope(const std::string& rulesJson) const
 {
     std::string state;
+    std::string requiredDllHash;
     std::uint64_t revision = 0;
     {
         std::shared_lock<std::shared_mutex> guard(lock_);
         state = controlState_;
+        requiredDllHash = requiredDllHash_;
         revision = stateRevision_;
     }
 
@@ -165,6 +183,7 @@ std::string HostGuardFileRuleProvider::BuildStateEnvelope(const std::string& rul
     envelope["state"] = state;
     envelope["stateVersion"] = stateVersion.str();
     envelope["ruleVersion"] = ruleVersion;
+    envelope["requiredDllHash"] = requiredDllHash;
     envelope["rules"] = (state == "running") ? rules : json::object();
     return envelope.dump();
 }

@@ -54,6 +54,7 @@ public:
     bool ResumeDetection();
     bool Unload();
     bool SetControlState(const std::string& state);
+    bool SetRequiredDllHash(const std::string& hash);
     void PrintStatus(std::ostream& output) const;
 
     bool started() const;

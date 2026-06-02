@@ -300,6 +300,25 @@ bool HostGuardDemoApp::SetControlState(const std::string& state)
     return true;
 }
 
+bool HostGuardDemoApp::SetRequiredDllHash(const std::string& hash)
+{
+    if (!ruleProvider_) {
+        startError_ = "rule provider is not initialized";
+        return false;
+    }
+
+    ruleProvider_->SetRequiredDllHash(hash);
+
+    if (amsiIpcModule_) {
+        std::string error;
+        if (!amsiIpcModule_->ReloadRules(1000, error)) {
+            startError_ = "HostGuardAmsiIpcModule dll hash update failed: " + error;
+            return false;
+        }
+    }
+    return true;
+}
+
 void HostGuardDemoApp::PrintStatus(std::ostream& output) const
 {
     output << "strictHostGuardMode: " << (options_.strictHostGuardMode ? "yes" : "no") << '\n'
@@ -318,6 +337,8 @@ void HostGuardDemoApp::PrintStatus(std::ostream& output) const
            << "enableDemoStagingWatcher: " << (options_.enableDemoStagingWatcher ? "yes" : "no") << '\n'
            << "controlState: "
            << (ruleProvider_ ? ruleProvider_->control_state() : std::string("not-ready")) << '\n'
+           << "requiredDllHash: "
+           << (ruleProvider_ ? ruleProvider_->required_dll_hash() : std::string("not-ready")) << '\n'
            << "providerCacheReady: "
            << ((ruleProvider_ && ruleProvider_->cache_ready()) ? "yes" : "no") << '\n'
            << "lastReload: reached=" << lastReload_.reached

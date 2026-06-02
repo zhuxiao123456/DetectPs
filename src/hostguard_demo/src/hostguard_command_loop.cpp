@@ -45,6 +45,16 @@ int RunHostGuardCommandLoop(HostGuardDemoApp& app)
             std::cout << (app.SetControlState("unload") ? "state unload set\n" : "state unload failed\n");
             continue;
         }
+        if (command == "dllhash-clear" || command == "clear-dllhash") {
+            std::cout << (app.SetRequiredDllHash("") ? "dllhash cleared\n" : "dllhash clear failed\n");
+            continue;
+        }
+        const std::string dllHashPrefix = "dllhash ";
+        if (command.rfind(dllHashPrefix, 0) == 0) {
+            const std::string hash = command.substr(dllHashPrefix.size());
+            std::cout << (app.SetRequiredDllHash(hash) ? "dllhash set\n" : "dllhash set failed\n");
+            continue;
+        }
         if (command == "reload") {
             std::cout << (app.Reload() ? "reload sent\n" : "reload failed\n");
             continue;

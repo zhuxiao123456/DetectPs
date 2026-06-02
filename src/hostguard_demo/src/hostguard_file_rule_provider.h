@@ -19,6 +19,8 @@ public:
     bool cache_ready() const;
     bool SetControlState(const std::string& state, std::string& error);
     std::string control_state() const;
+    void SetRequiredDllHash(std::string hash);
+    std::string required_dll_hash() const;
 
 private:
     std::string GetAllRulesJson();
@@ -33,5 +35,6 @@ private:
     std::string cachedAllRules_;
     std::string cachedAmsiRules_;
     std::string controlState_ = "running";
+    std::string requiredDllHash_;
     std::uint64_t stateRevision_ = 1;
 };

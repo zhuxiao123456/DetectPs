@@ -20,6 +20,7 @@
 #include <windows.h>
 
 #include <sddl.h>
+#include <bcrypt.h>
 #include <string>
 #include <vector>
 #include <memory>
@@ -28,6 +29,7 @@
 #include <cstdio>
 #include <ctime>
 #include <algorithm>
+#include <cctype>
 
 #include "../include/rasp_sentry_base.h"
 #include "../include/event_submit_client.h"
@@ -51,8 +53,126 @@ struct HostStateEnvelope {
     std::string desiredRuntimeState;
     std::string stateVersion;
     std::string ruleVersion;
+    std::string requiredDllHash;
     std::string rulesJson;
 };
+
+std::string NormalizeHashForCompare(std::string value)
+{
+    value.erase(std::remove_if(value.begin(), value.end(), [](unsigned char ch) {
+                    return std::isspace(ch) != 0;
+                }),
+                value.end());
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+std::string HexBytes(const unsigned char* data, size_t len)
+{
+    static const char kHex[] = "0123456789abcdef";
+    std::string out;
+    out.resize(len * 2);
+    for (size_t i = 0; i < len; ++i) {
+        out[i * 2] = kHex[(data[i] >> 4) & 0x0f];
+        out[i * 2 + 1] = kHex[data[i] & 0x0f];
+    }
+    return out;
+}
+
+std::wstring CurrentModulePath()
+{
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(&CurrentModulePath),
+                            &module) || module == nullptr) {
+        return std::wstring();
+    }
+
+    std::wstring path;
+    path.resize(MAX_PATH);
+    for (;;) {
+        DWORD len = GetModuleFileNameW(module, &path[0], static_cast<DWORD>(path.size()));
+        if (len == 0) {
+            return std::wstring();
+        }
+        if (len < path.size() - 1) {
+            path.resize(len);
+            return path;
+        }
+        path.resize(path.size() * 2);
+    }
+}
+
+std::string Sha256FileHex(const std::wstring& path)
+{
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return std::string();
+    }
+
+    BCRYPT_ALG_HANDLE alg = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    std::string result;
+    DWORD hashLen = 0;
+    DWORD cbData = 0;
+
+    if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) == 0 &&
+        BCryptGetProperty(alg, BCRYPT_HASH_LENGTH,
+                          reinterpret_cast<PUCHAR>(&hashLen),
+                          sizeof(hashLen), &cbData, 0) == 0 &&
+        hashLen > 0 &&
+        BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0) == 0) {
+        unsigned char buffer[64 * 1024];
+        bool ok = true;
+        for (;;) {
+            DWORD readBytes = 0;
+            if (!ReadFile(file, buffer, sizeof(buffer), &readBytes, nullptr)) {
+                ok = false;
+                break;
+            }
+            if (readBytes == 0) {
+                break;
+            }
+            if (BCryptHashData(hash, buffer, readBytes, 0) != 0) {
+                ok = false;
+                break;
+            }
+        }
+        if (ok) {
+            std::vector<unsigned char> hashBytes(hashLen);
+            if (BCryptFinishHash(hash, hashBytes.data(), hashLen, 0) == 0) {
+                result = HexBytes(hashBytes.data(), hashBytes.size());
+            }
+        }
+    }
+
+    if (hash) {
+        BCryptDestroyHash(hash);
+    }
+    if (alg) {
+        BCryptCloseAlgorithmProvider(alg, 0);
+    }
+    CloseHandle(file);
+    return result;
+}
+
+std::string CurrentModuleSha256Hex()
+{
+    static INIT_ONCE once = INIT_ONCE_STATIC_INIT;
+    static std::string cachedHash;
+    InitOnceExecuteOnce(&once,
+                        [](PINIT_ONCE, PVOID, PVOID*) -> BOOL {
+                            cachedHash = Sha256FileHex(CurrentModulePath());
+                            return TRUE;
+                        },
+                        nullptr,
+                        nullptr);
+    return cachedHash;
+}
 
 bool TryParseHostStateEnvelope(const std::string& response, HostStateEnvelope& envelope)
 {
@@ -82,6 +202,10 @@ bool TryParseHostStateEnvelope(const std::string& response, HostStateEnvelope& e
             }
         } else if (key == "ruleVersion") {
             if (!parser.read_string(envelope.ruleVersion)) {
+                parser.skip_value();
+            }
+        } else if (key == "requiredDllHash") {
+            if (!parser.read_string(envelope.requiredDllHash)) {
                 parser.skip_value();
             }
         } else if (key == "rules") {
@@ -398,6 +522,24 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
                             ModuleName(), envelope.stateVersion.c_str());
             OnUnloadSignal();
             return false;
+        }
+        if (!envelope.requiredDllHash.empty()) {
+            const std::string requiredDllHash = NormalizeHashForCompare(envelope.requiredDllHash);
+            const std::string currentDllHash = CurrentModuleSha256Hex();
+            if (currentDllHash.empty() || currentDllHash != requiredDllHash) {
+                m_upgradeInert.store(true, std::memory_order_release);
+                MarkHostAlive(true);
+                MarkDetectionPausedByHostState(true);
+                MarkRuleSnapshotReady(false);
+                MarkWaitingResumeAfterHostLost(true);
+                LogWithSeverity(RaspDiagSeverity::Warning,
+                                "[%s] ConnectSentry: requiredDllHash mismatch required=%s current=%s - entering upgrade inert mode",
+                                ModuleName(),
+                                requiredDllHash.c_str(),
+                                currentDllHash.empty() ? "unknown" : currentDllHash.c_str());
+                OnUnloadSignal();
+                return false;
+            }
         }
         if (m_upgradeInert.load(std::memory_order_acquire)) {
             Log("[%s] ConnectSentry: ignoring host state=%s because upgrade inert is already set",
