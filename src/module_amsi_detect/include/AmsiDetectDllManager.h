@@ -5,6 +5,7 @@
 #ifndef CSA_ENGINE_AMSI_DETECT_DLL_MANAGER_H
 #define CSA_ENGINE_AMSI_DETECT_DLL_MANAGER_H
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,7 +24,14 @@ namespace Engine {
         // 失败返回码.
         static constexpr int UPDATE_FAILED = -1;  // 通用失败.
 
-        AmsiDetectDllManager(const std::string &amsiDllFilePath);
+        struct AmsiDllUpdateResult {
+            int code = -1;
+            bool dllChanged = false;
+            std::string installedDllHash;
+            std::string targetDllHash;
+        };
+
+        AmsiDetectDllManager(std::string amsiDllFilePath);
         ~AmsiDetectDllManager() = default;
 
         // 注册/注销AMSI.
@@ -32,9 +40,10 @@ namespace Engine {
         
         // 更新dll（返回详细状态码）.
         int UpdateAmsiDll(const std::string &stagingDllPath, std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime);
+        AmsiDllUpdateResult UpdateAmsiDllEx(const std::string &stagingDllPath,
+                                                   std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime);
 
     private:
-        int BroadcastUnloadSignal();
         bool TryShadowReplace(const std::wstring &staged, const std::wstring &installed);
         int TryMoveFile(const std::wstring &src, const std::wstring &dst);
         bool ScheduleReboot(const std::wstring &src, const std::wstring &dst);

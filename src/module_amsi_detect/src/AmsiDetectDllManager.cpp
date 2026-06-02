@@ -6,6 +6,7 @@
 
 #include <windows.h>
 #include <algorithm>
+#include <utility>
 
 #include "ExecuteCmdUtils.h"
 #include "StrUtils.h"
@@ -20,10 +21,11 @@ namespace Engine {
     using namespace AmsiDetect;
 
     namespace {
-        const int kUpgradeUnloadBroadcastCycles = 3;
-        const uint32_t kUpgradeUnloadBroadcastTimeoutMs = 1000;
-        const DWORD kUpgradeUnloadSettleMs = 3000;
-
+        /**
+         * 生成类似upgrade-hash的前16位
+         * @param stagingDllHash  哈希值
+         * @return  升级状态版本,方便dll侧识别这是一次新的升级窗口
+         */
         std::string BuildUpgradeStateVersion(const std::string &stagingDllHash)
         {
             if (stagingDllHash.empty()) {
@@ -32,8 +34,8 @@ namespace Engine {
             return "upgrade-" + stagingDllHash.substr(0, std::min<size_t>(stagingDllHash.size(), 16));
         }
     }
-    AmsiDetectDllManager::AmsiDetectDllManager(const std::string &amsiDllFilePath)
-        : m_amsiDllFilePath(amsiDllFilePath)
+    AmsiDetectDllManager::AmsiDetectDllManager(std::string amsiDllFilePath)
+        : m_amsiDllFilePath(std::move(amsiDllFilePath))
     {
     }
 
@@ -71,19 +73,34 @@ namespace Engine {
     // 更新dll（返回详细状态码）.
     int AmsiDetectDllManager::UpdateAmsiDll(const std::string &stagingDllPath, std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime)
     {
+        return UpdateAmsiDllEx(stagingDllPath, m_amsiIpcRuntime).code;
+    }
+
+    AmsiDetectDllManager::AmsiDllUpdateResult AmsiDetectDllManager::UpdateAmsiDllEx(
+            const std::string &stagingDllPath,
+            std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime)
+    {
+        AmsiDllUpdateResult result;
+
         std::string usingDllHash;
         if (FileUtils::GetFileSha256(m_amsiDllFilePath, usingDllHash) != 0) {
             ErrorLogf1(GetLoggerPtr(), "Failed to get (%s) hash.", m_amsiDllFilePath);
-            return UPDATE_FAILED;
+            return result;
         }
+        result.installedDllHash = usingDllHash;
+
         std::string stagingDllHash;
         if (FileUtils::GetFileSha256(stagingDllPath, stagingDllHash) != 0) {
             ErrorLogf1(GetLoggerPtr(), "Failed to get (%s) hash.", stagingDllPath);
-            return UPDATE_FAILED;
+            return result;
         }
+        result.targetDllHash = stagingDllHash;
+
         if (usingDllHash == stagingDllHash) {
             InfoLogf3(GetLoggerPtr(), "(%s) (%s) hash(%s) is consistent, not need update.", m_amsiDllFilePath, stagingDllPath, usingDllHash);
-            return UPDATE_SUCCESS;
+            result.code = UPDATE_SUCCESS;
+            result.dllChanged = false;
+            return result;
         }
 
         InfoLogf4(GetLoggerPtr(), "(%s)-hash(%s) (%s)-hash(%s) is not consistent, start update...", m_amsiDllFilePath, usingDllHash, stagingDllPath, stagingDllHash);
@@ -92,24 +109,14 @@ namespace Engine {
         if (m_amsiIpcRuntime != nullptr) {
             std::string error;
             const std::string stateVersion = BuildUpgradeStateVersion(stagingDllHash);
-            if (!m_amsiIpcRuntime->EnterUpgradeUnloadingState(stateVersion, error)) {
+            if (!m_amsiIpcRuntime->EnterUpgradeUnloadingState(stateVersion, stagingDllHash, error)) {
                 WarningLogf1(GetLoggerPtr(), "Enter amsi upgrade unloading state failed: %s.", error);
             } else {
                 enteredUnloadingState = true;
                 InfoLogf1(GetLoggerPtr(), "Amsi upgrade unloading state entered: %s.", stateVersion);
             }
-
-            for (int i = 0; i < kUpgradeUnloadBroadcastCycles; ++i) {
-                error.clear();
-                if (!m_amsiIpcRuntime->Unload(kUpgradeUnloadBroadcastTimeoutMs, error)) {
-                    WarningLogf2(GetLoggerPtr(), "Broadcast amsi unload during dll update attempt=%d failed: %s.", i + 1, error);
-                }
-                const AmsiIpcBroadcastSummary summary = m_amsiIpcRuntime->GetLastBroadcastSummary("unload");
-                InfoLogf2(GetLoggerPtr(), "Dll update unload broadcast attempt=%d reached=%lu.",
-                          i + 1, static_cast<unsigned long>(summary.reached));
-                Sleep(1000);
-            }
-            Sleep(kUpgradeUnloadSettleMs);
+            InfoLog(GetLoggerPtr(), "Amsi upgrade unloading state published");
+            Sleep(AmsiGlobalConfRef.GetUnloadSettleMs());
         }
 
         std::wstring wStagedPath = StrUtils::Utf8ToUtf16(stagingDllPath);
@@ -117,7 +124,9 @@ namespace Engine {
         // 优先使用影子重命名替换DLL.
         if (TryShadowReplace(wStagedPath, wInstalledPath)) {
             InfoLog(GetLoggerPtr(), "DLL updated successfully via shadow rename - next AMSI scan will load the new binary.");
-            return UPDATE_SUCCESS_REPLACE;  // 影子重命名成功
+            result.code = UPDATE_SUCCESS_REPLACE;
+            result.dllChanged = true;
+            return result;
         }
 
         //  影子重命名失败，重试 MoveFileEx.
@@ -125,13 +134,17 @@ namespace Engine {
         int moveResult = TryMoveFile(wStagedPath, wInstalledPath);
         if (moveResult >= 0) {
             InfoLogf1(GetLoggerPtr(), "DLL updated successfully via MoveFileEx %d ms.", moveResult);
-            return UPDATE_SUCCESS_MOVE;  // MoveFileEx成功.
+            result.code = UPDATE_SUCCESS_MOVE;
+            result.dllChanged = true;
+            return result;
         }
 
         // 所有更新方法都失败，安排重启替换.
         InfoLog(GetLoggerPtr(), "All update methods failed - scheduling reboot replacement.");
         if (ScheduleReboot(wStagedPath, wInstalledPath)) {
-            return UPDATE_SUCCESS_REBOOT;  // 重启后替换成功.
+            result.code = UPDATE_SUCCESS_REBOOT;
+            result.dllChanged = true;
+            return result;
         } else {
             ErrorLog (GetLoggerPtr(), "Reboot scheduling also failed.");
             if (enteredUnloadingState && m_amsiIpcRuntime != nullptr) {
@@ -140,45 +153,9 @@ namespace Engine {
                     WarningLogf1(GetLoggerPtr(), "Restore amsi ipc running snapshot after dll update failure failed: %s.", restoreError);
                 }
             }
-            return UPDATE_FAILED;  // 完全失败.
+            result.code = UPDATE_FAILED;
+            return result;
         }
-    }
-
-    int AmsiDetectDllManager::BroadcastUnloadSignal()
-    {
-        InfoLog(GetLoggerPtr(), "Broadcasting 0x02 unload signal");
-
-        int reached = 0;
-        int i = 0;
-        for (; i <AmsiGlobalConfRef.GetBroadcastCount(); ++i) {
-            // 等待管道可用.
-            if (!WaitNamedPipeW(L"\\\\.\\pipe\\rasp_sentry_config", 500)) {
-                InfoLogf1(GetLoggerPtr(), "No more pipe listeners available, broadcast cnt(%d)", i);
-                break;  // 没有更多监听器.
-            }
-
-            // 连接管道.
-            HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\rasp_sentry_config", GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-            if (hPipe == INVALID_HANDLE_VALUE) {
-                ErrorLogf1(GetLoggerPtr(), "CreateFileW failed (GLE=%lu)", GetLastError());
-                continue;
-            }
-
-            // 发送 0x02 卸载信号.
-            BYTE signal = 0x02;
-            DWORD written = 0;
-            if (!WriteFile(hPipe, &signal, 1, &written, nullptr) || written != 1) {
-                ErrorLogf1(GetLoggerPtr(), "WriteFile failed (GLE=%lu)", GetLastError());
-                CloseHandle(hPipe);
-                continue;
-            }
-
-            CloseHandle(hPipe);
-            ++reached;
-        }
-        InfoLogf2(GetLoggerPtr(), "Unload broadcast complete - reached %d/%d provider(s)", reached, i);
-
-        return reached;  // 返回成功到达的监听器数量.
     }
 
     bool AmsiDetectDllManager::TryShadowReplace(const std::wstring &staged, const std::wstring &installed)

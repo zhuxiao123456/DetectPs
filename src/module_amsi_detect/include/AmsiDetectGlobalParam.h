@@ -18,6 +18,7 @@ namespace Engine
         struct AmsiRuleSnapshot {
             std::string amsiRulesJson;
             std::string version;
+            std::string requiredDllHash;
         };
 
         // module name
@@ -29,13 +30,13 @@ namespace Engine
         // task name
         static const std::string TASK_NAME_AMSI_DETECT = "amsi_detect_task";
 
-        // agentÉÏ±¨µÄAMSI ÌØÕ÷¿â°æ±¾ÏûÏ¢ºÅ.
+        // agentï¿½Ï±ï¿½AMSIï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ±¾ï¿½ï¿½Ï¢ID
         static const std::string AGENT_AMSI_LIB_VERSION = "feature_collect_1";
 
-        // master ·¢µÄAMSI ÌØÕ÷¿âÏÂÔØÏûÏ¢ºÅ.
+        // agentï¿½Ï±ï¿½ï¿½ï¿½AMSI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ±¾ï¿½ï¿½Ï¢ï¿½ï¿½.
         static const std::string MASTER_CMD_DOWNLOAD_AMSI_LIB = "feature_upgrade_HSS_AMSI_10001";
 
-        // agentÉÏ±¨µÄAMSI ÌØÕ÷¿âÏÂÔØ½á¹ûÏûÏ¢ºÅ.
+        // master ï¿½ï¿½ï¿½ï¿½AMSI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½.
         static const std::string AGENT_AMSI_LIB_RESPONSE = "feature_upgrade_response_1";
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

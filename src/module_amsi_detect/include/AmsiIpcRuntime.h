@@ -50,6 +50,7 @@ namespace Engine {
         bool Unload(uint32_t timeoutMs, std::string &error);
         bool UpdateRules(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error);
         bool EnterUpgradeUnloadingState(const std::string &stateVersion, std::string &error);
+        bool EnterUpgradeUnloadingState(const std::string &stateVersion, const std::string &requiredDllHash, std::string &error);
         bool RestorePreUpgradeSnapshot(std::string &error);
         bool Reload(uint32_t timeoutMs, std::string &error);
 

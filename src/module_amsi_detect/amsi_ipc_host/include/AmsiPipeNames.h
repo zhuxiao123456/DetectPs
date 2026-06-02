@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * å®šä¹‰äº† 4 æ ¹ç®¡é“çš„å…¨å±€é™æ€è·¯å¾„
+ * ¶¨ÒåÁË 4 ¸ù¹ÜµÀµÄÈ«¾Ö¾²Ì¬Â·¾¶
  */
 #ifndef AMSI_PIPE_NAMES_H
 #define AMSI_PIPE_NAMES_H
@@ -9,10 +9,10 @@
 
 namespace amsi_ipc {
 
-inline constexpr const wchar_t* kRulesPipeName = LR"(\\.\pipe\amsi_detect_rules)";
-inline constexpr const wchar_t* kEventsPipeName = LR"(\\.\pipe\amsi_detect_events)";
-inline constexpr const wchar_t* kControlStatusPipeName = LR"(\\.\pipe\amsi_detect_control_status)";
-inline constexpr const wchar_t* kConfigPipeName = LR"(\\.\pipe\amsi_detect_config)";
+constexpr const wchar_t* kRulesPipeName = LR"(\\.\pipe\amsi_detect_rules)";
+constexpr const wchar_t* kEventsPipeName = LR"(\\.\pipe\amsi_detect_events)";
+constexpr const wchar_t* kControlStatusPipeName = LR"(\\.\pipe\amsi_detect_control_status)";
+constexpr const wchar_t* kConfigPipeName = LR"(\\.\pipe\amsi_detect_config)";
 
 } // namespace amsi_ipc
 

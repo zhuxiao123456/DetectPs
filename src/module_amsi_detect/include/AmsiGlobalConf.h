@@ -78,6 +78,10 @@ namespace Engine {
             return m_rulePipeNums;
         }
 
+        uint32_t GetConfigPipeAcceptThreads() const {
+            return m_configPipeAcceptThreads;
+        }
+
         uint32_t GetEventPipeThreads() const {
             return m_eventPipeThreads;
         }
@@ -90,33 +94,51 @@ namespace Engine {
             return m_diagDroppedSummaryIntervalMs;
         }
 
+        uint32_t GetUnloadBroadcastCycles() const {
+            return m_upgradeUnloadBroadcastCycles;
+        }
+
+        uint32_t GetUnloadBroadcastTimeoutMs() const {
+            return m_upgradeUnloadBroadcastTimeoutMs;
+        }
+
+        uint32_t GetUnloadSettleMs() const {
+            return m_upgradeUnloadSettleMs;
+        }
+
     private:
-        // amsi.conf配置.
-        uint32_t m_broadcastCount = 256; // 广播时最大遍历数目.
-        size_t m_maxPayloadBytes = 64 * 1024 - 1;
-        // 检测事件队列: 高优先级、最大容纳 4096 个元素，总内存上限 64MB，单次入队超时 50ms
+        // amsi.conf配置项.
+        uint32_t m_broadcastCount = 256; // 广播时重试的次数.
+        size_t m_maxPayloadBytes = 64 * 1024 - 1;  // 单条消息最大载荷字节数.
+        // 检测队列配置: 优先级队列容量 4096 个元素，最大内存占用 64MB，入队超时时间 50ms
         size_t m_detectionQueueCapacity = 4096;
         size_t m_detectionQueueMaxBytes = 64 * 1024 * 1024;
         uint32_t m_detectionEnqueueTimeoutMs = 50;
-        // 探针诊断日志队列(dll传过来的)：中优先级，最大容纳 2048 个元素，总内存上限 16MB，限制单行日志最大 4KB，并设置 60 秒的去重窗口
+        // 诊断日志队列(DLL侧上报): 优先级队列容量 2048 个元素，最大内存占用 16MB，单条日志最大 4KB，重复日志去重窗口 60 秒
         size_t m_dllDiagnosticLogQueueCapacity = 2048;
         size_t m_dllDiagnosticLogQueueMaxBytes = 16 * 1024 * 1024;
         size_t m_dllDiagnosticLogMaxLineBytes = 4 * 1024;
         size_t m_detectionLogMaxLineBytes = 4 * 1024;
         size_t m_statusLogMaxLineBytes = 4 * 1024;
         uint32_t m_dllDiagnosticDuplicateWindowMs = 60 * 1000;
-        // 状态队列（Status Queue）：低优先级，最大容纳 1024 个元素，总内存上限 16MB，单次入队超时 50ms
+        // 状态队列(Status Queue): 优先级队列容量 1024 个元素，最大内存占用 16MB，入队超时时间 50ms
         size_t m_statusQueueCapacity = 1024;
         size_t m_statusQueueMaxBytes = 16 * 1024 * 1024;
         uint32_t m_statusEnqueueTimeoutMs = 50;
 
-        // IPC 管道线程数配置.
-        uint32_t m_rulePipeNums = 8;
+        // IPC管道线程配置.
+        uint32_t m_rulePipeNums = 4;
+        uint32_t m_configPipeAcceptThreads = 8;
         uint32_t m_eventPipeThreads = 4;
         uint32_t m_statusPipeThreads = 2;
 
-        // DLL 诊断日志 dropped 汇总打印间隔，默认 60 秒.
+        // DLL诊断日志丢弃统计打印间隔，默认 60 秒.
         size_t m_diagDroppedSummaryIntervalMs = 60 * 1000;
+
+        // dll更新升级参数
+        uint32_t m_upgradeUnloadBroadcastCycles = 3;  // unload广播三轮
+        uint32_t m_upgradeUnloadBroadcastTimeoutMs = 1000;  // 每轮广播超时1000ms
+        uint32_t m_upgradeUnloadSettleMs = 15000;  // 广播完成后等待15s,在替换DLL
     };
 }
 

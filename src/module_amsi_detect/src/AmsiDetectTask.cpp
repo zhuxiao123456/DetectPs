@@ -25,6 +25,16 @@ namespace Engine {
     using namespace AmsiDetect;
 
     namespace {
+
+        bool FillRequiredDllHash(const std::string &dllPath, AmsiRuleSnapshot &snapshot) {
+            std::string dllHash;
+            if (FileUtils::GetFileSha256(dllPath, dllHash) != 0) {
+                ErrorLogf1(GetLoggerPtr(), "Failed to get amsi dll hash from (%s).", dllPath);
+                return false;
+            }
+            snapshot.requiredDllHash = dllHash;
+            return true;
+        }
         std::string BuildRunningStateEnvelope(const SDK::JsonUtils::JsonValue &rulesJson, const std::string &version) {
             SDK::JsonUtils::JsonValue envelope;
             envelope["desiredRuntimeState"] = "running";
@@ -83,13 +93,13 @@ namespace Engine {
 
     void AmsiDetectTask::UnInit() {
         InfoLogf1(GetLoggerPtr(), "Task(%s) uninit begin.", name());
-        // ֪ͨ����������ģ�鲻�ٷ���AMSI�汾.
+        // 通知特征库升级模块不再发送AMSI版本.
         if (!m_usingAmsiVersion.empty()) {
             HandleAmsiVersionInFeatureUpgradeModule(m_usingAmsiVersion, false);
         }
 
         if (m_isDetecting) {
-            // ���dllע��ɹ���ж��
+            // 如果dll注册成功则卸载
             if (m_isAmsiRegistered) {
                 AmsiDetectDllManager amsiDetectDllManager{m_amsiDllFilePath};
                 if (!amsiDetectDllManager.UnregisterAmsiProvider()) {
@@ -98,21 +108,12 @@ namespace Engine {
                 m_isAmsiRegistered = false;
             }
 
-            // �㲥֪ͨdllֹͣ���(0x03)���ȴ�����dll��Ӧ���ر�ͨ��ͨ��; ��Ҫ���ack��Ϣ
+            // 如果通道开启，则关闭，不需要广播pause了
             if (m_isIpcRunning) {
-                std::string error;
-                if (m_amsiIpcRuntime != nullptr && !m_amsiIpcRuntime->PauseDetection(1000, error)) {
-                    WarningLogf1(GetLoggerPtr(), "Pause amsi detection failed during uninit: %s.", error);
-                }
-                if (m_amsiIpcRuntime != nullptr) {
-                    const AmsiIpcBroadcastSummary summary = m_amsiIpcRuntime->GetLastBroadcastSummary("pause");
-                    InfoLogf1(GetLoggerPtr(), "Pause amsi detection broadcast reached=%lu.",
-                              static_cast<unsigned long>(summary.reached));
-                }
                 StopAmsiIpcIfStarted();
             }
 
-            // �������
+            // 清理变量
 
             m_isDetecting = false;
         }
@@ -150,16 +151,16 @@ namespace Engine {
         LockUtils::ScopedMutexLock lock(m_operateAmsiLibLock);
 
         if (!CheckFileIsExist()) {
-            // �����ⲻ����ʱ������AMSI������.
+            // 特征库不完整时，清理AMSI特征库.
             if (DirUtils::IsDir(m_amsiDir)) {
                 if (DirUtils::DeleteDir(m_amsiDir) != 0) {
                     ErrorLogf1(GetLoggerPtr(), "Delete amsi dir (%s) failed.", m_amsiDir);
                 }
             }
 
-            // ����AMSI�������ʼ�汾.
+            // 发送AMSI特征库初始版本.
             SendAmsiDownloadRequest();
-            // ֪ͨ����������ģ�鶨ʱ����AMSI������汾.
+            // 通知特征库升级模块定时发送AMSI特征库版本.
             HandleAmsiVersionInFeatureUpgradeModule("2022010101", true);
             return 0;
         }
@@ -167,18 +168,21 @@ namespace Engine {
         InfoLog(GetLoggerPtr(), "Amsi file exist.");
         bool isStartCheckSuccess{false};
         do {
-            // ��ȡAMSI������汾.
+            // 读取AMSI特征库版本.
             if (!GetAmsiLibVersion()) {
                 break;
             }
 
-            // ��ȡ����.
+            // 读取规则.
             AmsiRuleSnapshot snapshot;
             if (!LoadRuleSnapshot(m_amsiRulePath, m_handingAmsiVersion, snapshot)) {
                 break;
             }
+            if (!FillRequiredDllHash(m_amsiDllFilePath, snapshot)) {
+                break;
+            }
 
-            // ����ͨ��ͨ��.
+            // 创建通信通道.
             std::string error;
             if (!StartAmsiIpc(snapshot, error)) {
                 ErrorLogf1(GetLoggerPtr(), "Start amsi ipc failed: %s.", error);
@@ -188,7 +192,7 @@ namespace Engine {
             m_isIpcRunning = true;
             InfoLogf1(GetLoggerPtr(), "Amsi ipc ready, rule version=%s.", snapshot.version);
 
-            // ע��AMSI.
+            // 注册AMSI.
             AmsiDetectDllManager amsiDetectDllManager{m_amsiDllFilePath};
             if (!amsiDetectDllManager.RegisterAmsiProvider()) {
                 return -1;
@@ -196,7 +200,7 @@ namespace Engine {
             m_isAmsiRegistered = true;
             m_isDetecting = true;
 
-            // ֪ͨ����������ģ�鶨ʱ����AMSI������汾.
+            // 通知特征库升级模块定时发送AMSI特征库版本.
             m_usingAmsiVersion = m_handingAmsiVersion;
             HandleAmsiVersionInFeatureUpgradeModule(m_usingAmsiVersion, true);
 
@@ -204,13 +208,13 @@ namespace Engine {
         } while (false);
 
         if (!isStartCheckSuccess) {
-            // ����AMSI������.
+            // 清理AMSI特征库.
             if (DirUtils::DeleteDir(m_amsiDir) != 0) {
                 ErrorLogf1(GetLoggerPtr(), "Delete amsi dir (%s) failed.", m_amsiDir);
             }
-            // ����AMSI�������ʼ�汾.
+            // 发送AMSI特征库初始版本.
             SendAmsiDownloadRequest();
-            // ֪ͨ����������ģ�鶨ʱ����AMSI������汾.
+            // 通知特征库升级模块定时发送AMSI特征库版本.
             HandleAmsiVersionInFeatureUpgradeModule("2022010101", true);
         }
 
@@ -250,7 +254,7 @@ namespace Engine {
         }
         ruleJson["version"] = version;
 
-        // ��������������.
+        // 加入策略里的配置.
         if (m_autoBlock) {
             ruleJson["globalMode"] = "block";
         } else {
@@ -363,7 +367,7 @@ namespace Engine {
 
     int
     AmsiDetectTask::DownloadAmsiPackage(const std::string &url, const std::string &hash, const std::string &version) {
-        // �������ϵͳ��֧��AMSI��ֱ�ӷ�������ʧ����Ϣ.
+        // 如果操作系统不支持AMSI，直接发送下载失败消息.
         int osName = SystemUtilsRef.GetOsName();
         if (osName < SystemUtils::WINDOWS_10 || osName >= SystemUtils::WINDOWS_MAX) {
             SendAmsiDownloadResponse(version, false, "os version unsupported amsi");
@@ -374,7 +378,7 @@ namespace Engine {
 
         LockUtils::ScopedMutexLock lock(m_operateAmsiLibLock);
 
-        // �����ʱ����Ŀ¼�Ƿ����, �������򴴽�Ŀ¼.
+        // 检查临时下载目录是否存在, 不存在则创建目录.
         if (!DirUtils::IsDir(m_amsiTmpDir)) {
             if (DirUtils::MakeDirs(m_amsiTmpDir, S_IRWXU | S_IRWXG | S_IRWXO) == 0) {
                 InfoLogf1(GetLoggerPtr(), "Create amsi tmp dir (%s) success.", m_amsiTmpDir);
@@ -385,7 +389,7 @@ namespace Engine {
             }
         }
 
-        // ����AMSI������.
+        // 下载AMSI特征库.
         int httpCode = HttpUtilsRef.Download(url, m_amsiZipPath, hash);
         if (httpCode != Poco::Net::HTTPResponse::HTTPStatus::HTTP_OK) {
             ErrorLogf2(GetLoggerPtr(), "Download amsi package failed, url=%s, hash=%s.", url, hash);
@@ -397,14 +401,14 @@ namespace Engine {
         }
         m_handingAmsiVersion = version;
 
-        // ��ѹ������.
+        // 解压特征库.
         if (!DecompressPackage(m_amsiTmpDir)) {
             return -1;
         }
 
-        if (!m_isDetecting) {  // �״�����AMSI������.
+        if (!m_isDetecting) {  // 首次下载AMSI特征库.
             FirstDownloadPackage();
-        } else { // ����AMSI������.
+        } else { // 更新AMSI特征库.
             UpgradeDownloadPackage();
         }
 
@@ -414,22 +418,29 @@ namespace Engine {
     void AmsiDetectTask::FirstDownloadPackage() {
         bool isStartCheckSuccess{false};
         do {
-            // ���Ź���.
+            // 加扰规则.
             std::string tmpRulesPath = m_amsiTmpDir + "amsi_rules.json";
             if (!ScramblingRules(tmpRulesPath, m_amsiRulePath)) {
-                // �����¿�Ӧ��ʧ��ԭ��.
+                // 发送新库应用失败原因.
                 SendAmsiDownloadResponse(m_handingAmsiVersion, false, "scrambling rules failed");
                 break;
             }
 
-            // ��ȡ����.
+            // dll暂存位置
+            std::string tmpDllPath = m_amsiTmpDir + "hss_amsi.dll";
+            // 读取规则.
             AmsiRuleSnapshot snapshot;
             if (!LoadRuleSnapshot(m_amsiRulePath, m_handingAmsiVersion, snapshot)) {
                 SendAmsiDownloadResponse(m_handingAmsiVersion, false, "load rule snapshot failed");
                 break;
             }
+            // 填充dll hash值
+            if (!FillRequiredDllHash(tmpDllPath, snapshot)) {
+                SendAmsiDownloadResponse(m_handingAmsiVersion, false, "get amsi dll hash failed");
+                break;
+            }
 
-            // ����ͨ��ͨ��.
+            // 创建通信通道.
             std::string error;
             if (!StartAmsiIpc(snapshot, error)) {
                 ErrorLogf1(GetLoggerPtr(), "Start amsi ipc failed: %s.", error);
@@ -440,42 +451,43 @@ namespace Engine {
             m_isIpcRunning = true;
             InfoLogf1(GetLoggerPtr(), "Amsi ipc ready, rule version=%s.", snapshot.version);
 
-            // ����dll��amsiĿ¼.
-            std::string tmpDllPath = m_amsiTmpDir + "hss_amsi.dll";
+            // 保存dll到amsi目录.
             int ret = FileUtils::CsaCopyFile(tmpDllPath, m_amsiDllFilePath);
             if (ret != 0) {
                 ErrorLogf3(GetLoggerPtr(), "Copy (%s) to (%s) failed, ret(%d).", tmpDllPath, m_amsiDllFilePath, ret);
-                // �����¿�Ӧ��ʧ��ԭ��.
+                // 发送新库应用失败原因.
                 SendAmsiDownloadResponse(m_handingAmsiVersion, false, "save amsi dll failed");
                 break;
             }
 
-            // ע��AMSI.
+            // 注册AMSI.
             AmsiDetectDllManager amsiDetectDllManager{m_amsiDllFilePath};
             if (!amsiDetectDllManager.RegisterAmsiProvider()) {
-                StopAmsiIpcIfStarted();  // ע��ʧ��,�ر����ͨ��
+                StopAmsiIpcIfStarted();  // 注册失败,关闭相关通道,m_isIpcRunning会被置为false
                 break;
             }
+            // 注册成功，修改对应变量
+            m_isAmsiRegistered = true;
 
             isStartCheckSuccess = true;
         } while (false);
 
         if (!isStartCheckSuccess) {
-            // ����AMSI������.
+            // 清理AMSI特征库.
             if (DirUtils::DeleteDir(m_amsiDir) != 0) {
                 ErrorLogf1(GetLoggerPtr(), "Delete amsi dir (%s) failed.", m_amsiDir);
             }
-            // ֪ͨ����������ģ�鶨ʱ����AMSI������汾.
+            // 通知特征库升级模块定时发送AMSI特征库版本.
             HandleAmsiVersionInFeatureUpgradeModule("2022010101", true);
         } else {
             m_isDetecting = true;
             m_usingAmsiVersion = m_handingAmsiVersion;
-            // ����AMSI������汾.
+            // 保存AMSI特征库版本.
             SaveAmsiLibVersion();
-            // ֪ͨ����������ģ�鶨ʱ����AMSI������汾.
+            // 通知特征库升级模块定时发送AMSI特征库版本.
             HandleAmsiVersionInFeatureUpgradeModule(m_usingAmsiVersion, true);
 
-            // ����tmpĿ¼.
+            // 清理tmp目录.
             if (DirUtils::DeleteDir(m_amsiTmpDir) != 0) {
                 ErrorLogf1(GetLoggerPtr(), "Delete amsi tmp dir (%s) failed.", m_amsiTmpDir);
             }
@@ -485,21 +497,21 @@ namespace Engine {
     }
 
     void AmsiDetectTask::UpgradeDownloadPackage() {
-        // ���Ź���.
+        // 加扰规则.
         std::string tmpRulesPath = m_amsiTmpDir + "amsi_rules.json";
         if (!ScramblingRules(tmpRulesPath, tmpRulesPath)) {
             ClearTmpDirAndSendFailedReason("scrambling rules failed");
             return;
         }
 
-        // ��ȡ����.
+        // 读取规则, 这里会将status设置为running
         AmsiRuleSnapshot snapshot;
         if (!LoadRuleSnapshot(tmpRulesPath, m_handingAmsiVersion, snapshot)) {
             ClearTmpDirAndSendFailedReason("load final rule snapshot failed");
             return;
         }
 
-        // ���ͨ�Ų������򴴽�.
+        // 如果通信不可用则创建.
         std::string error;
         if (m_amsiIpcRuntime == nullptr || !m_isIpcRunning) {
             if (!StartAmsiIpc(snapshot, error)) {
@@ -513,45 +525,34 @@ namespace Engine {
 
         AmsiDetectDllManager amsiDetectDllManager{m_amsiDllFilePath};
         std::string stagingDllPath = m_amsiTmpDir + "hss_amsi.dll";
-        if (amsiDetectDllManager.UpdateAmsiDll(stagingDllPath, m_amsiIpcRuntime) < 0) {
+        const AmsiDetectDllManager::AmsiDllUpdateResult updateResult =
+                amsiDetectDllManager.UpdateAmsiDllEx(stagingDllPath, m_amsiIpcRuntime);
+        if (updateResult.code < 0) {
             ClearTmpDirAndSendFailedReason("update dll failed");
             return;
         }
-        // �������amsiĿ¼.
+        snapshot.requiredDllHash = updateResult.targetDllHash;
+        // 保存规则到amsi目录.
         int ret = FileUtils::CsaCopyFile(tmpRulesPath, m_amsiRulePath);
         if (ret != 0) {
             ErrorLogf3(GetLoggerPtr(), "Copy (%s) to (%s) failed, ret(%d).", tmpRulesPath, m_amsiRulePath, ret);
-            ret = FileUtils::CsaDeleteFile(m_amsiRulePath); // ����������ʧ�ܣ�ɾ��amsiĿ¼�µľɹ����´���������.
+            ret = FileUtils::CsaDeleteFile(m_amsiRulePath); // 如果保存规则失败，删除amsi目录下的旧规则，下次重新下载.
             InfoLogf2(GetLoggerPtr(), "Delete (%s), ret(%d).", m_amsiRulePath, ret);
         }
         ret = FileUtils::CsaDeleteFile(tmpRulesPath);
         InfoLogf2(GetLoggerPtr(), "Delete (%s), ret(%d).", tmpRulesPath, ret);
 
-        // �㲥���������Ϣ֪ͨ�Ѽ��ص�dllʹ���¹������û�п���ͨ���򴴽�; ֮�����provider�еĹ����������.
+        // 更新provider中的规则快照内容.
         if (!m_amsiIpcRuntime->UpdateRules(snapshot, error)) {
             ErrorLogf1(GetLoggerPtr(), "Update amsi ipc rules failed: %s.", error);
             ClearTmpDirAndSendFailedReason("update ipc rules failed");
             return;
         }
-        m_lastReloadBroadcastOk = false;
-        // �㲥�¹���
-        if (m_amsiIpcRuntime != nullptr && m_isIpcRunning) {
-            if (!m_amsiIpcRuntime->Reload(3000, error)) {
-                WarningLogf1(GetLoggerPtr(), "Broadcast amsi reload failed: %s.", error);
-            } else {
-                m_lastReloadBroadcastOk = true;
-            }
-            {
-                const AmsiIpcBroadcastSummary summary = m_amsiIpcRuntime->GetLastBroadcastSummary("reload");
-                InfoLogf1(GetLoggerPtr(), "Reload amsi rules broadcast reached=%lu.",
-                          static_cast<unsigned long>(summary.reached));
-            }
-        }
 
         m_usingAmsiVersion = m_handingAmsiVersion;
-        // ����AMSI������汾.
+        // 保存AMSI特征库版本.
         SaveAmsiLibVersion();
-        // ֪ͨ����������ģ�鶨ʱ����AMSI������汾.
+        // 通知特征库升级模块定时发送AMSI特征库版本.
         HandleAmsiVersionInFeatureUpgradeModule(m_usingAmsiVersion, true);
 
         return;
@@ -568,7 +569,7 @@ namespace Engine {
             ret = true;
         }
 
-        // ɾ��ѹ����.
+        // 删除压缩包.
         if (FileUtils::CsaDeleteFile(m_amsiZipPath) != 0) {
             ErrorLogf2(GetLoggerPtr(), "Delete (%s) failed, errno(%d).", m_amsiZipPath, errno);
         }
@@ -603,12 +604,12 @@ namespace Engine {
     }
 
     void AmsiDetectTask::ClearTmpDirAndSendFailedReason(const std::string &reason) {
-        // ����AMSI��������ʱĿ¼.
+        // 清理AMSI特征库临时目录.
         if (DirUtils::DeleteDir(m_amsiTmpDir) != 0) {
             ErrorLogf1(GetLoggerPtr(), "Delete amsi dir (%s) failed.", m_amsiTmpDir);
         }
 
-        // �����¿�Ӧ��ʧ��ԭ��.
+        // 发送新库应用失败原因.
         SendAmsiDownloadResponse(m_handingAmsiVersion, false, reason);
 
         return;

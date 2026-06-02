@@ -2,6 +2,7 @@
 // Created by z00840245 on 2026/5/26.
 //
 
+#include <unordered_map>
 #include "../include/AmsiEventProcessor.h"
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -68,6 +69,22 @@ namespace Engine {
 
         void MakeAmsiAlarmMsg(const SDK::JsonUtils::JsonValue &raw,
                               SDK::JsonUtils::JsonValue &jValue) {
+            // 添加action字段
+            std::string act = GetStringField(raw, "act");
+            static const std::unordered_map<std::string, uint32_t> kActionCodeMap = {
+                    {"block", 2},
+                    {"audit", 1}
+            };
+            auto it = kActionCodeMap.find(act);
+
+            if (it != kActionCodeMap.end()) {
+                jValue["action"] = it->second;
+            } else {
+                WarningLogf1(AmsiDetect::GetLoggerPtr(),
+                             "Unknown action value: '%s', defaulting to audit(1)",
+                             act.c_str());
+                jValue["action"] = 1;
+            }
             jValue["event_id"] = CryptoCodeUtils::GenerateUUID();
             jValue["event_classid"] = "amsi_0001";
             jValue["event_name"] = "Suspicious Powershell Command Execution";
@@ -82,7 +99,7 @@ namespace Engine {
             jValue["detect_module"] = AmsiDetect::MODULE_NAME_AMSI_DETECT;
 
             SDK::JsonUtils::JsonValue processInfo;
-            processInfo["process_pid"] = GetIntField(raw, "processId", 0);
+            processInfo["process_pid"] = GetIntField(raw, "processPid", 0);
             processInfo["process_path"] = GetStringField(raw, "processPath");
             processInfo["parent_process_pid"] = GetIntField(raw, "parentPid", 0);
             processInfo["parent_process_path"] = GetStringField(raw, "parentProcessPath");

@@ -14,9 +14,25 @@
 #include <utility>
 
 namespace amsi_ipc {
+    namespace {
+        std::uint32_t ClampAcceptThreadCount(std::uint32_t count) {
+            if (count < 1) {
+                return 1;
+            }
+            if (count > 32) {
+                return 32;
+            }
+            return count;
+        }
+    }
 
     AmsiConfigBroadcaster::AmsiConfigBroadcaster(std::wstring configPipeName)
-            : configPipeName_(std::move(configPipeName)) {
+            : AmsiConfigBroadcaster(std::move(configPipeName), 1) {
+    }
+
+    AmsiConfigBroadcaster::AmsiConfigBroadcaster(std::wstring configPipeName, std::uint32_t acceptThreadCount)
+            : configPipeName_(std::move(configPipeName)),
+              acceptThreadCount_(ClampAcceptThreadCount(acceptThreadCount)) {
     }
 
     AmsiConfigBroadcaster::~AmsiConfigBroadcaster() {
@@ -24,7 +40,7 @@ namespace amsi_ipc {
     }
 
     bool AmsiConfigBroadcaster::Start() {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::mutex> lock(mutex_);
         if (running_) {
             return true;
         }
@@ -57,42 +73,53 @@ namespace amsi_ipc {
         }
 
         running_ = true;
-        acceptThread_ = CreateThread(nullptr, 0, AcceptThreadProc, this, 0, nullptr);
-        if (!acceptThread_) {
-            running_ = false;
-            CloseHandle(static_cast<HANDLE>(stopEvent_));
-            stopEvent_ = nullptr;
-            return false;
+        acceptThreads_.clear();
+        for (std::uint32_t i = 0; i < acceptThreadCount_; ++i) {
+            HANDLE thread = CreateThread(nullptr, 0, AcceptThreadProc, this, 0, nullptr);
+            if (!thread) {
+                running_ = false;
+                SetEvent(stopEvent_);
+                CloseClientsLocked();
+                std::vector<HANDLE> startedThreads;
+                startedThreads.swap(acceptThreads_);
+                const std::uint32_t wakeCount = static_cast<std::uint32_t>(startedThreads.size());
+                lock.unlock();
+                WakeAcceptThreads(wakeCount);
+                JoinAcceptThreads(startedThreads, wakeCount);
+                lock.lock();
+                CloseHandle(stopEvent_);
+                stopEvent_ = nullptr;
+                return false;
+            }
+            acceptThreads_.push_back(thread);
         }
         return true;
     }
 
     void AmsiConfigBroadcaster::Stop() {
-        HANDLE thread = nullptr;
+        std::vector<HANDLE> threads;
+        std::uint32_t wakeCount = 0;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            if (!running_ && !acceptThread_ && !stopEvent_) {
+            if (!running_ && acceptThreads_.empty() && !stopEvent_) {
                 return;
             }
             running_ = false;
             if (stopEvent_) {
-                SetEvent(static_cast<HANDLE>(stopEvent_));
+                SetEvent(stopEvent_);
             }
-            thread = static_cast<HANDLE>(acceptThread_);
+            threads.swap(acceptThreads_);
+            wakeCount = acceptThreadCount_;
             CloseClientsLocked();
         }
 
-        WakeAcceptThread();
+        WakeAcceptThreads(wakeCount);
 
-        if (thread) {
-            WaitForSingleObject(thread, 3000);
-            CloseHandle(thread);
-        }
+        JoinAcceptThreads(threads, wakeCount);
 
         std::lock_guard<std::mutex> lock(mutex_);
-        acceptThread_ = nullptr;
         if (stopEvent_) {
-            CloseHandle(static_cast<HANDLE>(stopEvent_));
+            CloseHandle(stopEvent_);
             stopEvent_ = nullptr;
         }
     }
@@ -107,25 +134,26 @@ namespace amsi_ipc {
         }
 
         const auto rawSignal = static_cast<std::uint8_t>(signal);
-        const DWORD deadline = GetTickCount() + timeoutMs;
+        const ULONGLONG startTick = GetTickCount64();
 
         while (result.reached < maxListeners) {
             HANDLE pipe = INVALID_HANDLE_VALUE;
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 if (!clients_.empty()) {
-                    pipe = static_cast<HANDLE>(clients_.back());
+                    pipe = clients_.back();
                     clients_.pop_back();
                 }
             }
 
             if (pipe == INVALID_HANDLE_VALUE) {
-                const DWORD now = GetTickCount();
-                if (timeoutMs == 0 || now >= deadline) {
+                const ULONGLONG elapsed = GetTickCount64() - startTick;
+                if (timeoutMs == 0 || elapsed >= timeoutMs) {
                     result.lastError = result.reached > 0 ? ERROR_SUCCESS : ERROR_FILE_NOT_FOUND;
                     break;
                 }
-                Sleep(std::min<DWORD>(25, deadline - now));
+                const DWORD remaining = static_cast<DWORD>(timeoutMs - elapsed);
+                Sleep(std::min<DWORD>(25, remaining));
                 continue;
             }
 
@@ -182,6 +210,11 @@ namespace amsi_ipc {
                 continue;
             }
 
+            if (IsStopRequested()) {
+                CloseHandle(pipe);
+                break;
+            }
+
             const BOOL connected = ConnectNamedPipe(pipe, nullptr);
             const DWORD connectError = connected ? ERROR_SUCCESS : GetLastError();
 
@@ -200,22 +233,50 @@ namespace amsi_ipc {
     }
 
     void AmsiConfigBroadcaster::CloseClientsLocked() {
-        for (void *client: clients_) {
-            CloseHandle(static_cast<HANDLE>(client));
+        for (HANDLE client: clients_) {
+            CloseHandle(client);
         }
         clients_.clear();
     }
 
-    void AmsiConfigBroadcaster::WakeAcceptThread() const {
-        HANDLE pipe = CreateFileW(configPipeName_.c_str(),
-                                  GENERIC_READ,
-                                  0,
-                                  nullptr,
-                                  OPEN_EXISTING,
-                                  0,
-                                  nullptr);
-        if (pipe != INVALID_HANDLE_VALUE) {
-            CloseHandle(pipe);
+    void AmsiConfigBroadcaster::JoinAcceptThreads(std::vector<HANDLE> &threads,
+                                                  std::uint32_t wakeCount) const {
+        for (HANDLE thread: threads) {
+            DWORD wait = WaitForSingleObject(thread, 3000);
+            if (wait == WAIT_TIMEOUT) {
+                WakeAcceptThreads(wakeCount);
+                wait = WaitForSingleObject(thread, 1000);
+            }
+            CloseHandle(thread);
+        }
+        threads.clear();
+    }
+
+    bool AmsiConfigBroadcaster::IsStopRequested() const {
+        HANDLE stopEvent = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (!running_) {
+                return true;
+            }
+            stopEvent = stopEvent_;
+        }
+
+        return stopEvent && WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0;
+    }
+
+    void AmsiConfigBroadcaster::WakeAcceptThreads(std::uint32_t wakeCount) const {
+        for (std::uint32_t i = 0; i < wakeCount; ++i) {
+            HANDLE pipe = CreateFileW(configPipeName_.c_str(),
+                                      GENERIC_READ,
+                                      0,
+                                      nullptr,
+                                      OPEN_EXISTING,
+                                      0,
+                                      nullptr);
+            if (pipe != INVALID_HANDLE_VALUE) {
+                CloseHandle(pipe);
+            }
         }
     }
 

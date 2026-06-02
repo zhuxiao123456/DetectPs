@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * 定义 AMSI config 控制信号广播结构。
+ * Defines AMSI config control signal broadcaster.
  */
 
 #ifndef AMSI_CONFIG_BROADCASTER_H
@@ -13,24 +13,29 @@
 #include <string>
 #include <vector>
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
 namespace amsi_ipc {
-    // 定义广播通信的控制指令, 强制底层类型为单字节 std::uint8_t, 降低通信开销和复杂度
     enum class AmsiControlSignal : std::uint8_t {
         Reload = 0x01,
         Unload = 0x02,
         PauseDetection = 0x03,
         ResumeDetection = 0x04,
     };
-    // 封装广播操作的执行结果
+
     struct AmsiBroadcastResult {
-        int reached = 0;  // 收到指定的探针数量
-        std::uint32_t lastError = 0;  // 过程中发生的最后一个 Windows 系统错误码 (GetLastError())，方便上层诊断
+        int reached = 0;
+        std::uint32_t lastError = 0;
     };
 
-    // 执行广播动作的核心类
     class AmsiConfigBroadcaster {
     public:
         explicit AmsiConfigBroadcaster(std::wstring configPipeName);
+
+        AmsiConfigBroadcaster(std::wstring configPipeName, std::uint32_t acceptThreadCount);
 
         ~AmsiConfigBroadcaster();
 
@@ -53,16 +58,20 @@ namespace amsi_ipc {
 
         void CloseClientsLocked();
 
-        void WakeAcceptThread() const;
+        void JoinAcceptThreads(std::vector<HANDLE> &threads, std::uint32_t wakeCount) const;
+
+        bool IsStopRequested() const;
+
+        void WakeAcceptThreads(std::uint32_t wakeCount) const;
 
         std::wstring configPipeName_;
-        void *acceptThread_ = nullptr;
-        void *stopEvent_ = nullptr;
+        std::uint32_t acceptThreadCount_ = 1;
+        std::vector<HANDLE> acceptThreads_;
+        HANDLE stopEvent_ = nullptr;
         mutable std::mutex mutex_;
-        mutable std::vector<void *> clients_;
+        mutable std::vector<HANDLE> clients_;
         bool running_ = false;
     };
-
 } // namespace amsi_ipc
 
 #endif

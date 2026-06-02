@@ -70,13 +70,19 @@ namespace Engine {
         void Reset(size_t capacity, size_t maxBytes);  // 重置队列状态、引擎配置热更新、重启服务时使用
         // 生产者接口: 数据入队
         bool Push(RuntimePayloadEnvelope &&item, uint32_t timeoutMs, bool waitWhenFull);
+
         bool TryPush(RuntimePayloadEnvelope &&item);
+
         bool Pop(RuntimePayloadEnvelope &out);
+
         void Stop();
+
         void StopAndDrop();
+
         void Clear();
 
         size_t Size() const;
+
         size_t Bytes() const;
 
     private:
