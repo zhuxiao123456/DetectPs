@@ -291,18 +291,21 @@ TEST_F(AmsiIpcRuntimeTest, UpdateRules_AfterStart_ReturnsTrue) {
     runtime.Stop(1000, error);
 }
 
-TEST_F(AmsiIpcRuntimeTest, PauseDetection_AfterStart_NoListeners_ReturnsFalse) {
+TEST_F(AmsiIpcRuntimeTest, PauseDetection_AfterStart_LegacyConfigDisabled_ReturnsTrue) {
     AmsiIpcRuntime runtime;
     auto config = MakeValidConfig();
     std::string error;
     runtime.Init(config, error);
     auto snapshot = MakeValidSnapshot();
     runtime.Start(snapshot, error);
-    EXPECT_FALSE(runtime.PauseDetection(1000, error));
+    EXPECT_TRUE(runtime.PauseDetection(1000, error));
+    auto summary = runtime.GetLastBroadcastSummary("pause");
+    EXPECT_EQ(summary.reached, 0u);
+    EXPECT_EQ(summary.lastError, 0u);
     runtime.Stop(1000, error);
 }
 
-TEST_F(AmsiIpcRuntimeTest, ResumeDetection_AfterStart_NoListeners_ReturnsFalse) {
+TEST_F(AmsiIpcRuntimeTest, ResumeDetection_AfterStart_LegacyConfigDisabled_ReturnsTrue) {
     AmsiIpcRuntime runtime;
     auto config = MakeValidConfig();
     std::string error;
@@ -310,28 +313,37 @@ TEST_F(AmsiIpcRuntimeTest, ResumeDetection_AfterStart_NoListeners_ReturnsFalse) 
     auto snapshot = MakeValidSnapshot();
     runtime.Start(snapshot, error);
     runtime.PauseDetection(1000, error);
-    EXPECT_FALSE(runtime.ResumeDetection(1000, error));
+    EXPECT_TRUE(runtime.ResumeDetection(1000, error));
+    auto summary = runtime.GetLastBroadcastSummary("resume");
+    EXPECT_EQ(summary.reached, 0u);
+    EXPECT_EQ(summary.lastError, 0u);
     runtime.Stop(1000, error);
 }
 
-TEST_F(AmsiIpcRuntimeTest, Unload_AfterStart_NoListeners_ReturnsFalse) {
+TEST_F(AmsiIpcRuntimeTest, Unload_AfterStart_LegacyConfigDisabled_ReturnsTrue) {
     AmsiIpcRuntime runtime;
     auto config = MakeValidConfig();
     std::string error;
     runtime.Init(config, error);
     auto snapshot = MakeValidSnapshot();
     runtime.Start(snapshot, error);
-    EXPECT_FALSE(runtime.Unload(1000, error));
+    EXPECT_TRUE(runtime.Unload(1000, error));
+    auto summary = runtime.GetLastBroadcastSummary("unload");
+    EXPECT_EQ(summary.reached, 0u);
+    EXPECT_EQ(summary.lastError, 0u);
     runtime.Stop(1000, error);
 }
 
-TEST_F(AmsiIpcRuntimeTest, Reload_AfterStart_NoListeners_ReturnsFalse) {
+TEST_F(AmsiIpcRuntimeTest, Reload_AfterStart_LegacyConfigDisabled_ReturnsTrue) {
     AmsiIpcRuntime runtime;
     auto config = MakeValidConfig();
     std::string error;
     runtime.Init(config, error);
     auto snapshot = MakeValidSnapshot();
     runtime.Start(snapshot, error);
-    EXPECT_FALSE(runtime.Reload(1000, error));
+    EXPECT_TRUE(runtime.Reload(1000, error));
+    auto summary = runtime.GetLastBroadcastSummary("reload");
+    EXPECT_EQ(summary.reached, 0u);
+    EXPECT_EQ(summary.lastError, 0u);
     runtime.Stop(1000, error);
 }

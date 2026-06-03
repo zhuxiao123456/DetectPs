@@ -39,7 +39,6 @@ namespace Engine {
         const wchar_t *kRulesPipeName = L"\\\\.\\pipe\\amsi_detect_rules";
         const wchar_t *kEventsPipeName = L"\\\\.\\pipe\\amsi_detect_events";
         const wchar_t *kControlStatusPipeName = L"\\\\.\\pipe\\amsi_detect_control_status";
-        const wchar_t *kConfigPipeName = L"\\\\.\\pipe\\amsi_detect_config";
         constexpr DWORD kRulePipeOutBufferBytes = 512 * 1024;
         constexpr DWORD kRulePipeInBufferBytes = 256;
 
@@ -365,9 +364,6 @@ namespace Engine {
         std::unique_ptr<amsi_ipc::NamedPipeServerPool> rulePool;
         std::unique_ptr<amsi_ipc::NamedPipeServerPool> eventPool;
         std::unique_ptr<amsi_ipc::NamedPipeServerPool> statusPool;
-
-        std::unique_ptr<amsi_ipc::AmsiConfigBroadcaster> broadcaster;
-
         BoundedPayloadQueue detectionQueue;
         BoundedPayloadQueue dllDiagQueue;
         BoundedPayloadQueue statusQueue;
@@ -418,8 +414,6 @@ namespace Engine {
          */
         void ResetRuntimeObjects() {
             acceptingPayload.store(false);
-            broadcaster.reset();
-
             statusPool.reset();
             eventPool.reset();
             rulePool.reset();
@@ -886,27 +880,6 @@ namespace Engine {
             m_impl->ResetRuntimeObjects();
             return false;
         }
-
-        /**
-         * host->dll
-         * - DLL ???????????§Õ????
-          - DLL ???????????? Host §Õ 1 ??????????
-          - Host ????????§»?????? DLL ?? handle??
-          - ??? reload/unload/pause/resume ???Host ???? clients_?????§Õ????
-          - §Õ????? handle??DLL ????????????????
-         */
-        m_impl->broadcaster.reset(new amsi_ipc::AmsiConfigBroadcaster(
-                kConfigPipeName,
-                AmsiGlobalConfRef.GetConfigPipeAcceptThreads()));
-        if (!m_impl->broadcaster->Start()) {
-            error = "start config notify pipe failed";
-            m_impl->StopPools();
-            m_impl->StopQueuesAndWorkers(3000);
-            m_impl->ResetRuntimeObjects();
-            return false;
-        }
-        InfoLog(AmsiDetect::GetLoggerPtr(), "Amsi config notify server started on amsi_detect_config.");
-
         m_impl->acceptingPayload.store(true);
         m_impl->snapshot = providerSnapshot;
         m_impl->hasPreUpgradeSnapshot = false;
@@ -948,66 +921,39 @@ namespace Engine {
      * @return
      */
     bool AmsiIpcRuntime::PauseDetection(uint32_t timeoutMs, std::string &error) {
-        if (!m_impl->running.load() || !m_impl->broadcaster) {
-            error.clear();
-            return true;
-        }
-
-        const amsi_ipc::AmsiBroadcastResult result =
-                m_impl->broadcaster->Broadcast(amsi_ipc::AmsiControlSignal::PauseDetection,
-                                               AmsiGlobalConfRef.GetBroadcastCount(),
-                                               timeoutMs);
+        amsi_ipc::AmsiBroadcastResult result{};
         m_impl->StoreBroadcastSummary("pause", timeoutMs, result);
-        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi pause broadcast reached=%lu lastError=%lu timeoutMs=%lu.",
-                   static_cast<unsigned long>(result.reached < 0 ? 0 : result.reached),
-                   static_cast<unsigned long>(result.lastError),
+        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi pause legacy config broadcast disabled reached=%lu lastError=%lu timeoutMs=%lu.",
+                   static_cast<unsigned long>(0),
+                   static_cast<unsigned long>(0),
                    static_cast<unsigned long>(timeoutMs));
-        return BroadcastSucceeded(result, error);
+        error.clear();
+        return true;
     }
 
     bool AmsiIpcRuntime::ResumeDetection(uint32_t timeoutMs, std::string &error) {
-        if (!m_impl->running.load() || !m_impl->broadcaster) {
-            error.clear();
-            return true;
-        }
-
-        const amsi_ipc::AmsiBroadcastResult result =
-                m_impl->broadcaster->Broadcast(amsi_ipc::AmsiControlSignal::ResumeDetection,
-                                               AmsiGlobalConfRef.GetBroadcastCount(),
-                                               timeoutMs);
+        amsi_ipc::AmsiBroadcastResult result{};
         m_impl->StoreBroadcastSummary("resume", timeoutMs, result);
-        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi resume broadcast reached=%lu lastError=%lu timeoutMs=%lu.",
-                   static_cast<unsigned long>(result.reached < 0 ? 0 : result.reached),
-                   static_cast<unsigned long>(result.lastError),
+        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi resume legacy config broadcast disabled reached=%lu lastError=%lu timeoutMs=%lu.",
+                   static_cast<unsigned long>(0),
+                   static_cast<unsigned long>(0),
                    static_cast<unsigned long>(timeoutMs));
-        return BroadcastSucceeded(result, error);
+        error.clear();
+        return true;
     }
 
-    // Best-effort unload broadcast. Current wire protocol does not provide reliable ack.
+    // Legacy config unload broadcast is disabled. DLLs observe unloading through amsi_detect_rules polling.
     bool AmsiIpcRuntime::Unload(uint32_t timeoutMs, std::string &error) {
-        if (!m_impl->running.load() || !m_impl->broadcaster) {
-            error.clear();
-            return true;
-        }
-
-        const amsi_ipc::AmsiBroadcastResult result =
-                m_impl->broadcaster->Broadcast(amsi_ipc::AmsiControlSignal::Unload,
-                                               AmsiGlobalConfRef.GetBroadcastCount(),
-                                               timeoutMs);
+        amsi_ipc::AmsiBroadcastResult result{};
         m_impl->StoreBroadcastSummary("unload", timeoutMs, result);
-        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi unload broadcast reached=%lu lastError=%lu timeoutMs=%lu.",
-                   static_cast<unsigned long>(result.reached < 0 ? 0 : result.reached),
-                   static_cast<unsigned long>(result.lastError),
+        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi unload legacy config broadcast disabled reached=%lu lastError=%lu timeoutMs=%lu.",
+                   static_cast<unsigned long>(0),
+                   static_cast<unsigned long>(0),
                    static_cast<unsigned long>(timeoutMs));
-        return BroadcastSucceeded(result, error);
+        error.clear();
+        return true;
     }
-
-    /**
-     * ???¦Ì?????????????????????????????????y??; ????????????? ruleProvider ?§Ö????????
-     * @param snapshot  ?¦Ì?????????????
-     * @param error ???????
-     * @return ??????? true
-     */
+    // Updates the in-memory rule snapshot served by amsi_detect_rules.
     bool AmsiIpcRuntime::UpdateRules(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error) {
         if (!m_impl->initialized.load()) {
             error = "amsi ipc runtime is not initialized";
@@ -1105,21 +1051,19 @@ namespace Engine {
     }
 
     bool AmsiIpcRuntime::Reload(uint32_t timeoutMs, std::string &error) {
-        if (!m_impl->running.load() || !m_impl->broadcaster) {
+        if (!m_impl->running.load()) {
             error = "amsi ipc runtime is not running";
             return false;
         }
 
-        const amsi_ipc::AmsiBroadcastResult result =
-                m_impl->broadcaster->Broadcast(amsi_ipc::AmsiControlSignal::Reload,
-                                               AmsiGlobalConfRef.GetBroadcastCount(),
-                                               timeoutMs);
+        amsi_ipc::AmsiBroadcastResult result{};
         m_impl->StoreBroadcastSummary("reload", timeoutMs, result);
-        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi reload broadcast reached=%lu lastError=%lu timeoutMs=%lu.",
-                   static_cast<unsigned long>(result.reached < 0 ? 0 : result.reached),
-                   static_cast<unsigned long>(result.lastError),
+        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi reload legacy config broadcast disabled reached=%lu lastError=%lu timeoutMs=%lu.",
+                   static_cast<unsigned long>(0),
+                   static_cast<unsigned long>(0),
                    static_cast<unsigned long>(timeoutMs));
-        return BroadcastSucceeded(result, error);
+        error.clear();
+        return true;
     }
 
     bool AmsiIpcRuntime::IsRunning() const {

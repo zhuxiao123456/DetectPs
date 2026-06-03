@@ -31,7 +31,7 @@ namespace Engine {
             std::string targetDllHash;
         };
 
-        AmsiDetectDllManager(std::string amsiDllFilePath);
+        AmsiDetectDllManager(const std::string &amsiDllFilePath);
         ~AmsiDetectDllManager() = default;
 
         // 注册/注销AMSI.

@@ -34,8 +34,8 @@ namespace Engine {
             return "upgrade-" + stagingDllHash.substr(0, std::min<size_t>(stagingDllHash.size(), 16));
         }
     }
-    AmsiDetectDllManager::AmsiDetectDllManager(std::string amsiDllFilePath)
-        : m_amsiDllFilePath(std::move(amsiDllFilePath))
+    AmsiDetectDllManager::AmsiDetectDllManager(const std::string &amsiDllFilePath)
+        : m_amsiDllFilePath(amsiDllFilePath)
     {
     }
 

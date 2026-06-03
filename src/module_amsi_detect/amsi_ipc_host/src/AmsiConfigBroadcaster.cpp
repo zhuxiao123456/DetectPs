@@ -243,10 +243,12 @@ namespace amsi_ipc {
                                                   std::uint32_t wakeCount) const {
         const std::uint32_t boundedWakeCount = static_cast<std::uint32_t>(
                 std::min<std::size_t>(threads.size(), wakeCount));
+        bool wakeRetried = false;
         for (HANDLE thread: threads) {
             DWORD wait = WaitForSingleObject(thread, 3000);
-            if (wait == WAIT_TIMEOUT) {
+            if (wait == WAIT_TIMEOUT && !wakeRetried) {
                 WakeAcceptThreads(boundedWakeCount);
+                wakeRetried = true;
                 wait = WaitForSingleObject(thread, 1000);
             }
             CloseHandle(thread);
