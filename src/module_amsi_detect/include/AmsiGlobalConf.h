@@ -127,7 +127,7 @@ namespace Engine {
         uint32_t m_statusEnqueueTimeoutMs = 50;
 
         // IPC管道线程配置.
-        uint32_t m_rulePipeNums = 4;
+        uint32_t m_rulePipeNums = 16;
         uint32_t m_configPipeAcceptThreads = 8;
         uint32_t m_eventPipeThreads = 4;
         uint32_t m_statusPipeThreads = 2;

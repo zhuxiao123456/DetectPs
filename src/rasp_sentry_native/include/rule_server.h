@@ -16,12 +16,14 @@ class RuleServer : public amsi_ipc::IAmsiRuleProvider
 {
 public:
     static constexpr const wchar_t* kPipeName = L"amsi_detect_rules";
-    static constexpr int kThreadCount = 8;
+    static constexpr int kThreadCount = 16;
 
     explicit RuleServer(std::string rulesPath);
-    RuleServer(std::string rulesPath, std::wstring pipeName);
+    RuleServer(std::string rulesPath, std::wstring pipeName, int threadCount = kThreadCount);
     explicit RuleServer(amsi_ipc::IAmsiRuleProvider& provider);
-    RuleServer(amsi_ipc::IAmsiRuleProvider& provider, std::wstring pipeName);
+    RuleServer(amsi_ipc::IAmsiRuleProvider& provider,
+               std::wstring pipeName,
+               int threadCount = kThreadCount);
     ~RuleServer();
 
     void Start();
@@ -36,6 +38,7 @@ public:
 
 private:
     bool m_started = false;
+    int m_threadCount = kThreadCount;
     std::unique_ptr<DemoFileRuleProvider> m_ownedProvider;
     amsi_ipc::IAmsiRuleProvider* m_provider = nullptr;
 

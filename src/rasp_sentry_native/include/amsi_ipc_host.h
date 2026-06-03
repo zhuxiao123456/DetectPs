@@ -35,6 +35,7 @@ struct AmsiIpcHostConfig {
     bool enableDemoConfigWatcher = true;
     bool enableDemoStagingWatcher = true;
     bool strictHostGuardMode = false;
+    int rulePipeThreads = 16;
     std::wstring rulesPipeName;
     std::wstring eventsPipeName;
     std::wstring controlStatusPipeName;

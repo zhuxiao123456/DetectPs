@@ -47,7 +47,7 @@ namespace Engine {
 
         m_broadcastCount = conf.GetIntValue("broadcast_count", 256);
 
-        m_rulePipeNums = ClampPipeThreadCount(conf.GetIntValue("rule_pipe_nums", 4));
+        m_rulePipeNums = ClampPipeThreadCount(conf.GetIntValue("rule_pipe_nums", 16));
         m_configPipeAcceptThreads =
                 ClampPipeThreadCount(conf.GetIntValue("config_pipe_accept_threads", 8));
         m_eventPipeThreads = conf.GetIntValue("event_pipe_threads", 4);

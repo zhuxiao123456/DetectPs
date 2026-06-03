@@ -2,16 +2,28 @@
 
 #include "sentry_log.h"
 
+namespace {
+
+constexpr DWORD kRulePipeOutBufferBytes = 512 * 1024;
+constexpr DWORD kRulePipeInBufferBytes = 256;
+
+} // namespace
+
 RuleServer::RuleServer(std::string rulesPath)
     : RuleServer(std::move(rulesPath), amsi_ipc::kRulesPipeName)
 {
 }
 
-RuleServer::RuleServer(std::string rulesPath, std::wstring pipeName)
+RuleServer::RuleServer(std::string rulesPath, std::wstring pipeName, int threadCount)
     : m_ownedProvider(new DemoFileRuleProvider(std::move(rulesPath))),
       m_provider(m_ownedProvider.get()),
+      m_threadCount(threadCount),
       m_ruleChannel(*this),
-      m_rulePipePool(std::move(pipeName), kThreadCount, m_ruleChannel)
+      m_rulePipePool(std::move(pipeName),
+                     threadCount,
+                     m_ruleChannel,
+                     kRulePipeOutBufferBytes,
+                     kRulePipeInBufferBytes)
 {
 }
 
@@ -20,10 +32,15 @@ RuleServer::RuleServer(amsi_ipc::IAmsiRuleProvider& provider)
 {
 }
 
-RuleServer::RuleServer(amsi_ipc::IAmsiRuleProvider& provider, std::wstring pipeName)
+RuleServer::RuleServer(amsi_ipc::IAmsiRuleProvider& provider, std::wstring pipeName, int threadCount)
     : m_provider(&provider),
+      m_threadCount(threadCount),
       m_ruleChannel(*this),
-      m_rulePipePool(std::move(pipeName), kThreadCount, m_ruleChannel)
+      m_rulePipePool(std::move(pipeName),
+                     threadCount,
+                     m_ruleChannel,
+                     kRulePipeOutBufferBytes,
+                     kRulePipeInBufferBytes)
 {
 }
 

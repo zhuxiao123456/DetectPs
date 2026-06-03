@@ -23,6 +23,17 @@ std::wstring OrDefaultPipeName(const std::wstring& configured,
     return configured.empty() ? std::wstring(defaultName) : configured;
 }
 
+int ClampThreadCount(int value)
+{
+    if (value < 1) {
+        return 1;
+    }
+    if (value > 32) {
+        return 32;
+    }
+    return value;
+}
+
 } // namespace
 
 AmsiIpcHostConfig AmsiIpcHostConfig::ForDemo(std::string logDir,
@@ -79,10 +90,11 @@ bool AmsiIpcHost::Start()
 
     const std::wstring rulesPipeName = OrDefaultPipeName(config_.rulesPipeName,
                                                          amsi_ipc::kRulesPipeName);
+    const int rulePipeThreads = ClampThreadCount(config_.rulePipeThreads);
     if (adapters_.ruleProvider) {
-        ruleServer_.reset(new RuleServer(*adapters_.ruleProvider, rulesPipeName));
+        ruleServer_.reset(new RuleServer(*adapters_.ruleProvider, rulesPipeName, rulePipeThreads));
     } else {
-        ruleServer_.reset(new RuleServer(config_.rulesPath, rulesPipeName));
+        ruleServer_.reset(new RuleServer(config_.rulesPath, rulesPipeName, rulePipeThreads));
     }
     if (config_.enableDemoConfigWatcher) {
         configWatcher_.reset(new ConfigWatcher(config_.rulesPath, ruleServer_->RuleProvider()));
@@ -145,7 +157,7 @@ bool AmsiIpcHost::Start()
     ruleServer_->Start();
     stage_ = StartStage::RuleServer;
     SentryLog_Info("Program", "RuleServer started - %d threads on amsi_detect_rules",
-                   RuleServer::kThreadCount);
+                   rulePipeThreads);
 
     const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
                                                           amsi_ipc::kConfigPipeName);

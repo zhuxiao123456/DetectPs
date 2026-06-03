@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdio>
 #include <functional>
+#include <vector>
 #include <string>
 #include <thread>
 
@@ -55,23 +56,31 @@ void ConfigureRealIpcTestPipes(hostguard_demo::HostGuardAmsiIpcConfig& config, c
 
 std::string ExchangeRulesPipePayload(const std::wstring& pipeName, const std::string& payload)
 {
+    HANDLE pipe = INVALID_HANDLE_VALUE;
     for (int attempt = 0; attempt < 50; ++attempt) {
-        if (WaitNamedPipeW(pipeName.c_str(), 100)) {
+        if (!WaitNamedPipeW(pipeName.c_str(), 100)) {
+            Sleep(20);
+            continue;
+        }
+
+        pipe = CreateFileW(pipeName.c_str(),
+                           GENERIC_READ | GENERIC_WRITE,
+                           0,
+                           nullptr,
+                           OPEN_EXISTING,
+                           0,
+                           nullptr);
+        if (pipe != INVALID_HANDLE_VALUE) {
             break;
         }
         Sleep(20);
     }
-
-    HANDLE pipe = CreateFileW(pipeName.c_str(),
-                              GENERIC_READ | GENERIC_WRITE,
-                              0,
-                              nullptr,
-                              OPEN_EXISTING,
-                              0,
-                              nullptr);
     if (pipe == INVALID_HANDLE_VALUE) {
         return "__connect_rules_failed__";
     }
+
+    DWORD mode = PIPE_READMODE_MESSAGE;
+    SetNamedPipeHandleState(pipe, &mode, nullptr, nullptr);
 
     DWORD written = 0;
     if (!WriteFile(pipe, payload.data(), static_cast<DWORD>(payload.size()), &written, nullptr) ||
@@ -80,15 +89,25 @@ std::string ExchangeRulesPipePayload(const std::wstring& pipeName, const std::st
         return "__write_rules_failed__";
     }
 
-    char response[4096] = {};
-    DWORD bytesRead = 0;
-    if (!ReadFile(pipe, response, static_cast<DWORD>(sizeof(response) - 1), &bytesRead, nullptr)) {
+    std::string response;
+    char chunk[8192] = {};
+    for (;;) {
+        DWORD bytesRead = 0;
+        if (ReadFile(pipe, chunk, static_cast<DWORD>(sizeof(chunk)), &bytesRead, nullptr)) {
+            response.append(chunk, bytesRead);
+            break;
+        }
+        const DWORD err = GetLastError();
+        if (err == ERROR_MORE_DATA) {
+            response.append(chunk, bytesRead);
+            continue;
+        }
         CloseHandle(pipe);
         return "__read_rules_failed__";
     }
 
     CloseHandle(pipe);
-    return std::string(response, bytesRead);
+    return response;
 }
 
 bool WritePipePayload(const std::wstring& pipeName, const std::string& payload)
@@ -128,6 +147,11 @@ int main()
     using namespace hostguard_demo;
 
     bool ok = true;
+
+    {
+        HostGuardAmsiIpcConfig config;
+        ok &= Expect(config.rulePipeThreads == 16, "real rule pipe default thread count is 16");
+    }
 
     {
         HostGuardAmsiIpcAdapter adapter;
@@ -173,6 +197,71 @@ int main()
         ok &= Expect(status.ruleRequests == 2, "real rule pipe increments ruleRequests");
         ok &= Expect(status.ruleRequestUnsupported == 0,
                      "supported real rule commands do not increment unsupported count");
+    }
+
+    {
+        HostGuardAmsiIpcAdapter adapter;
+        HostGuardAmsiIpcConfig config;
+        ConfigureRealIpcTestPipes(config, L"rule_large_parallel");
+        std::string error;
+        const std::string padding(100 * 1024, 'x');
+        const std::string allRules = std::string(R"({"rules":[{"id":"large","padding":")") +
+                                     padding +
+                                     R"("}]})";
+
+        ok &= Expect(adapter.Init(config, error), "large parallel rule IPC adapter Init succeeds");
+        ok &= Expect(adapter.UpdateRules(allRules, R"([{"id":"amsi"}])", "v-large", "h-large", error),
+                     "large parallel rules update succeeds");
+        ok &= Expect(adapter.Start(error), "large parallel rule IPC adapter Start succeeds");
+
+        std::atomic<int> successCount{0};
+        std::atomic<int> connectFailures{0};
+        std::atomic<int> readFailures{0};
+        std::atomic<int> shortResponses{0};
+        std::atomic<int> maxResponseSize{0};
+        std::vector<std::thread> clients;
+        clients.reserve(16);
+        for (int i = 0; i < 16; ++i) {
+            clients.emplace_back([&]() {
+                const std::string response = ExchangeRulesPipePayload(config.rulesPipeName, "GET_ALL_RULES\n");
+                if (response == "__connect_rules_failed__") {
+                    ++connectFailures;
+                    return;
+                }
+                if (response == "__read_rules_failed__") {
+                    ++readFailures;
+                    return;
+                }
+                int observedSize = static_cast<int>(response.size());
+                int currentMax = maxResponseSize.load();
+                while (observedSize > currentMax &&
+                       !maxResponseSize.compare_exchange_weak(currentMax, observedSize)) {
+                }
+                if (response.find(R"("id":"large")") != std::string::npos &&
+                    response.find(padding) != std::string::npos) {
+                    ++successCount;
+                } else {
+                    ++shortResponses;
+                }
+            });
+        }
+        for (auto& client : clients) {
+            client.join();
+        }
+        const auto status = adapter.GetStatus();
+        adapter.Stop();
+
+        if (successCount.load() != 16) {
+            std::fprintf(stderr,
+                         "large parallel detail: success=%d connectFailures=%d readFailures=%d shortResponses=%d maxResponseSize=%d\n",
+                         successCount.load(),
+                         connectFailures.load(),
+                         readFailures.load(),
+                         shortResponses.load(),
+                         maxResponseSize.load());
+        }
+        ok &= Expect(successCount.load() == 16, "16 concurrent GET_ALL_RULES clients receive 100KB payload");
+        ok &= Expect(status.ruleRequests == 16, "large parallel rule requests are counted");
     }
 
     {

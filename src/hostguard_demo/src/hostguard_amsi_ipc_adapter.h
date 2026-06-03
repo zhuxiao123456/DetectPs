@@ -37,7 +37,7 @@ struct HostGuardAmsiIpcConfig {
     bool useProductionPipes = true;
     bool enableRealIpc = false;
 
-    int rulePipeThreads = 8;
+    int rulePipeThreads = 16;
     int eventPipeThreads = 4;
     int statusPipeThreads = 4;
 

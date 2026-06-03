@@ -82,6 +82,7 @@ public:
         hostConfig.eventsPipeName = config.eventsPipeName;
         hostConfig.controlStatusPipeName = config.controlStatusPipeName;
         hostConfig.configPipeName = config.configPipeName;
+        hostConfig.rulePipeThreads = config.rulePipeThreads;
 
         AmsiIpcHostAdapters adapters;
         adapters.ruleProvider = &ruleProvider_;
