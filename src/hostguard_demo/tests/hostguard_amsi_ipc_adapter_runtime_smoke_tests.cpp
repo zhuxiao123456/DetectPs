@@ -36,6 +36,24 @@ bool WaitUntil(std::function<bool()> predicate, int timeoutMs)
     return predicate();
 }
 
+bool PipeServerExists(const std::wstring& pipeName)
+{
+    HANDLE pipe = CreateFileW(pipeName.c_str(),
+                              GENERIC_READ | GENERIC_WRITE,
+                              0,
+                              nullptr,
+                              OPEN_EXISTING,
+                              0,
+                              nullptr);
+    if (pipe != INVALID_HANDLE_VALUE) {
+        CloseHandle(pipe);
+        return true;
+    }
+
+    const DWORD error = GetLastError();
+    return error == ERROR_PIPE_BUSY || error == ERROR_PIPE_CONNECTED;
+}
+
 std::wstring TestPipeName(const wchar_t* suffix)
 {
     return std::wstring(LR"(\\.\pipe\hostguard_amsi_adapter_phase25_)") +
@@ -368,6 +386,8 @@ int main()
 
         ok &= Expect(adapter.Init(config, error), "real broadcaster adapter Init succeeds");
         ok &= Expect(adapter.Start(error), "real broadcaster adapter Start succeeds");
+        ok &= Expect(!PipeServerExists(config.configPipeName),
+                     "HostGuard real IPC adapter does not serve legacy config pipe");
 
         HostGuardAmsiBroadcastResult reload;
         HostGuardAmsiBroadcastResult pause;

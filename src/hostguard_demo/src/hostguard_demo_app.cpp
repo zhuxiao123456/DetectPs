@@ -99,12 +99,6 @@ bool HostGuardDemoApp::Start()
                       NarrowAscii(options_.controlStatusPipeName);
         return false;
     }
-    if (PipeServerExists(options_.configPipeName)) {
-        startError_ = std::string(HostGuardPipeModeName(options_.pipeMode)) +
-                      " config pipe is already served: " + NarrowAscii(options_.configPipeName);
-        return false;
-    }
-
     hostguard_demo::EnsureDirectory(options_.logDir);
 
     ruleProvider_.reset(new HostGuardFileRuleProvider(options_.rulesPath));
@@ -227,7 +221,7 @@ bool HostGuardDemoApp::Reload()
         return false;
     }
     host_->InvalidateRules();
-    lastReload_ = host_->BroadcastReload();
+    lastReload_ = amsi_ipc::AmsiBroadcastResult{};
     return true;
 }
 
@@ -263,18 +257,16 @@ bool HostGuardDemoApp::ResumeDetection()
 
 bool HostGuardDemoApp::Unload()
 {
+    if (!SetControlState("unload")) {
+        return false;
+    }
     if (amsiIpcModule_) {
-        std::string error;
-        if (!amsiIpcModule_->Unload(1000, error)) {
-            startError_ = "HostGuardAmsiIpcModule Unload failed: " + error;
-            return false;
-        }
         return true;
     }
     if (!host_) {
         return false;
     }
-    lastUnload_ = host_->BroadcastUnload();
+    lastUnload_ = amsi_ipc::AmsiBroadcastResult{};
     return true;
 }
 
@@ -329,7 +321,8 @@ void HostGuardDemoApp::PrintStatus(std::ostream& output) const
            << "rulesPipeName: " << NarrowAscii(options_.rulesPipeName) << '\n'
            << "eventsPipeName: " << NarrowAscii(options_.eventsPipeName) << '\n'
            << "controlStatusPipeName: " << NarrowAscii(options_.controlStatusPipeName) << '\n'
-           << "configPipeName: " << NarrowAscii(options_.configPipeName) << '\n'
+           << "configPipeName: disabled\n"
+           << "configPipeEnabled: no\n"
            << "amsiIpc.enabled: " << (options_.amsiIpc.enabled ? "yes" : "no") << '\n'
            << "amsiIpc.enableRealIpc: " << (options_.amsiIpc.enableRealIpc ? "yes" : "no") << '\n'
            << "amsiIpc.useProductionPipes: " << (options_.amsiIpc.useProductionPipes ? "yes" : "no") << '\n'

@@ -1,6 +1,6 @@
 #pragma once
 // =========================================================================
-// rasp_sentry_base.h â€?Abstract base class shared by all RASP native modules.
+// rasp_sentry_base.h Abstract base class shared by all RASP native modules.
 //
 // Provides once-written infrastructure:
 //   - Ring-buffer diagnostic log  (RaspLog -> amsi_detect_events pipe)
@@ -13,14 +13,14 @@
 //   - Initialize() / Shutdown()   (lifecycle)
 //   - virtual Evaluate()          (sensor-dispatch entry point)
 //
-// Each module (IIS7, AMSI, â€? provides:
-//   - AllocRule()       â€?virtual factory; return module's derived RaspRuleBase type
-//   - ParseAndSwap()    â€?build snapshot from parsed rules, precompile Lua
-//   - OnReloadSignal()  â€?retries ConnectSentry + ParseAndSwap (called by ConfigPipeThread)
-//   - ParseRuleExtension() â€?fills module-specific fields for each unrecognised JSON key
-//   - Evaluate()        â€?applies module-specific C++ guards + Lua; returns results
-//   - ModuleName()      â€?"rasp_mod_iis7" / "rasp_mod_amsi"
-//   - LogEventPattern() â€?"iis7-log" / "amsi-log"
+// Each module (IIS7, AMSI,  provides:
+//   - AllocRule()       virtual factory; return module's derived RaspRuleBase type
+//   - ParseAndSwap()    build snapshot from parsed rules, precompile Lua
+//   - OnReloadSignal()  retries ConnectSentry + ParseAndSwap (called by ConfigPipeThread)
+//   - ParseRuleExtension() fills module-specific fields for each unrecognised JSON key
+//   - Evaluate()        applies module-specific C++ guards + Lua; returns results
+//   - ModuleName()      "rasp_mod_iis7" / "rasp_mod_amsi"
+//   - LogEventPattern() "iis7-log" / "amsi-log"
 // =========================================================================
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -42,7 +42,7 @@
 #include "legacy_diag_json_builder.h"
 #include "rule_json_parser.h"
 
-// â”€â”€ RaspEvalResult â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ RaspEvalResult ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 // Returned by Evaluate() per matched rule. url/method/ip/ua are populated by
 // the module's Evaluate() so SendDetectionEvent() can build full JSONL without
 // module-specific arguments.
@@ -60,7 +60,7 @@ struct RaspEvalResult
     std::string appName;   // IIS7: HTTP verb;         AMSI: appName (UTF-8)
     std::string ip;       // IIS7: client IP;         AMSI: ""
     std::string ua;       // IIS7: User-Agent header; AMSI: ""
-    int confidence;  // ç½®ä¿¡åº?
+    int confidence;  // ÖÃÐÅ
     // Current process and script evidence for AMSI detection events.
     uint32_t    processPid = 0;
     std::string processName;
@@ -78,7 +78,7 @@ struct RuleBundleMetadata
     std::string hash;
 };
 
-// â”€â”€ RaspSentryBase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ RaspSentryBase ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 class RaspSentryBase
 {
 public:
@@ -87,13 +87,13 @@ public:
     bool ShouldBypassScanFast() const;
     static bool AnyHostLivenessThreadRunning();
 
-    // Diagnostic log â€?thread-safe; enqueues to ring buffer; drains async to sentry pipe.
+    // Diagnostic log thread-safe; enqueues to ring buffer; drains async to sentry pipe.
     // Module .cpp keeps a thin RaspLog(fmt,...) free function that calls g_engine->Log().
     void Log(const char* fmt, ...) const;
     void LogWithSeverity(RaspDiagSeverity severity, const char* fmt, ...) const;
     void VLogWithSeverity(RaspDiagSeverity severity, const char* fmt, va_list ap) const;
 
-    // Unified evaluation entry point â€?each module implements for its sensor set.
+    // Unified evaluation entry point each module implements for its sensor set.
     // Returns all matched rules (multi-rule firing supported). Called by each module's
     // public-facing method after building RaspLuaContext from request/scan data.
     virtual std::vector<RaspEvalResult> Evaluate(
@@ -101,7 +101,7 @@ public:
         const RaspLuaContext& ctx) = 0;
 
 protected:
-    // â”€â”€ Shared state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ©¤©¤ Shared state ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
     RaspLuaEngine     m_luaEngine;
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_hostAlive{false};
@@ -118,7 +118,7 @@ protected:
     bool IsRuleSnapshotReady() const;
     bool IsWaitingResumeAfterHostLost() const;
 
-    // â”€â”€ IPC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ©¤©¤ IPC ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
     // Connect to \\.\pipe\amsi_detect_rules, send GET_ALL_RULES\n, read response.
     // On success: jsonOut contains raw response; libSourceOut contains decoded
     // globalLibrariesBase64 (rasp_lib.lua source, '\n'-joined).
@@ -129,13 +129,13 @@ protected:
 
     static bool Base64Decode(const std::string& b64, std::string& out);
 
-    // â”€â”€ Shared JSON parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ©¤©¤ Shared JSON parser ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
     // Parser context remains available to derived ParseRuleExtension() handlers.
     using Parser = RuleJsonParser::Parser;
 
     // Parse GET_ALL_RULES response JSON.
     // Accumulates globalLibrariesBase64 into libSourceOut.
-    // Allocates rule objects via AllocRule() (virtual factory â€?derived class may
+    // Allocates rule objects via AllocRule() (virtual factory derived class may
     // return module-specific subtype). For each unrecognised JSON key, calls
     // ParseRuleExtension(key, &parser, *rule) so derived classes can fill extra fields.
     // The allocated objects are owned by the returned unique_ptr vector.
@@ -148,24 +148,24 @@ protected:
         RaspGlobalMode*                              globalModeOut = nullptr,
         bool*                                        hasGlobalModeOut = nullptr);
 
-    // Virtual factory â€?override to return module-specific derived type.
+    // Virtual factory override to return module-specific derived type.
     // Default returns new RaspRuleBase().
     // The returned pointer is stored in a unique_ptr<RaspRuleBase>; the downcast
     // in ParseRuleExtension is safe because the actual object is the derived type.
     virtual RaspRuleBase* AllocRule() const { return new RaspRuleBase(); }
 
     // Called by ParseRulesJson for each JSON key not handled by the base parser.
-    // parserPtr is Parser* â€?cast and call read_*/skip_value() to consume the value.
+    // parserPtr is Parser* cast and call read_*/skip_value() to consume the value.
     // baseRule's actual runtime type is whatever AllocRule() returned, so a downcast
     // to the derived type is safe.
-    // Default: skip the value (no-op â€?AMSI needs no override).
+    // Default: skip the value (no-op AMSI needs no override).
     virtual void ParseRuleExtension(const std::string& key,
                                     void*              parserPtr,
                                     RaspRuleBase&      rule);
 
     // Fire-and-forget JSONL detection event to \\.\pipe\amsi_detect_events.
     // Non-blocking: returns immediately if pipe unavailable (event silently dropped).
-    // Replaces amsi_event_sender::SendAmsiEvent() â€?used by all modules.
+    // Replaces amsi_event_sender::SendAmsiEvent() used by all modules.
     void SendDetectionEvent(const RaspEvalResult& result) const;
     EnqueueResult TrySubmitDetectionEvent(const RaspEvalResult& result) const;
 
@@ -187,17 +187,17 @@ protected:
     void SetActiveEffectiveSnapshotHash(const std::string& hash);
     std::string ActiveEffectiveSnapshotHash() const;
 
-    // Called after ConnectSentry() succeeds â€?module parses JSON into its typed
+    // Called after ConnectSentry() succeeds module parses JSON into its typed
     // snapshot, precompiles Lua scripts, and swaps atomically.
     // Returns false if JSON is unparseable (snapshot left unchanged).
     virtual bool ParseAndSwap(const std::string& json,
                               const std::string& libSource) = 0;
 
-    // Called by ConfigPipeThread on 0x01 signal â€?module retries ConnectSentry
+    // Called by ConfigPipeThread on 0x01 signal module retries ConnectSentry
     // and calls ParseAndSwap(); keeps existing snapshot if sentry unavailable.
     virtual void OnReloadSignal() = 0;
 
-    // Called by ConfigPipeThread on 0x02 signal â€?module stops scanning and
+    // Called by ConfigPipeThread on 0x02 signal module stops scanning and
     // unloads the DLL from the host process.  Default: no-op (IIS module ignores
     // the unload signal; only AMSI overrides this).
     virtual void OnUnloadSignal() {}
@@ -212,7 +212,7 @@ protected:
     virtual size_t ActiveRuleCountForStatus() const { return 0; }
 
 private:
-    // â”€â”€ Ring buffer (diagnostic log) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ©¤©¤ Ring buffer (diagnostic log) ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
     static const int kLogQueueCap = 256;
     struct LogEntry {
         char text[1024];
@@ -235,10 +235,9 @@ private:
     // out must point to a writable buffer with outSize > 0.
     bool PopLogEntryLocked(char* out, size_t outSize, RaspDiagSeverity& severityOut);
 
-    // â”€â”€ Background threads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ©¤©¤ Background threads ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
     HANDLE m_logThread    = INVALID_HANDLE_VALUE;
-    HANDLE m_configThread = INVALID_HANDLE_VALUE;
-    // Unconditional for all modules â€?active polling handles AMSI processes
+    // Unconditional for all modules active polling handles AMSI processes
     // that start before rasp_sentry (passive reload signal would never reach them).
     HANDLE m_retryThread  = INVALID_HANDLE_VALUE;
     HANDLE m_hostLivenessThread = INVALID_HANDLE_VALUE;
@@ -248,7 +247,7 @@ private:
     DWORD m_probeTimeoutMs = 200;
     DWORD m_maxConsecutiveFailures = 3;
     DWORD m_hostLostGraceMs = 6000;
-    DWORD m_rulePollIntervalMs = 180000;
+    DWORD m_rulePollIntervalMs = 5000;
     DWORD m_rulePollRetryIntervalMs = 5000;
     mutable AsyncEventSink m_eventSink;
     mutable std::mutex m_ruleMetadataMutex;
@@ -256,7 +255,6 @@ private:
     std::string m_activeEffectiveSnapshotHash;
 
     static DWORD WINAPI LogForwardThreadProc(LPVOID param);
-    static DWORD WINAPI ConfigPipeThreadProc(LPVOID param);
     static DWORD WINAPI SentryRetryThreadProc(LPVOID param);
     static DWORD WINAPI HostLivenessThreadProc(LPVOID param);
     bool ProbeRulePipe() const;

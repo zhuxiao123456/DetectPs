@@ -56,6 +56,7 @@ AmsiIpcHostConfig AmsiIpcHostConfig::ForHostGuard()
     config.enableDemoConfigWatcher = false;
     config.enableDemoStagingWatcher = false;
     config.strictHostGuardMode = true;
+    config.enableConfigPipe = false;
     return config;
 }
 
@@ -159,16 +160,18 @@ bool AmsiIpcHost::Start()
     SentryLog_Info("Program", "RuleServer started - %d threads on amsi_detect_rules",
                    rulePipeThreads);
 
-    const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
-                                                          amsi_ipc::kConfigPipeName);
-    configBroadcaster_.reset(new amsi_ipc::AmsiConfigBroadcaster(configPipeName));
-    if (!configBroadcaster_->Start()) {
-        SentryLog_Error("Program", "Failed to start config notify server on amsi_detect_config");
-        Stop();
-        return false;
+    if (config_.enableConfigPipe) {
+        const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
+                                                              amsi_ipc::kConfigPipeName);
+        configBroadcaster_.reset(new amsi_ipc::AmsiConfigBroadcaster(configPipeName));
+        if (!configBroadcaster_->Start()) {
+            SentryLog_Error("Program", "Failed to start config notify server on amsi_detect_config");
+            Stop();
+            return false;
+        }
+        stage_ = StartStage::ConfigBroadcaster;
+        SentryLog_Info("Program", "Config notify server started on amsi_detect_config");
     }
-    stage_ = StartStage::ConfigBroadcaster;
-    SentryLog_Info("Program", "Config notify server started on amsi_detect_config");
 
     if (configWatcher_) {
         configWatcher_->Start();
@@ -243,6 +246,9 @@ void AmsiIpcHost::InvalidateRules()
 amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastReload(int maxListeners,
                                                            std::uint32_t timeoutMs)
 {
+    if (!config_.enableConfigPipe) {
+        return amsi_ipc::AmsiBroadcastResult{};
+    }
     const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
                                                           amsi_ipc::kConfigPipeName);
     if (!configBroadcaster_) {
@@ -257,6 +263,9 @@ amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastReload(int maxListeners,
 amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastUnload(int maxListeners,
                                                            std::uint32_t timeoutMs)
 {
+    if (!config_.enableConfigPipe) {
+        return amsi_ipc::AmsiBroadcastResult{};
+    }
     const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
                                                           amsi_ipc::kConfigPipeName);
     if (!configBroadcaster_) {
@@ -271,6 +280,9 @@ amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastUnload(int maxListeners,
 amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastPauseDetection(int maxListeners,
                                                                    std::uint32_t timeoutMs)
 {
+    if (!config_.enableConfigPipe) {
+        return amsi_ipc::AmsiBroadcastResult{};
+    }
     const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
                                                           amsi_ipc::kConfigPipeName);
     if (!configBroadcaster_) {
@@ -285,6 +297,9 @@ amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastPauseDetection(int maxListen
 amsi_ipc::AmsiBroadcastResult AmsiIpcHost::BroadcastResumeDetection(int maxListeners,
                                                                     std::uint32_t timeoutMs)
 {
+    if (!config_.enableConfigPipe) {
+        return amsi_ipc::AmsiBroadcastResult{};
+    }
     const std::wstring configPipeName = OrDefaultPipeName(config_.configPipeName,
                                                           amsi_ipc::kConfigPipeName);
     if (!configBroadcaster_) {

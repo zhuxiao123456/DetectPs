@@ -58,6 +58,24 @@ bool WaitForPipe(const std::wstring& pipeName)
     return false;
 }
 
+bool PipeServerExists(const std::wstring& pipeName)
+{
+    HANDLE pipe = CreateFileW(pipeName.c_str(),
+                              GENERIC_READ | GENERIC_WRITE,
+                              0,
+                              nullptr,
+                              OPEN_EXISTING,
+                              0,
+                              nullptr);
+    if (pipe != INVALID_HANDLE_VALUE) {
+        CloseHandle(pipe);
+        return true;
+    }
+
+    const DWORD error = GetLastError();
+    return error == ERROR_PIPE_BUSY || error == ERROR_PIPE_CONNECTED;
+}
+
 std::string ExchangePipe(const std::wstring& pipeName, const std::string& payload)
 {
     if (!WaitForPipe(pipeName)) {
@@ -286,6 +304,8 @@ int main()
 
     HostGuardDemoApp adapterRealApp(adapterRealOptions);
     ok &= Expect(adapterRealApp.Start(), "HostGuardDemoApp starts with real AMSI IPC adapter enabled");
+    ok &= Expect(!PipeServerExists(adapterRealOptions.configPipeName),
+                 "adapter real IPC app does not serve legacy config pipe");
     const std::string adapterRulesResponse = ExchangePipe(adapterRealOptions.rulesPipeName, "GET_RULES\n");
     if (adapterRulesResponse.find("amsi-2") == std::string::npos) {
         std::fprintf(stderr, "adapter rules response: %s\n", adapterRulesResponse.c_str());
@@ -306,6 +326,8 @@ int main()
     ok &= Expect(adapterRealApp.PauseDetection(), "real AMSI IPC module pause detection completes");
     ok &= Expect(adapterRealApp.ResumeDetection(), "real AMSI IPC module resume detection completes");
     ok &= Expect(adapterRealApp.Unload(), "real AMSI IPC module unload completes");
+    ok &= Expect(!PipeServerExists(adapterRealOptions.configPipeName),
+                 "adapter real IPC commands do not create legacy config pipe");
 
     HostGuardDemoOptions conflictingLegacyOptions;
     conflictingLegacyOptions.rulesPath = rulesPath;
@@ -331,6 +353,8 @@ int main()
     HostGuardDemoApp app(options);
     ok &= Expect(app.Start(), "HostGuardDemoApp starts");
     ok &= Expect(app.started(), "HostGuardDemoApp reports started");
+    ok &= Expect(!PipeServerExists(options.configPipeName),
+                 "HostGuardDemoApp does not serve legacy config pipe");
     const std::string appRulesResponse = ExchangePipe(options.rulesPipeName, "GET_RULES\n");
     if (appRulesResponse.find("amsi-2") == std::string::npos) {
         std::fprintf(stderr, "rules response: %s\n", appRulesResponse.c_str());
@@ -355,6 +379,8 @@ int main()
                  "app control status pipe reaches JSONL sink");
     ok &= Expect(app.Reload(), "reload command completes");
     ok &= Expect(app.Unload(), "unload command completes");
+    ok &= Expect(!PipeServerExists(options.configPipeName),
+                 "reload and unload commands do not create legacy config pipe");
     app.Stop();
     ok &= Expect(!app.started(), "HostGuardDemoApp reports stopped");
 

@@ -9,7 +9,6 @@
 //   - ParseRulesJson()  (base-field recursive-descent parser)
 //   - SendDetectionEvent() (replaces amsi_event_sender::SendAmsiEvent)
 //   - LogForwardThreadProc  (ring-buffer drain -> amsi_detect_events)
-//   - ConfigPipeThreadProc  (reload signal client on amsi_detect_config)
 //   - SentryRetryThreadProc (actively polls sentry for state/rule updates)
 //   - Initialize() / Shutdown()
 // =========================================================================
@@ -40,7 +39,7 @@
 #include "../include/legacy_pipe_event_transport.h"
 
 // =========================================================================
-// å¤„ç†æ‰€æœ‰ä¸Ž rasp_sentryï¼ˆå¤–éƒ¨å®ˆæŠ¤è¿›ç¨‹ï¼‰çš?IPC é€šä¿¡ã€æ— é”çŽ¯å½¢æ—¥å¿—é˜Ÿåˆ—ã€ä»¥åŠæžè½»é‡çº§çš„ JSON è§£æž
+// ´¦ÀíËùÓÐÓë rasp_sentry£¨Íâ²¿ÊØ»¤½ø³Ì£©IPC Í¨ÐÅ¡¢ÎÞËø»·ÐÎÈÕÖ¾¶ÓÁÐ¡¢ÒÔ¼°¼«ÇáÁ¿¼¶µÄ JSON ½âÎö
 // =========================================================================
 static INIT_ONCE s_logCsOnce = INIT_ONCE_STATIC_INIT;
 static std::atomic<long> s_hostLivenessThreads{0};
@@ -301,7 +300,7 @@ void RaspSentryBase::SleepHostLivenessInterruptible(DWORD sleepMs) const
 static BOOL WINAPI LogCsInit(INIT_ONCE*, PVOID, PVOID*)
 {
     // NOTE: Each RaspSentryBase instance owns its own CRITICAL_SECTION (m_logCs)
-    // and HANDLE (m_logEvent) â€?this INIT_ONCE is just a one-time initializer flag
+    // and HANDLE (m_logEvent) this INIT_ONCE is just a one-time initializer flag
     // per process. Actual per-instance init happens in EnsureLogCsInit().
     return TRUE;
 }
@@ -316,7 +315,7 @@ void RaspSentryBase::EnsureLogCsInit()
 }
 
 // =========================================================================
-// Log() â€?public; thread-safe; writes to OutputDebugString AND ring buffer.
+// Log() public; thread-safe; writes to OutputDebugString AND ring buffer.
 // =========================================================================
 
 void RaspSentryBase::Log(const char* fmt, ...) const
@@ -359,10 +358,10 @@ void RaspSentryBase::VLogWithSeverity(RaspDiagSeverity severity, const char* fmt
     const_cast<RaspSentryBase*>(this)->EnqueueLog(buf, severity);
 }
 /*
- * åŠŸèƒ½ï¼šæžä½Žå¼€é”€çš„æ— é”?è‡ªæ—‹é”æ—¥å¿—è®°å½?
- * æµç¨‹ï¼šLog å†™å…¥çŽ¯å½¢æ•°ç»„ï¼ˆå¦‚æžœæ»¡äº†å°±è¦†ç›–æœ€è€çš„ï¼?> è§¦å‘ m_logEvent -> åŽå°çº¿ç¨‹ LogForwardThreadProc é†’æ¥ ->
- * æ‹¼è£…ä¸?JSON -> é€šè¿‡å‘½åç®¡é“ \\.\pipe\amsi_detect_events å‘å‡º
- * Mark: æ—¥å¿—é™åˆ¶é•¿åº¦(é˜²æ­¢æ¶æ„æ—¥å¿—å¡«æ»¡ç¼“å†²åŒ?
+ * ¹¦ÄÜ£º¼«µÍ¿ªÏúµÄÎÞ×ÔÐýËøÈÕÖ¾¼Ç
+ * Á÷³Ì£ºLog Ð´Èë»·ÐÎÊý×é£¨Èç¹ûÂúÁË¾Í¸²¸Ç×îÀÏµÄ> ´¥·¢ m_logEvent -> ºóÌ¨Ïß³Ì LogForwardThreadProc ÐÑÀ´ ->
+ * Æ´×°JSON -> Í¨¹ýÃüÃû¹ÜµÀ \\.\pipe\amsi_detect_events ·¢³ö
+ * Mark: ÈÕÖ¾ÏÞÖÆ³¤¶È(·ÀÖ¹¶ñÒâÈÕÖ¾ÌîÂú»º³å
 */
 void RaspSentryBase::EnqueueLog(const char* text, RaspDiagSeverity severity)
 {
@@ -387,7 +386,7 @@ void RaspSentryBase::PushLogEntryLocked(const char* text, RaspDiagSeverity sever
     m_logHead = (m_logHead + 1) % kLogQueueCap;
 }
 
-// è°ƒç”¨æ–¹å¿…é¡»å·²ç»æŒæœ?m_logCsã€?
+// µ÷ÓÃ·½±ØÐëÒÑ¾­³Öm_logCs
 bool RaspSentryBase::PopLogEntryLocked(char* out, size_t outSize, RaspDiagSeverity& severityOut)
 {
     bool hasItem = (m_logCount > 0);
@@ -403,7 +402,7 @@ bool RaspSentryBase::PopLogEntryLocked(char* out, size_t outSize, RaspDiagSeveri
 }
 
 // =========================================================================
-// Base64 decoder â€?å¯ä»¥æ·»åŠ ä¸€ä¸ªè¾“å…¥ã€è¾“å‡ºé•¿åº¦é™åˆ¶ï¼ˆé˜²æ­¢dosæ”»å‡»ï¼?
+// Base64 decoder ¿ÉÒÔÌí¼ÓÒ»¸öÊäÈë¡¢Êä³ö³¤¶ÈÏÞÖÆ£¨·ÀÖ¹dos¹¥»÷
 // =========================================================================
 bool RaspSentryBase::Base64Decode(const std::string& input, std::string& output)
 {
@@ -441,7 +440,7 @@ bool RaspSentryBase::Base64Decode(const std::string& input, std::string& output)
 }
 
 // =========================================================================
-// ConnectSentry â€?åœ¨å¯åŠ¨æ—¶ï¼Œè¿žæŽ¥å‘½åç®¡é“ï¼Œå‘é€?GET_ALL_RULESï¼Œé˜»å¡žè¯»å–å¹¶æ‹‰å–å®Œæ•´çš„å®‰å…¨ç­–ç•?JSON
+// ConnectSentry ÔÚÆô¶¯Ê±£¬Á¬½ÓÃüÃû¹ÜµÀ£¬·¢GET_ALL_RULES£¬×èÈû¶ÁÈ¡²¢À­È¡ÍêÕûµÄ°²È«²ßJSON
 // =========================================================================
 
 bool RaspSentryBase::ConnectSentry(std::string& jsonOut, std::string& libSourceOut)
@@ -454,7 +453,7 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
                                    std::string& libSourceOut,
                                    RuleBundleMetadata& metadataOut)
 {
-    Log("[%s] ConnectSentry: connecting to amsi_detect_rules", ModuleName());
+    LogWithSeverity(RaspDiagSeverity::Info, "[%s] ConnectSentry: connecting to amsi_detect_rules", ModuleName());
     metadataOut = RuleBundleMetadata{};
 
     if (!WaitNamedPipeW(L"\\\\.\\pipe\\amsi_detect_rules", 100))
@@ -588,10 +587,10 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
 }
 
 /*
- * é€’å½’è§£æžæ£€æŸ¥é¡¹æ•°ç»„
+ * µÝ¹é½âÎö¼ì²éÏîÊý×é
  * */
 // =========================================================================
-// ParseRulesJson â€?base-field parser
+// ParseRulesJson base-field parser
 // =========================================================================
 
 void RaspSentryBase::ParseRuleExtension(const std::string& /*key*/,
@@ -603,7 +602,7 @@ void RaspSentryBase::ParseRuleExtension(const std::string& /*key*/,
 }
 
 /*
- * è½»é‡çº§æµå¼?JSON è§£æžå™¨ã€é¿å…å¼•å…¥å·¨å¤§çš„ç¬¬ä¸‰æ–?JSON åº?
+ * ÇáÁ¿¼¶Á÷JSON ½âÎöÆ÷¡¢±ÜÃâÒýÈë¾Þ´óµÄµÚÈýJSON
  * */
 bool RaspSentryBase::ParseRulesJson(
     const std::string&                          json,
@@ -654,8 +653,8 @@ bool RaspSentryBase::ParseRulesJson(
     rulesOut = std::move(result.rules);
     return result.ok;
 
-                    // â”€â”€ Base fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                    // â”€â”€ Module-specific fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ©¤©¤ Base fields ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
+                    // ©¤©¤ Module-specific fields ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 }
 
 // =========================================================================
@@ -1004,87 +1003,6 @@ DWORD WINAPI RaspSentryBase::HostLivenessThreadProc(LPVOID param)
     return 0;
 }
 // =========================================================================
-// ConfigPipeThreadProc - client of \\.\pipe\amsi_detect_config.
-// Host owns the config pipe server; this thread reconnects after each signal.
-// =========================================================================
-
-DWORD WINAPI RaspSentryBase::ConfigPipeThreadProc(LPVOID param)
-{
-    auto* self = static_cast<RaspSentryBase*>(param);
-
-    self->Log("[%s] ConfigPipeClientThread: started", self->ModuleName());
-
-    bool configPipeWasVisible = false;
-    while (self->m_running.load()) {
-        if (!WaitNamedPipeW(L"\\\\.\\pipe\\amsi_detect_config", 500)) {
-            if (configPipeWasVisible) {
-                self->LogWithSeverity(RaspDiagSeverity::Warning,
-                                      "[%s] ConfigPipeClientThread: host config pipe unavailable - waiting",
-                                      self->ModuleName());
-                configPipeWasVisible = false;
-            }
-            self->SleepHostLivenessInterruptible(500);
-            continue;
-        }
-        if (!configPipeWasVisible) {
-            self->Log("[%s] ConfigPipeClientThread: host config pipe visible - connecting",
-                      self->ModuleName());
-            configPipeWasVisible = true;
-        }
-
-        HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_config",
-                                   GENERIC_READ,
-                                   0,
-                                   nullptr,
-                                   OPEN_EXISTING,
-                                   0,
-                                   nullptr);
-        if (hPipe == INVALID_HANDLE_VALUE) {
-            self->SleepHostLivenessInterruptible(500);
-            continue;
-        }
-
-        BYTE signal = 0;
-        DWORD readBytes = 0;
-        const BOOL readOk = ReadFile(hPipe, &signal, 1, &readBytes, nullptr);
-        CloseHandle(hPipe);
-        if (!self->m_running.load()) {
-            break;
-        }
-        if (!readOk || readBytes != 1) {
-            self->SleepHostLivenessInterruptible(200);
-            continue;
-        }
-
-        self->Log("[%s] ConfigPipeClientThread: signal=0x%02X (readBytes=%lu)",
-                  self->ModuleName(), static_cast<unsigned>(signal), readBytes);
-
-        if (signal == 0x01 && self->m_running.load()) {
-            self->Log("[%s] ConfigPipeClientThread: reload signal - pulling updated rules",
-                      self->ModuleName());
-            self->OnReloadSignal();
-        } else if (signal == 0x02) {
-            self->Log("[%s] ConfigPipeClientThread: unload signal - entering upgrade inert mode",
-                      self->ModuleName());
-            self->m_upgradeInert.store(true, std::memory_order_release);
-            self->MarkDetectionPausedByHostState(true);
-            self->MarkRuleSnapshotReady(false);
-            self->MarkWaitingResumeAfterHostLost(true);
-            self->OnUnloadSignal();
-        } else if (signal == 0x03) {
-            self->Log("[%s] ConfigPipeClientThread: pause detection signal - disabling scan entry",
-                      self->ModuleName());
-            self->OnPauseDetectionSignal();
-        } else if (signal == 0x04) {
-            self->Log("[%s] ConfigPipeClientThread: resume detection signal - enabling scan entry",
-                      self->ModuleName());
-            self->OnResumeDetectionSignal();
-        }
-    }
-    self->Log("[%s] ConfigPipeClientThread: exiting", self->ModuleName());
-    return 0;
-}
-// =========================================================================
 // SentryRetryThreadProc - actively polls Host state/rules through amsi_detect_rules.
 // Reload broadcasts are only acceleration hints; this thread is the fallback that
 // lets already-loaded DLLs recover or update when they miss a broadcast.
@@ -1207,7 +1125,7 @@ void RaspSentryBase::Initialize()
     // Initialize() override if needed. Here we set a default no-op proxy that
     // derived classes replace in their own Initialize before calling base.
     // (IIS7 and AMSI both set the proxy before calling base Initialize via
-    //  the existing pattern â€?see their OnBeginInit hooks.)
+    //  the existing pattern see their OnBeginInit hooks.)
 
     Log("[%s] Initialize: starting - all config via rasp_sentry IPC", ModuleName());
 
@@ -1249,8 +1167,6 @@ void RaspSentryBase::Initialize()
                         ModuleName(), GetLastError());
         m_retryThread = INVALID_HANDLE_VALUE;
     }
-
-    m_configThread = CreateThread(nullptr, 0, ConfigPipeThreadProc, this, 0, nullptr);
     m_hostLivenessThread = CreateThread(nullptr, 0, HostLivenessThreadProc, this, 0, nullptr);
     if (m_hostLivenessThread == INVALID_HANDLE_VALUE || m_hostLivenessThread == nullptr) {
         MarkHostAlive(false);
@@ -1264,7 +1180,7 @@ void RaspSentryBase::Initialize()
     }
     m_logThread    = CreateThread(nullptr, 0, LogForwardThreadProc,  this, 0, nullptr);
 
-    Log("[%s] Initialize: RulePollThread + ConfigPipeThread + HostLivenessThread + LogForwardThread started", ModuleName());
+    Log("[%s] Initialize: RulePollThread + HostLivenessThread + LogForwardThread started", ModuleName());
 }
 
 void RaspSentryBase::Shutdown()
@@ -1291,16 +1207,7 @@ void RaspSentryBase::Shutdown()
         CloseHandle(m_retryThread);
         m_retryThread = INVALID_HANDLE_VALUE;
     }
-
-    // 3. Stop config client thread. It wakes from bounded WaitNamedPipe/read retry loops.
-    if (m_configThread != INVALID_HANDLE_VALUE)
-    {
-        WaitForSingleObject(m_configThread, 2000);
-        CloseHandle(m_configThread);
-        m_configThread = INVALID_HANDLE_VALUE;
-    }
-
-    // 4. Drain log thread last (final flush after other background threads stop)
+    // 3. Drain log thread last (final flush after other background threads stop)
     m_logThreadAlive = false;
     if (m_logEvent) SetEvent(m_logEvent);
     if (m_logThread != INVALID_HANDLE_VALUE)
