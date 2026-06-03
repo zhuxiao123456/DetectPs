@@ -172,6 +172,11 @@ protected:
     // Worker-only. Must never be called from Scan hot path.
     bool SendDetectionEventSyncWorkerOnly(const AsyncEvent& event) const;
 
+    // Optional module hook for enriching diagnostic RaspLog payloads with
+    // process context. The shared base cannot depend on module-specific
+    // process capture providers.
+    virtual void FillDiagnosticLogContext(LegacyDiagJsonBuildInput& input) const;
+
     // Best-effort load status report to amsi_detect_control_status.
     // Failure to send must not affect scanning, reload, or snapshot state.
     void SendRuleLoadResult(bool success,

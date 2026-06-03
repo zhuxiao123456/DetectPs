@@ -644,6 +644,22 @@ void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
     std::atomic_store(&m_snapshot, next);
 }
 
+void AmsiRuleEngine::FillDiagnosticLogContext(LegacyDiagJsonBuildInput& input) const
+{
+    const ProcessContextSnapshot& process = GetProcessContextProvider().GetSnapshot();
+
+    input.pid = process.currentPid != 0 ? process.currentPid : GetCurrentProcessId();
+    char pidText[16] = {};
+    sprintf_s(pidText, sizeof(pidText), "%lu", static_cast<unsigned long>(input.pid));
+    input.dllInstanceId = std::string("amsi_detect_") + pidText;
+
+    input.processName = process.currentProcessName;
+    input.processPath = process.currentProcessPath;
+    input.parentPid = process.parentPid;
+    input.parentProcessName = process.parentProcessName;
+    input.parentProcessPath = process.parentProcessPath;
+}
+
 // =========================================================================
 // Self-unload support — triggered by IPC signal byte 0x02
 //

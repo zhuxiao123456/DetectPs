@@ -32,12 +32,17 @@ int main()
         LegacyDiagJsonBuildResult result = builder.Build(BaseInput());
 
         const std::string expected =
-            "{\"id\":\"fixed-id\",\"ts\":\"2026-01-02T03:04:05.006Z\","
-            "\"sev\":\"info\",\"act\":\"audit\",\"cat\":\"diag\","
-            "\"mod\":\"fixed-module\",\"sensor\":\"RaspLog\","
-            "\"rule\":\"\",\"desc\":\"hello world\","
-            "\"method\":\"\",\"url\":\"\",\"ip\":\"\",\"ua\":\"\","
-            "\"pattern\":\"fixed-pattern\",\"payload\":\"\"}";
+            "{\"sev\":\"info\",\"cat\":\"diag\","
+            "\"sensor\":\"RaspLog\","
+            "\"desc\":\"hello world\","
+            "\"pattern\":\"fixed-pattern\","
+            "\"dllInstanceId\":\"\","
+            "\"pid\":0,"
+            "\"processName\":\"\","
+            "\"processPath\":\"\","
+            "\"parentPid\":0,"
+            "\"parentProcessName\":\"\","
+            "\"parentProcessPath\":\"\"}";
 
         if (!Expect(result.compactJson == expected, "raw JSON preserves legacy diag field order"))
             return 1;
@@ -46,7 +51,36 @@ int main()
             return 1;
         if (!Expect(!result.truncated, "short diag JSON is not truncated"))
             return 1;
-        if (!Expect(result.compactJson.size() <= 2047, "short diag JSON respects legacy effective line size"))
+        if (!Expect(result.compactJson.size() <= 4095, "short diag JSON respects effective line size"))
+            return 1;
+    }
+
+    {
+        LegacyDiagJsonBuilder builder;
+        LegacyDiagJsonBuildInput input = BaseInput();
+        input.dllInstanceId = "amsi_detect_9696";
+        input.pid = 9696;
+        input.processName = "pwsh.exe";
+        input.processPath = "D:\\SoftwareInstall\\PowerShell\\7\\pwsh.exe";
+        input.parentPid = 1000;
+        input.parentProcessName = "WindowsTerminal.exe";
+        input.parentProcessPath = "C:\\Program Files\\Parent \"Launcher\"\\parent.exe";
+        LegacyDiagJsonBuildResult result = builder.Build(input);
+
+        if (!Expect(result.compactJson.find("\"dllInstanceId\":\"amsi_detect_9696\"") != std::string::npos,
+                    "dllInstanceId is emitted"))
+            return 1;
+        if (!Expect(result.compactJson.find("\"pid\":9696") != std::string::npos,
+                    "pid is emitted as a number"))
+            return 1;
+        if (!Expect(result.compactJson.find("\"processPath\":\"D:\\\\SoftwareInstall\\\\PowerShell\\\\7\\\\pwsh.exe\"") != std::string::npos,
+                    "processPath is JSON escaped"))
+            return 1;
+        if (!Expect(result.compactJson.find("\"parentPid\":1000") != std::string::npos,
+                    "parentPid is emitted as a number"))
+            return 1;
+        if (!Expect(result.compactJson.find("Parent \\\"Launcher\\\"") != std::string::npos,
+                    "parentProcessPath quotes are JSON escaped"))
             return 1;
     }
 
@@ -124,7 +158,7 @@ int main()
 
         if (!Expect(result.truncated, "oversized diag JSON is marked truncated"))
             return 1;
-        if (!Expect(result.compactJson.size() == 2047, "oversized diag JSON fills the legacy effective line size"))
+        if (!Expect(result.compactJson.size() == 4095, "oversized diag JSON fills the effective line size"))
             return 1;
         if (!Expect(result.compactJson.find('\0') == std::string::npos,
                     "compact JSON does not include the snprintf NUL terminator"))

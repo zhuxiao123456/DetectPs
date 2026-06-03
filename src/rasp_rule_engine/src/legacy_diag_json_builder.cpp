@@ -64,24 +64,39 @@ const char* SeverityToString(RaspDiagSeverity severity)
 LegacyDiagJsonBuildResult LegacyDiagJsonBuilder::Build(const LegacyDiagJsonBuildInput& input) const
 {
     const std::string desc = EscapeLegacyDiagJson(input.message);
+    const std::string pattern = EscapeLegacyDiagJson(input.pattern);
+    const std::string dllInstanceId = EscapeLegacyDiagJson(input.dllInstanceId);
+    const std::string processName = EscapeLegacyDiagJson(input.processName);
+    const std::string processPath = EscapeLegacyDiagJson(input.processPath);
+    const std::string parentProcessName = EscapeLegacyDiagJson(input.parentProcessName);
+    const std::string parentProcessPath = EscapeLegacyDiagJson(input.parentProcessPath);
     const char* severity = SeverityToString(input.severity);
 
-    char line[2048] = {};
+    char line[4096] = {};
     const int written = std::snprintf(
         line,
         sizeof(line),
-        "{\"id\":\"%s\",\"ts\":\"%s\","
-        "\"sev\":\"%s\",\"act\":\"audit\",\"cat\":\"diag\","
-        "\"mod\":\"%s\",\"sensor\":\"RaspLog\","
-        "\"rule\":\"\",\"desc\":\"%s\","
-        "\"method\":\"\",\"url\":\"\",\"ip\":\"\",\"ua\":\"\","
-        "\"pattern\":\"%s\",\"payload\":\"\"}",
-        input.id.c_str(),
-        input.timestamp.c_str(),
+        "{\"sev\":\"%s\",\"cat\":\"diag\","
+        "\"sensor\":\"RaspLog\","
+        "\"desc\":\"%s\","
+        "\"pattern\":\"%s\","
+        "\"dllInstanceId\":\"%s\","
+        "\"pid\":%lu,"
+        "\"processName\":\"%s\","
+        "\"processPath\":\"%s\","
+        "\"parentPid\":%lu,"
+        "\"parentProcessName\":\"%s\","
+        "\"parentProcessPath\":\"%s\"}",
         severity,
-        input.module.c_str(),
         desc.c_str(),
-        input.pattern.c_str());
+        pattern.c_str(),
+        dllInstanceId.c_str(),
+        static_cast<unsigned long>(input.pid),
+        processName.c_str(),
+        processPath.c_str(),
+        static_cast<unsigned long>(input.parentPid),
+        parentProcessName.c_str(),
+        parentProcessPath.c_str());
 
     LegacyDiagJsonBuildResult result;
     result.truncated = (written < 0) || (written >= static_cast<int>(sizeof(line)));

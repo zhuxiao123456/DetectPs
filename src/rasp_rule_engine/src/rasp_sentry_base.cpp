@@ -885,6 +885,15 @@ std::string RaspSentryBase::ActiveEffectiveSnapshotHash() const
     return m_activeEffectiveSnapshotHash;
 }
 // =========================================================================
+void RaspSentryBase::FillDiagnosticLogContext(LegacyDiagJsonBuildInput& input) const
+{
+    DWORD pid = GetCurrentProcessId();
+    input.pid = static_cast<uint32_t>(pid);
+    char pidText[16] = {};
+    std::snprintf(pidText, sizeof(pidText), "%lu", static_cast<unsigned long>(pid));
+    input.dllInstanceId = std::string("amsi_detect_") + pidText;
+}
+
 // LogForwardThreadProc - drains ring buffer to amsi_detect_events as diag events
 // =========================================================================
 
@@ -915,6 +924,7 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
             input.pattern = self->LogEventPattern();
             input.message = entryText;
             input.severity = entrySeverity;
+            self->FillDiagnosticLogContext(input);
 
             LegacyDiagJsonBuildResult built = LegacyDiagJsonBuilder().Build(input);
             const std::string& compactJson = built.compactJson;
