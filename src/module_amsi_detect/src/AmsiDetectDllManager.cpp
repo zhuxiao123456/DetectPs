@@ -22,9 +22,9 @@ namespace Engine {
 
     namespace {
         /**
-         * ç”Ÿæˆç±»ä¼¼upgrade-hashçš„å‰16ä½
-         * @param stagingDllHash  å“ˆå¸Œå€¼
-         * @return  å‡çº§çŠ¶æ€ç‰ˆæœ¬,æ–¹ä¾¿dllä¾§è¯†åˆ«è¿™æ˜¯ä¸€æ¬¡æ–°çš„å‡çº§çª—å£
+         * Éú³ÉÀàËÆupgrade-hashµÄÇ°16Î»
+         * @param stagingDllHash  ¹şÏ£Öµ
+         * @return  Éı¼¶×´Ì¬°æ±¾,·½±ãdll²àÊ¶±ğÕâÊÇÒ»´ÎĞÂµÄÉı¼¶´°¿Ú
          */
         std::string BuildUpgradeStateVersion(const std::string &stagingDllHash)
         {
@@ -70,7 +70,7 @@ namespace Engine {
         return true;
     }
 
-    // æ›´æ–°dllï¼ˆè¿”å›è¯¦ç»†çŠ¶æ€ç ï¼‰.
+    // ¸üĞÂdll£¨·µ»ØÏêÏ¸×´Ì¬Âë£©.
     int AmsiDetectDllManager::UpdateAmsiDll(const std::string &stagingDllPath, std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime)
     {
         return UpdateAmsiDllEx(stagingDllPath, m_amsiIpcRuntime).code;
@@ -100,6 +100,11 @@ namespace Engine {
 
         if (usingDllHash == stagingDllHash) {
             InfoLogf3(GetLoggerPtr(), "(%s) (%s) hash(%s) is consistent, not need update.", m_amsiDllFilePath, stagingDllPath, usingDllHash);
+            // É¾³ıÔİ´æÎÄ¼ş.
+            if (!DeleteFileW(StrUtils::Utf8ToUtf16(stagingDllPath).c_str())) {
+                WarningLogf2(GetLoggerPtr(), "Could not delete staged file(%s) (GLE=%lu)", stagingDllPath, GetLastError());
+            }
+
             result.code = UPDATE_SUCCESS;
             result.dllChanged = false;
             return result;
@@ -123,7 +128,7 @@ namespace Engine {
 
         std::wstring wStagedPath = StrUtils::Utf8ToUtf16(stagingDllPath);
         std::wstring wInstalledPath = StrUtils::Utf8ToUtf16(m_amsiDllFilePath);
-        // ä¼˜å…ˆä½¿ç”¨å½±å­é‡å‘½åæ›¿æ¢DLL.
+        // ÓÅÏÈÊ¹ÓÃÓ°×ÓÖØÃüÃûÌæ»»DLL.
         if (TryShadowReplace(wStagedPath, wInstalledPath)) {
             InfoLog(GetLoggerPtr(), "DLL updated successfully via shadow rename - next AMSI scan will load the new binary.");
             result.code = UPDATE_SUCCESS_REPLACE;
@@ -131,7 +136,7 @@ namespace Engine {
             return result;
         }
 
-        //  å½±å­é‡å‘½åå¤±è´¥ï¼Œé‡è¯• MoveFileEx.
+        //  Ó°×ÓÖØÃüÃûÊ§°Ü£¬ÖØÊÔ MoveFileEx.
         WarningLog(GetLoggerPtr(), "Shadow rename failed - retrying MoveFileEx for up to 30s.");
         int moveResult = TryMoveFile(wStagedPath, wInstalledPath);
         if (moveResult >= 0) {
@@ -141,7 +146,7 @@ namespace Engine {
             return result;
         }
 
-        // æ‰€æœ‰æ›´æ–°æ–¹æ³•éƒ½å¤±è´¥ï¼Œå®‰æ’é‡å¯æ›¿æ¢.
+        // ËùÓĞ¸üĞÂ·½·¨¶¼Ê§°Ü£¬°²ÅÅÖØÆôÌæ»».
         InfoLog(GetLoggerPtr(), "All update methods failed - scheduling reboot replacement.");
         if (ScheduleReboot(wStagedPath, wInstalledPath)) {
             result.code = UPDATE_SUCCESS_REBOOT;
@@ -164,17 +169,17 @@ namespace Engine {
     {
         std::wstring backup = installed + L".bak";
 
-        // æ­¥éª¤1ï¼šé‡å‘½åå·²å®‰è£…DLLä¸º.bak.
+        // ²½Öè1£ºÖØÃüÃûÒÑ°²×°DLLÎª.bak.
         if (!MoveFileExW(installed.c_str(), backup.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED)) {
-            ErrorLogf2(GetLoggerPtr(), "Shadow rename step 1 failed (GLE=%lu): %s -> .bak", GetLastError(), StrUtils::Utf16ToUtf8(installed));
+            ErrorLogf3(GetLoggerPtr(), "Shadow rename step 1 failed (GLE=%lu): %s -> %s", GetLastError(), StrUtils::Utf16ToUtf8(installed), StrUtils::Utf16ToUtf8(backup));
             return false;
         }
         InfoLogf2(GetLoggerPtr(), "Shadow renamed step 1: %s -> %s success.", StrUtils::Utf16ToUtf8(installed), StrUtils::Utf16ToUtf8(backup));
 
-        // æ­¥éª¤2ï¼šå¤åˆ¶æ–°DLLåˆ°åŸè·¯å¾„.
+        // ²½Öè2£º¸´ÖÆĞÂDLLµ½Ô­Â·¾¶.
         if (!CopyFileW(staged.c_str(), installed.c_str(), FALSE)) {
             ErrorLogf3(GetLoggerPtr(), "Shadow rename step 2 failed - copy (%s) to (%s) failed (GLE=%lu), restoring backup", StrUtils::Utf16ToUtf8(staged), StrUtils::Utf16ToUtf8(installed), GetLastError());
-            // å°è¯•æ¢å¤å¤‡ä»½.
+            // ³¢ÊÔ»Ö¸´±¸·İ.
             if (!MoveFileExW(backup.c_str(), installed.c_str(), MOVEFILE_REPLACE_EXISTING)) {
                 ErrorLogf3(GetLoggerPtr(), "Restore backup (%s) to (%s) failed (GLE=%lu)", StrUtils::Utf16ToUtf8(backup), StrUtils::Utf16ToUtf8(installed), GetLastError());
             }
@@ -182,12 +187,17 @@ namespace Engine {
         }
         InfoLogf2(GetLoggerPtr(), "Shadow renamed step 2: %s -> %s success", StrUtils::Utf16ToUtf8(staged), StrUtils::Utf16ToUtf8(installed));
 
-        // æ­¥éª¤3ï¼šåˆ é™¤æš‚å­˜æ–‡ä»¶ï¼ˆéè‡´å‘½ï¼Œå¤±è´¥ä¸å½±å“æ›´æ–°ç»“æœï¼‰.
+        // ²½Öè3£ºÉ¾³ıÔİ´æÎÄ¼ş£¨·ÇÖÂÃü£¬Ê§°Ü²»Ó°Ïì¸üĞÂ½á¹û£©.
         if (!DeleteFileW(staged.c_str())) {
             WarningLogf2(GetLoggerPtr(), "Could not delete staged file(%s) (GLE=%lu)", StrUtils::Utf16ToUtf8(staged), GetLastError());
         }
 
-        return true;  // å½±å­é‡å‘½åæˆåŠŸ.
+        // ²½Öè4£ºÉ¾³ı±¸·İÎÄ¼ş£¨·ÇÖÂÃü£¬Ê§°Ü²»Ó°Ïì¸üĞÂ½á¹û£©.
+        if (!DeleteFileW(backup.c_str())) {
+            WarningLogf2(GetLoggerPtr(), "Could not delete backup file(%s) (GLE=%lu)", StrUtils::Utf16ToUtf8(backup), GetLastError());
+        }
+
+        return true;  // Ó°×ÓÖØÃüÃû³É¹¦.
     }
 
     int AmsiDetectDllManager::TryMoveFile(const std::wstring &src, const std::wstring &dst)
@@ -198,7 +208,7 @@ namespace Engine {
         while (elapsed < kRetryTimeoutMs) {
             if (MoveFileExW(src.c_str(), dst.c_str(),
                 MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED)) {
-                return elapsed + 1;  // è¿”å›è€—æ—¶+1ï¼ˆé¿å…ä¸0å†²çªï¼‰.
+                return elapsed + 1;  // ·µ»ØºÄÊ±+1£¨±ÜÃâÓë0³åÍ»£©.
             }
             DebugLogf3(GetLoggerPtr(), "MoveFileEx failed (GLE=%lu), retry %dms later, elapsed %dms", GetLastError(), kRetryIntervalMs, elapsed);
             
@@ -206,7 +216,7 @@ namespace Engine {
             elapsed += kRetryIntervalMs;
         }
         
-        return -1;  // ç§»åŠ¨å¤±è´¥ï¼ˆè¶…æ—¶ï¼‰.
+        return -1;  // ÒÆ¶¯Ê§°Ü£¨³¬Ê±£©.
     }
 
     bool AmsiDetectDllManager::ScheduleReboot(const std::wstring& src, const std::wstring& dst)
@@ -216,11 +226,11 @@ namespace Engine {
             InfoLogf2(GetLoggerPtr(), 
                 "Replacement scheduled at next reboot: %s -> %s", 
                 StrUtils::Utf16ToUtf8(src), StrUtils::Utf16ToUtf8(dst));
-            return true;  // é‡å¯å®‰æ’æˆåŠŸ.
+            return true;  // ÖØÆô°²ÅÅ³É¹¦.
         } else {
             ErrorLogf1(GetLoggerPtr(), 
                 "MOVE_FILE_DELAY_UNTIL_REBOOT also failed (GLE=%lu)", GetLastError());
-            return false;  // é‡å¯å®‰æ’å¤±è´¥.
+            return false;  // ÖØÆô°²ÅÅÊ§°Ü.
         }
     }
 

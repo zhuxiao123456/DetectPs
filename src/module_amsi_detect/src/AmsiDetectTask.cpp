@@ -46,6 +46,7 @@ namespace Engine {
         }
     }
 
+
     AmsiDetectTask::AmsiDetectTask() : CsaTask(TASK_NAME_AMSI_DETECT, FEATURE_NAME_AMSI_DETECT,
                                                TaskCondition::TASK_TYPE_ENDLESS_LOOP) {
     }
@@ -54,6 +55,12 @@ namespace Engine {
 
     int AmsiDetectTask::Init() {
         InfoLogf1(GetLoggerPtr(), "Task(%s) init.", name());
+
+        // »ñÈ¡ÏµÍ³ÒÑ¾­ÔËĞĞµÄºÁÃëÊı.
+        uint64_t ms = GetTickCount64();
+       if(ms <= 60000) { // ÏµÍ³Æô¶¯Ê±¼äĞ¡ÓÚ60s, µÈ´ıÒ»·ÖÖÓÏµÍ³ÎÈ¶¨.
+           GracefulSleep(60);
+       }
 
         int osName = SystemUtilsRef.GetOsName();
         if (osName < SystemUtils::WINDOWS_10 || osName >= SystemUtils::WINDOWS_MAX) {
@@ -73,7 +80,6 @@ namespace Engine {
         m_isDetecting = false;
         m_isIpcRunning = false;
         m_isAmsiRegistered = false;
-        m_lastReloadBroadcastOk = false;
 
         if (!InitPath()) {
             return -1;
@@ -93,35 +99,27 @@ namespace Engine {
 
     void AmsiDetectTask::UnInit() {
         InfoLogf1(GetLoggerPtr(), "Task(%s) uninit begin.", name());
-        // é€šçŸ¥ç‰¹å¾åº“å‡çº§æ¨¡å—ä¸å†å‘é€AMSIç‰ˆæœ¬.
-        if (!m_usingAmsiVersion.empty()) {
-            HandleAmsiVersionInFeatureUpgradeModule(m_usingAmsiVersion, false);
-        }
+        // Í¨ÖªÌØÕ÷¿âÉı¼¶Ä£¿é²»ÔÙ·¢ËÍAMSI°æ±¾.
+        HandleAmsiVersionInFeatureUpgradeModule(m_usingAmsiVersion, false);
 
         if (m_isDetecting) {
-            // å¦‚æœdllæ³¨å†ŒæˆåŠŸåˆ™å¸è½½
+            // Èç¹ûdll×¢²á³É¹¦ÔòĞ¶ÔØ
             if (m_isAmsiRegistered) {
                 AmsiDetectDllManager amsiDetectDllManager{m_amsiDllFilePath};
                 if (!amsiDetectDllManager.UnregisterAmsiProvider()) {
                     WarningLog(GetLoggerPtr(), "Unregister amsi provider failed during uninit.");
                 }
-                m_isAmsiRegistered = false;
             }
-
-            // å¦‚æœé€šé“å¼€å¯ï¼Œåˆ™å…³é—­ï¼Œä¸éœ€è¦å¹¿æ’­pauseäº†
+            // Èç¹ûÍ¨µÀ¿ªÆô£¬Ôò¹Ø±Õ.
             if (m_isIpcRunning) {
                 StopAmsiIpcIfStarted();
             }
-
-            // æ¸…ç†å˜é‡
-
-            m_isDetecting = false;
         }
 
+        // ÇåÀí±äÁ¿.
         m_isDetecting = false;
         m_isIpcRunning = false;
         m_isAmsiRegistered = false;
-        m_lastReloadBroadcastOk = false;
 
         m_usingAmsiVersion.clear();
         m_handingAmsiVersion.clear();
@@ -151,16 +149,16 @@ namespace Engine {
         LockUtils::ScopedMutexLock lock(m_operateAmsiLibLock);
 
         if (!CheckFileIsExist()) {
-            // ç‰¹å¾åº“ä¸å®Œæ•´æ—¶ï¼Œæ¸…ç†AMSIç‰¹å¾åº“.
+            // ÌØÕ÷¿â²»ÍêÕûÊ±£¬ÇåÀíAMSIÌØÕ÷¿â.
             if (DirUtils::IsDir(m_amsiDir)) {
                 if (DirUtils::DeleteDir(m_amsiDir) != 0) {
                     ErrorLogf1(GetLoggerPtr(), "Delete amsi dir (%s) failed.", m_amsiDir);
                 }
             }
 
-            // å‘é€AMSIç‰¹å¾åº“åˆå§‹ç‰ˆæœ¬.
+            // ·¢ËÍAMSIÌØÕ÷¿â³õÊ¼°æ±¾.
             SendAmsiDownloadRequest();
-            // é€šçŸ¥ç‰¹å¾åº“å‡çº§æ¨¡å—å®šæ—¶å‘é€AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+            // Í¨ÖªÌØÕ÷¿âÉı¼¶Ä£¿é¶¨Ê±·¢ËÍAMSIÌØÕ÷¿â°æ±¾.
             HandleAmsiVersionInFeatureUpgradeModule("2022010101", true);
             return 0;
         }
@@ -168,12 +166,12 @@ namespace Engine {
         InfoLog(GetLoggerPtr(), "Amsi file exist.");
         bool isStartCheckSuccess{false};
         do {
-            // è¯»å–AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+            // ¶ÁÈ¡AMSIÌØÕ÷¿â°æ±¾.
             if (!GetAmsiLibVersion()) {
                 break;
             }
 
-            // è¯»å–è§„åˆ™.
+            // ¶ÁÈ¡¹æÔò.
             AmsiRuleSnapshot snapshot;
             if (!LoadRuleSnapshot(m_amsiRulePath, m_handingAmsiVersion, snapshot)) {
                 break;
@@ -182,7 +180,7 @@ namespace Engine {
                 break;
             }
 
-            // åˆ›å»ºé€šä¿¡é€šé“.
+            // ´´½¨Í¨ĞÅÍ¨µÀ.
             std::string error;
             if (!StartAmsiIpc(snapshot, error)) {
                 ErrorLogf1(GetLoggerPtr(), "Start amsi ipc failed: %s.", error);
@@ -192,7 +190,7 @@ namespace Engine {
             m_isIpcRunning = true;
             InfoLogf1(GetLoggerPtr(), "Amsi ipc ready, rule version=%s.", snapshot.version);
 
-            // æ³¨å†ŒAMSI.
+            // ×¢²áAMSI.
             AmsiDetectDllManager amsiDetectDllManager{m_amsiDllFilePath};
             if (!amsiDetectDllManager.RegisterAmsiProvider()) {
                 return -1;
@@ -200,7 +198,7 @@ namespace Engine {
             m_isAmsiRegistered = true;
             m_isDetecting = true;
 
-            // é€šçŸ¥ç‰¹å¾åº“å‡çº§æ¨¡å—å®šæ—¶å‘é€AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+            // Í¨ÖªÌØÕ÷¿âÉı¼¶Ä£¿é¶¨Ê±·¢ËÍAMSIÌØÕ÷¿â°æ±¾.
             m_usingAmsiVersion = m_handingAmsiVersion;
             HandleAmsiVersionInFeatureUpgradeModule(m_usingAmsiVersion, true);
 
@@ -208,14 +206,21 @@ namespace Engine {
         } while (false);
 
         if (!isStartCheckSuccess) {
-            // æ¸…ç†AMSIç‰¹å¾åº“.
+            // ÇåÀíAMSIÌØÕ÷¿â.
             if (DirUtils::DeleteDir(m_amsiDir) != 0) {
                 ErrorLogf1(GetLoggerPtr(), "Delete amsi dir (%s) failed.", m_amsiDir);
             }
-            // å‘é€AMSIç‰¹å¾åº“åˆå§‹ç‰ˆæœ¬.
+            // ·¢ËÍAMSIÌØÕ÷¿â³õÊ¼°æ±¾.
             SendAmsiDownloadRequest();
-            // é€šçŸ¥ç‰¹å¾åº“å‡çº§æ¨¡å—å®šæ—¶å‘é€AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+            // Í¨ÖªÌØÕ÷¿âÉı¼¶Ä£¿é¶¨Ê±·¢ËÍAMSIÌØÕ÷¿â°æ±¾.
             HandleAmsiVersionInFeatureUpgradeModule("2022010101", true);
+        } else {
+            // Èç¹ûÔø¾­Éı¼¶Ê±±¸·İÎÄ¼şÎ´³É¹¦É¾³ı£¬ÄÇÃ´³¢ÊÔÉ¾³ıÒ»´Î£¨ÎŞ½ø³Ì¼ÓÔØ¾Édll¼´¿É³É¹¦É¾³ı£©.
+            std::string backup = m_amsiDllFilePath + ".bak";
+            if (FileUtils::IsFile(backup)) {
+                int ret = FileUtils::CsaDeleteFile(backup);
+                InfoLogf2(GetLoggerPtr(), "Delete (%s), ret(%d).", backup, ret);
+            }
         }
 
         return 0;
@@ -254,7 +259,7 @@ namespace Engine {
         }
         ruleJson["version"] = version;
 
-        // åŠ å…¥ç­–ç•¥é‡Œçš„é…ç½®.
+        // ¼ÓÈë²ßÂÔÀïµÄÅäÖÃ.
         if (m_autoBlock) {
             ruleJson["globalMode"] = "block";
         } else {
@@ -275,6 +280,7 @@ namespace Engine {
         std::string assembledRules = BuildRunningStateEnvelope(ruleJson, version);
         snapshot.amsiRulesJson = assembledRules;
         snapshot.version = version;
+        InfoLog(GetLoggerPtr(), "Load rule success.")
 
         return true;
     }
@@ -292,6 +298,12 @@ namespace Engine {
             ErrorLogf2(GetLoggerPtr(), "Descrambling file(%s) failed, ret(%d).", srcFilePath, ret)
             return false;
         }
+
+        if(scramblingStr.empty() || scramblingStr[0] != '{') {
+            ErrorLogf1(GetLoggerPtr(), "Descrambling file(%s) content not a json.", srcFilePath)
+            return false;
+        }
+
         content = scramblingStr;
 
         return true;
@@ -367,7 +379,7 @@ namespace Engine {
 
     int
     AmsiDetectTask::DownloadAmsiPackage(const std::string &url, const std::string &hash, const std::string &version) {
-        // å¦‚æœæ“ä½œç³»ç»Ÿä¸æ”¯æŒAMSIï¼Œç›´æ¥å‘é€ä¸‹è½½å¤±è´¥æ¶ˆæ¯.
+        // Èç¹û²Ù×÷ÏµÍ³²»Ö§³ÖAMSI£¬Ö±½Ó·¢ËÍÏÂÔØÊ§°ÜÏûÏ¢.
         int osName = SystemUtilsRef.GetOsName();
         if (osName < SystemUtils::WINDOWS_10 || osName >= SystemUtils::WINDOWS_MAX) {
             SendAmsiDownloadResponse(version, false, "os version unsupported amsi");
@@ -378,7 +390,14 @@ namespace Engine {
 
         LockUtils::ScopedMutexLock lock(m_operateAmsiLibLock);
 
-        // æ£€æŸ¥ä¸´æ—¶ä¸‹è½½ç›®å½•æ˜¯å¦å­˜åœ¨, ä¸å­˜åœ¨åˆ™åˆ›å»ºç›®å½•.
+        // Èç¹û°æ±¾ÒÑÓ¦ÓÃ£¬²»ÖØ¸´ÏÂÔØ.
+        if (m_usingAmsiVersion == version) {
+            InfoLogf1(GetLoggerPtr(), "Amsi package version(%s) is using, not repeat download.", m_usingAmsiVersion);
+            SendAmsiDownloadResponse(version, true, "");
+            return 0;
+        }
+
+        // ¼ì²éÁÙÊ±ÏÂÔØÄ¿Â¼ÊÇ·ñ´æÔÚ, ²»´æÔÚÔò´´½¨Ä¿Â¼.
         if (!DirUtils::IsDir(m_amsiTmpDir)) {
             if (DirUtils::MakeDirs(m_amsiTmpDir, S_IRWXU | S_IRWXG | S_IRWXO) == 0) {
                 InfoLogf1(GetLoggerPtr(), "Create amsi tmp dir (%s) success.", m_amsiTmpDir);
@@ -389,7 +408,7 @@ namespace Engine {
             }
         }
 
-        // ä¸‹è½½AMSIç‰¹å¾åº“.
+        // ÏÂÔØAMSIÌØÕ÷¿â.
         int httpCode = HttpUtilsRef.Download(url, m_amsiZipPath, hash);
         if (httpCode != Poco::Net::HTTPResponse::HTTPStatus::HTTP_OK) {
             ErrorLogf2(GetLoggerPtr(), "Download amsi package failed, url=%s, hash=%s.", url, hash);
@@ -401,14 +420,14 @@ namespace Engine {
         }
         m_handingAmsiVersion = version;
 
-        // è§£å‹ç‰¹å¾åº“.
+        // ½âÑ¹ÌØÕ÷¿â.
         if (!DecompressPackage(m_amsiTmpDir)) {
             return -1;
         }
 
-        if (!m_isDetecting) {  // é¦–æ¬¡ä¸‹è½½AMSIç‰¹å¾åº“.
+        if (!m_isDetecting) {  // Ê×´ÎÏÂÔØAMSIÌØÕ÷¿â.
             FirstDownloadPackage();
-        } else { // æ›´æ–°AMSIç‰¹å¾åº“.
+        } else { // ¸üĞÂAMSIÌØÕ÷¿â.
             UpgradeDownloadPackage();
         }
 
@@ -418,29 +437,29 @@ namespace Engine {
     void AmsiDetectTask::FirstDownloadPackage() {
         bool isStartCheckSuccess{false};
         do {
-            // åŠ æ‰°è§„åˆ™.
+            // ¼ÓÈÅ¹æÔò.
             std::string tmpRulesPath = m_amsiTmpDir + "amsi_rules.json";
             if (!ScramblingRules(tmpRulesPath, m_amsiRulePath)) {
-                // å‘é€æ–°åº“åº”ç”¨å¤±è´¥åŸå› .
+                // ·¢ËÍĞÂ¿âÓ¦ÓÃÊ§°ÜÔ­Òò.
                 SendAmsiDownloadResponse(m_handingAmsiVersion, false, "scrambling rules failed");
                 break;
             }
 
-            // dllæš‚å­˜ä½ç½®
+            // dllÔİ´æÎ»ÖÃ
             std::string tmpDllPath = m_amsiTmpDir + "hss_amsi.dll";
-            // è¯»å–è§„åˆ™.
+            // ¶ÁÈ¡¹æÔò.
             AmsiRuleSnapshot snapshot;
             if (!LoadRuleSnapshot(m_amsiRulePath, m_handingAmsiVersion, snapshot)) {
                 SendAmsiDownloadResponse(m_handingAmsiVersion, false, "load rule snapshot failed");
                 break;
             }
-            // å¡«å……dll hashå€¼
+            // Ìî³ädll hashÖµ
             if (!FillRequiredDllHash(tmpDllPath, snapshot)) {
                 SendAmsiDownloadResponse(m_handingAmsiVersion, false, "get amsi dll hash failed");
                 break;
             }
 
-            // åˆ›å»ºé€šä¿¡é€šé“.
+            // ´´½¨Í¨ĞÅÍ¨µÀ.
             std::string error;
             if (!StartAmsiIpc(snapshot, error)) {
                 ErrorLogf1(GetLoggerPtr(), "Start amsi ipc failed: %s.", error);
@@ -451,43 +470,43 @@ namespace Engine {
             m_isIpcRunning = true;
             InfoLogf1(GetLoggerPtr(), "Amsi ipc ready, rule version=%s.", snapshot.version);
 
-            // ä¿å­˜dllåˆ°amsiç›®å½•.
+            // ±£´ædllµ½amsiÄ¿Â¼.
             int ret = FileUtils::CsaCopyFile(tmpDllPath, m_amsiDllFilePath);
             if (ret != 0) {
                 ErrorLogf3(GetLoggerPtr(), "Copy (%s) to (%s) failed, ret(%d).", tmpDllPath, m_amsiDllFilePath, ret);
-                // å‘é€æ–°åº“åº”ç”¨å¤±è´¥åŸå› .
+                // ·¢ËÍĞÂ¿âÓ¦ÓÃÊ§°ÜÔ­Òò.
                 SendAmsiDownloadResponse(m_handingAmsiVersion, false, "save amsi dll failed");
                 break;
             }
 
-            // æ³¨å†ŒAMSI.
+            // ×¢²áAMSI.
             AmsiDetectDllManager amsiDetectDllManager{m_amsiDllFilePath};
             if (!amsiDetectDllManager.RegisterAmsiProvider()) {
-                StopAmsiIpcIfStarted();  // æ³¨å†Œå¤±è´¥,å…³é—­ç›¸å…³é€šé“,m_isIpcRunningä¼šè¢«ç½®ä¸ºfalse
+                StopAmsiIpcIfStarted();  // ×¢²áÊ§°Ü,¹Ø±ÕÏà¹ØÍ¨µÀ,m_isIpcRunning»á±»ÖÃÎªfalse
                 break;
             }
-            // æ³¨å†ŒæˆåŠŸï¼Œä¿®æ”¹å¯¹åº”å˜é‡
+            // ×¢²á³É¹¦£¬ĞŞ¸Ä¶ÔÓ¦±äÁ¿
             m_isAmsiRegistered = true;
 
             isStartCheckSuccess = true;
         } while (false);
 
         if (!isStartCheckSuccess) {
-            // æ¸…ç†AMSIç‰¹å¾åº“.
+            // ÇåÀíAMSIÌØÕ÷¿â.
             if (DirUtils::DeleteDir(m_amsiDir) != 0) {
                 ErrorLogf1(GetLoggerPtr(), "Delete amsi dir (%s) failed.", m_amsiDir);
             }
-            // é€šçŸ¥ç‰¹å¾åº“å‡çº§æ¨¡å—å®šæ—¶å‘é€AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+            // Í¨ÖªÌØÕ÷¿âÉı¼¶Ä£¿é¶¨Ê±·¢ËÍAMSIÌØÕ÷¿â°æ±¾.
             HandleAmsiVersionInFeatureUpgradeModule("2022010101", true);
         } else {
             m_isDetecting = true;
             m_usingAmsiVersion = m_handingAmsiVersion;
-            // ä¿å­˜AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+            // ±£´æAMSIÌØÕ÷¿â°æ±¾.
             SaveAmsiLibVersion();
-            // é€šçŸ¥ç‰¹å¾åº“å‡çº§æ¨¡å—å®šæ—¶å‘é€AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+            // Í¨ÖªÌØÕ÷¿âÉı¼¶Ä£¿é¶¨Ê±·¢ËÍAMSIÌØÕ÷¿â°æ±¾.
             HandleAmsiVersionInFeatureUpgradeModule(m_usingAmsiVersion, true);
 
-            // æ¸…ç†tmpç›®å½•.
+            // ÇåÀítmpÄ¿Â¼.
             if (DirUtils::DeleteDir(m_amsiTmpDir) != 0) {
                 ErrorLogf1(GetLoggerPtr(), "Delete amsi tmp dir (%s) failed.", m_amsiTmpDir);
             }
@@ -497,21 +516,21 @@ namespace Engine {
     }
 
     void AmsiDetectTask::UpgradeDownloadPackage() {
-        // åŠ æ‰°è§„åˆ™.
+        // ¼ÓÈÅ¹æÔò.
         std::string tmpRulesPath = m_amsiTmpDir + "amsi_rules.json";
         if (!ScramblingRules(tmpRulesPath, tmpRulesPath)) {
             ClearTmpDirAndSendFailedReason("scrambling rules failed");
             return;
         }
 
-        // è¯»å–è§„åˆ™, è¿™é‡Œä¼šå°†statusè®¾ç½®ä¸ºrunning
+        // ¶ÁÈ¡¹æÔò, ÕâÀï»á½«statusÉèÖÃÎªrunning
         AmsiRuleSnapshot snapshot;
         if (!LoadRuleSnapshot(tmpRulesPath, m_handingAmsiVersion, snapshot)) {
             ClearTmpDirAndSendFailedReason("load final rule snapshot failed");
             return;
         }
 
-        // å¦‚æœé€šä¿¡ä¸å¯ç”¨åˆ™åˆ›å»º.
+        // Èç¹ûÍ¨ĞÅ²»¿ÉÓÃÔò´´½¨.
         std::string error;
         if (m_amsiIpcRuntime == nullptr || !m_isIpcRunning) {
             if (!StartAmsiIpc(snapshot, error)) {
@@ -532,17 +551,17 @@ namespace Engine {
             return;
         }
         snapshot.requiredDllHash = updateResult.targetDllHash;
-        // ä¿å­˜è§„åˆ™åˆ°amsiç›®å½•.
+        // ±£´æ¹æÔòµ½amsiÄ¿Â¼.
         int ret = FileUtils::CsaCopyFile(tmpRulesPath, m_amsiRulePath);
         if (ret != 0) {
             ErrorLogf3(GetLoggerPtr(), "Copy (%s) to (%s) failed, ret(%d).", tmpRulesPath, m_amsiRulePath, ret);
-            ret = FileUtils::CsaDeleteFile(m_amsiRulePath); // å¦‚æœä¿å­˜è§„åˆ™å¤±è´¥ï¼Œåˆ é™¤amsiç›®å½•ä¸‹çš„æ—§è§„åˆ™ï¼Œä¸‹æ¬¡é‡æ–°ä¸‹è½½.
+            ret = FileUtils::CsaDeleteFile(m_amsiRulePath); // Èç¹û±£´æ¹æÔòÊ§°Ü£¬É¾³ıamsiÄ¿Â¼ÏÂµÄ¾É¹æÔò£¬ÏÂ´ÎÖØĞÂÏÂÔØ.
             InfoLogf2(GetLoggerPtr(), "Delete (%s), ret(%d).", m_amsiRulePath, ret);
         }
         ret = FileUtils::CsaDeleteFile(tmpRulesPath);
         InfoLogf2(GetLoggerPtr(), "Delete (%s), ret(%d).", tmpRulesPath, ret);
 
-        // æ›´æ–°providerä¸­çš„è§„åˆ™å¿«ç…§å†…å®¹.
+        // ¸üĞÂproviderÖĞµÄ¹æÔò¿ìÕÕÄÚÈİ.
         if (!m_amsiIpcRuntime->UpdateRules(snapshot, error)) {
             ErrorLogf1(GetLoggerPtr(), "Update amsi ipc rules failed: %s.", error);
             ClearTmpDirAndSendFailedReason("update ipc rules failed");
@@ -550,9 +569,9 @@ namespace Engine {
         }
 
         m_usingAmsiVersion = m_handingAmsiVersion;
-        // ä¿å­˜AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+        // ±£´æAMSIÌØÕ÷¿â°æ±¾.
         SaveAmsiLibVersion();
-        // é€šçŸ¥ç‰¹å¾åº“å‡çº§æ¨¡å—å®šæ—¶å‘é€AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+        // Í¨ÖªÌØÕ÷¿âÉı¼¶Ä£¿é¶¨Ê±·¢ËÍAMSIÌØÕ÷¿â°æ±¾.
         HandleAmsiVersionInFeatureUpgradeModule(m_usingAmsiVersion, true);
 
         return;
@@ -569,7 +588,7 @@ namespace Engine {
             ret = true;
         }
 
-        // åˆ é™¤å‹ç¼©åŒ….
+        // É¾³ıÑ¹Ëõ°ü.
         if (FileUtils::CsaDeleteFile(m_amsiZipPath) != 0) {
             ErrorLogf2(GetLoggerPtr(), "Delete (%s) failed, errno(%d).", m_amsiZipPath, errno);
         }
@@ -604,12 +623,12 @@ namespace Engine {
     }
 
     void AmsiDetectTask::ClearTmpDirAndSendFailedReason(const std::string &reason) {
-        // æ¸…ç†AMSIç‰¹å¾åº“ä¸´æ—¶ç›®å½•.
+        // ÇåÀíAMSIÌØÕ÷¿âÁÙÊ±Ä¿Â¼.
         if (DirUtils::DeleteDir(m_amsiTmpDir) != 0) {
             ErrorLogf1(GetLoggerPtr(), "Delete amsi dir (%s) failed.", m_amsiTmpDir);
         }
 
-        // å‘é€æ–°åº“åº”ç”¨å¤±è´¥åŸå› .
+        // ·¢ËÍĞÂ¿âÓ¦ÓÃÊ§°ÜÔ­Òò.
         SendAmsiDownloadResponse(m_handingAmsiVersion, false, reason);
 
         return;

@@ -320,26 +320,26 @@ namespace Engine {
             switch (level) {
                 case DllDiagLogLevel::Debug:
                     DebugLogf(AmsiDetect::GetLoggerPtr(),
-                              "Recv amsi dll diagnostic payload rawLen=%lu payload: %s.",
+                              "Recv dll rawLen=%lu payload: %s.",
                               static_cast<unsigned long>(rawLen),
                               line);
                     break;
                 case DllDiagLogLevel::Warning:
                     WarningLogf2(AmsiDetect::GetLoggerPtr(),
-                                 "Recv amsi dll diagnostic payload rawLen=%lu payload: %s.",
+                                 "Recv dll rawLen=%lu payload: %s.",
                                  static_cast<unsigned long>(rawLen),
                                  line);
                     break;
                 case DllDiagLogLevel::Error:
                     ErrorLogf2(AmsiDetect::GetLoggerPtr(),
-                               "Recv amsi dll diagnostic payload rawLen=%lu payload: %s.",
+                               "Recv dll rawLen=%lu payload: %s.",
                                static_cast<unsigned long>(rawLen),
                                line);
                     break;
                 case DllDiagLogLevel::Info:
                 default:
                     InfoLogf2(AmsiDetect::GetLoggerPtr(),
-                              "Recv amsi dll diagnostic payload rawLen=%lu payload: %s.",
+                              "Recv dll rawLen=%lu payload: %s.",
                               static_cast<unsigned long>(rawLen),
                               line);
                     break;
@@ -915,45 +915,11 @@ namespace Engine {
     }
 
     /**
-     * ???????????????????????????????????,??????
-     * @param timeoutMs  ???¦É??????????????????????????????????????????
-     * @param error
-     * @return
+     * ???¦Ì?????????????????????????????????y??; ????????????? ruleProvider ?§Ö????????
+     * @param snapshot  ?¦Ì?????????????
+     * @param error ???????
+     * @return ??????? true
      */
-    bool AmsiIpcRuntime::PauseDetection(uint32_t timeoutMs, std::string &error) {
-        amsi_ipc::AmsiBroadcastResult result{};
-        m_impl->StoreBroadcastSummary("pause", timeoutMs, result);
-        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi pause legacy config broadcast disabled reached=%lu lastError=%lu timeoutMs=%lu.",
-                   static_cast<unsigned long>(0),
-                   static_cast<unsigned long>(0),
-                   static_cast<unsigned long>(timeoutMs));
-        error.clear();
-        return true;
-    }
-
-    bool AmsiIpcRuntime::ResumeDetection(uint32_t timeoutMs, std::string &error) {
-        amsi_ipc::AmsiBroadcastResult result{};
-        m_impl->StoreBroadcastSummary("resume", timeoutMs, result);
-        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi resume legacy config broadcast disabled reached=%lu lastError=%lu timeoutMs=%lu.",
-                   static_cast<unsigned long>(0),
-                   static_cast<unsigned long>(0),
-                   static_cast<unsigned long>(timeoutMs));
-        error.clear();
-        return true;
-    }
-
-    // Legacy config unload broadcast is disabled. DLLs observe unloading through amsi_detect_rules polling.
-    bool AmsiIpcRuntime::Unload(uint32_t timeoutMs, std::string &error) {
-        amsi_ipc::AmsiBroadcastResult result{};
-        m_impl->StoreBroadcastSummary("unload", timeoutMs, result);
-        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi unload legacy config broadcast disabled reached=%lu lastError=%lu timeoutMs=%lu.",
-                   static_cast<unsigned long>(0),
-                   static_cast<unsigned long>(0),
-                   static_cast<unsigned long>(timeoutMs));
-        error.clear();
-        return true;
-    }
-    // Updates the in-memory rule snapshot served by amsi_detect_rules.
     bool AmsiIpcRuntime::UpdateRules(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error) {
         if (!m_impl->initialized.load()) {
             error = "amsi ipc runtime is not initialized";
@@ -1049,101 +1015,4 @@ namespace Engine {
         error.clear();
         return true;
     }
-
-    bool AmsiIpcRuntime::Reload(uint32_t timeoutMs, std::string &error) {
-        if (!m_impl->running.load()) {
-            error = "amsi ipc runtime is not running";
-            return false;
-        }
-
-        amsi_ipc::AmsiBroadcastResult result{};
-        m_impl->StoreBroadcastSummary("reload", timeoutMs, result);
-        DebugLogf3(AmsiDetect::GetLoggerPtr(), "Amsi reload legacy config broadcast disabled reached=%lu lastError=%lu timeoutMs=%lu.",
-                   static_cast<unsigned long>(0),
-                   static_cast<unsigned long>(0),
-                   static_cast<unsigned long>(timeoutMs));
-        error.clear();
-        return true;
-    }
-
-    bool AmsiIpcRuntime::IsRunning() const {
-        return m_impl && m_impl->running.load();
-    }
-
-    /**
-     * ????????????????????????????????????????§ß???§Ö????????????Size()???????????Bytes()??
-     * ??????????Ž???????????????????
-     * @return
-     */
-    AmsiIpcRuntimeStats AmsiIpcRuntime::GetStats() const {
-        AmsiIpcRuntimeStats stats;
-        if (!m_impl) {
-            return stats;
-        }
-
-        stats.initialized = m_impl->initialized.load();
-        stats.running = m_impl->running.load();
-        stats.stopping = m_impl->stopping.load();
-        stats.workersStarted = m_impl->workersStarted.load();
-        stats.pipeStarted = m_impl->pipeStarted.load();
-
-        stats.detectionReceived = m_impl->detectionReceived.load();
-        stats.detectionDropped = m_impl->detectionDropped.load();
-        stats.dllDiagReceived = m_impl->dllDiagReceived.load();
-        stats.dllDiagDropped = m_impl->dllDiagDropped.load();
-        stats.statusReceived = m_impl->statusReceived.load();
-        stats.statusDropped = m_impl->statusDropped.load();
-        stats.drainAckReceived = m_impl->drainAckReceived.load();
-        stats.unknownEventReceived = m_impl->unknownEventReceived.load();
-        stats.oversizedPayloadDropped = m_impl->oversizedPayloadDropped.load();
-
-        {
-            std::lock_guard<std::mutex> lock(m_impl->broadcastMutex);
-            stats.lastReloadReached = m_impl->lastReloadBroadcast.reached;
-            stats.lastReloadLastError = m_impl->lastReloadBroadcast.lastError;
-            stats.lastPauseReached = m_impl->lastPauseBroadcast.reached;
-            stats.lastPauseLastError = m_impl->lastPauseBroadcast.lastError;
-            stats.lastResumeReached = m_impl->lastResumeBroadcast.reached;
-            stats.lastResumeLastError = m_impl->lastResumeBroadcast.lastError;
-            stats.lastUnloadReached = m_impl->lastUnloadBroadcast.reached;
-            stats.lastUnloadLastError = m_impl->lastUnloadBroadcast.lastError;
-        }
-
-        stats.detectionQueueSize = m_impl->detectionQueue.Size();
-        stats.detectionQueueBytes = m_impl->detectionQueue.Bytes();
-        stats.dllDiagQueueSize = m_impl->dllDiagQueue.Size();
-        stats.dllDiagQueueBytes = m_impl->dllDiagQueue.Bytes();
-        stats.statusQueueSize = m_impl->statusQueue.Size();
-        stats.statusQueueBytes = m_impl->statusQueue.Bytes();
-
-        {
-            std::lock_guard<std::mutex> lock(m_impl->statsMutex);
-            stats.lastError = m_impl->lastError;
-            stats.degraded = m_impl->degraded;
-        }
-        return stats;
-    }
-
-    AmsiIpcBroadcastSummary AmsiIpcRuntime::GetLastBroadcastSummary(const std::string &command) const {
-        AmsiIpcBroadcastSummary summary;
-        if (!m_impl) {
-            return summary;
-        }
-
-        std::lock_guard<std::mutex> lock(m_impl->broadcastMutex);
-        if (command == "reload") {
-            return m_impl->lastReloadBroadcast;
-        }
-        if (command == "pause") {
-            return m_impl->lastPauseBroadcast;
-        }
-        if (command == "resume") {
-            return m_impl->lastResumeBroadcast;
-        }
-        if (command == "unload") {
-            return m_impl->lastUnloadBroadcast;
-        }
-        return summary;
-    }
-
 }

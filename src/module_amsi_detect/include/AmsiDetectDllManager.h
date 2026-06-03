@@ -15,14 +15,14 @@ namespace Engine {
 
     class AmsiDetectDllManager {
     public:
-        // ===== è¿”å›ç å®šä¹‰ =====
-        // æˆåŠŸè¿”å›ç .
-        static constexpr int UPDATE_SUCCESS = 0; // hashä¸€è‡´æ— éœ€æ›´æ–°.
-        static constexpr int UPDATE_SUCCESS_REPLACE = 1;      // å½±å­é‡å‘½åæˆåŠŸ.
-        static constexpr int UPDATE_SUCCESS_MOVE = 2;           // MoveFileExæˆåŠŸ.
-        static constexpr int UPDATE_SUCCESS_REBOOT = 3;       // é‡å¯åæ›¿æ¢æˆåŠŸ.
-        // å¤±è´¥è¿”å›ç .
-        static constexpr int UPDATE_FAILED = -1;  // é€šç”¨å¤±è´¥.
+        // ===== ·µ»ØÂë¶¨Òå =====
+        // ³É¹¦·µ»ØÂë.
+        static constexpr int UPDATE_SUCCESS = 0; // hashÒ»ÖÂÎŞĞè¸üĞÂ.
+        static constexpr int UPDATE_SUCCESS_REPLACE = 1;      // Ó°×ÓÖØÃüÃû³É¹¦.
+        static constexpr int UPDATE_SUCCESS_MOVE = 2;           // MoveFileEx³É¹¦.
+        static constexpr int UPDATE_SUCCESS_REBOOT = 3;       // ÖØÆôºóÌæ»»³É¹¦.
+        // Ê§°Ü·µ»ØÂë.
+        static constexpr int UPDATE_FAILED = -1;  // Í¨ÓÃÊ§°Ü.
 
         struct AmsiDllUpdateResult {
             int code = -1;
@@ -34,11 +34,11 @@ namespace Engine {
         AmsiDetectDllManager(const std::string &amsiDllFilePath);
         ~AmsiDetectDllManager() = default;
 
-        // æ³¨å†Œ/æ³¨é”€AMSI.
+        // ×¢²á/×¢ÏúAMSI.
         bool RegisterAmsiProvider();
         bool UnregisterAmsiProvider();
         
-        // æ›´æ–°dllï¼ˆè¿”å›è¯¦ç»†çŠ¶æ€ç ï¼‰.
+        // ¸üĞÂdll£¨·µ»ØÏêÏ¸×´Ì¬Âë£©.
         int UpdateAmsiDll(const std::string &stagingDllPath, std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime);
         AmsiDllUpdateResult UpdateAmsiDllEx(const std::string &stagingDllPath,
                                                    std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime);
@@ -49,7 +49,7 @@ namespace Engine {
         bool ScheduleReboot(const std::wstring &src, const std::wstring &dst);
 
     private:
-        // DLLè·¯å¾„.
+        // DLLÂ·¾¶.
         std::string m_amsiDllFilePath;
     };
 

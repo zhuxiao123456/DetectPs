@@ -15,9 +15,12 @@
 #include "MsgIdDefine.h"
 #include "ModuleUtils.h"
 
+#include "AutoIsolateAndKillMsgUtils.h"
+
 namespace Engine {
     using namespace SDK;
     using namespace AmsiDetect;
+    using namespace AutoKillAndIsolate;
     namespace {
 
         bool ParseRawDetectionEvent(const std::string &rawJson,
@@ -69,22 +72,15 @@ namespace Engine {
 
         void MakeAmsiAlarmMsg(const SDK::JsonUtils::JsonValue &raw,
                               SDK::JsonUtils::JsonValue &jValue) {
-            // 娣诲姞action瀛楁
+            // 添加自动阻断字段.
             std::string act = GetStringField(raw, "act");
-            static const std::unordered_map<std::string, uint32_t> kActionCodeMap = {
-                    {"block", 2},
-                    {"audit", 1}
-            };
-            auto it = kActionCodeMap.find(act);
-
-            if (it != kActionCodeMap.end()) {
-                jValue["action"] = it->second;
-            } else {
-                WarningLogf1(AmsiDetect::GetLoggerPtr(),
-                             "Unknown action value: '%s', defaulting to audit(1)",
-                             act.c_str());
-                jValue["action"] = 1;
+            if (act == "block") {
+                jValue[ALARM_AUTO_BLOCK] = true;
+                jValue[ALARM_HANDLE_STATUS] = 1; // master定义的告警状态，1表示已处理.
+                jValue[ALARM_HANDLE_METHOD] = 4; // master定义的告警处理方式，4表示已隔离查杀.
+                jValue[ALARM_HANDLER] = "System";
             }
+
             jValue["event_id"] = CryptoCodeUtils::GenerateUUID();
             jValue["event_classid"] = "amsi_0001";
             jValue["event_name"] = "Suspicious Powershell Command Execution";

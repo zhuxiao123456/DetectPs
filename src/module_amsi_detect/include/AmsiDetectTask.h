@@ -49,15 +49,13 @@ namespace Engine {
         bool m_autoBlock{false};
         std::set<std::string> m_trustProcess;
 
-        // P1 compatibility flag: true means AMSI IPC runtime is started, not AMSI Provider registered.
         bool m_isDetecting{false};
         bool m_isIpcRunning{false};
         bool m_isAmsiRegistered{false};
-        bool m_lastReloadBroadcastOk{false};
 
-        // å½“å‰ç”¨äºæ£€æµ‹çš„AMSIç‰¹å¾åº“ç‰ˆæœ¬.
+        // µ±Ç°ÓÃÓÚ¼ì²âµÄAMSIÌØÕ÷¿â°æ±¾.
         std::string m_usingAmsiVersion;
-        // å½“å‰å¤„ç†ä¸­çš„AMSIç‰¹å¾åº“ç‰ˆæœ¬ï¼ˆä¸‹è½½æˆåŠŸï¼ŒåŠ è½½ä¸­ï¼‰.
+        // µ±Ç°´¦ÀíÖĞµÄAMSIÌØÕ÷¿â°æ±¾£¨ÏÂÔØ³É¹¦£¬¼ÓÔØÖĞ£©.
         std::string m_handingAmsiVersion;
         std::string m_localRuleHash;
 
@@ -70,7 +68,7 @@ namespace Engine {
 
         std::unique_ptr<AmsiIpcRuntime> m_amsiIpcRuntime;
 
-        // ä¿è¯åŒä¸€æ—¶é—´åªæœ‰ä¸€ä¸ªçº¿ç¨‹æ“ä½œç‰¹å¾åº“.
+        // ±£Ö¤Í¬Ò»Ê±¼äÖ»ÓĞÒ»¸öÏß³Ì²Ù×÷ÌØÕ÷¿â.
         SDK::LockUtils::MutexLock m_operateAmsiLibLock;
     };
 }

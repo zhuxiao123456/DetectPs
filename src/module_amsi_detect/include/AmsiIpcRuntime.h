@@ -13,7 +13,7 @@
 #include "AmsiIpcRuntimeQueue.h"
 
 namespace Engine {
-    // æ§åˆ¶è¿è¡Œæ—¶çš„è¡Œä¸ºå¼€å…³ã€‚åŒ…å« RASP å¯åŠ¨æ ¡éªŒæ ‡å¿—ï¼ˆæ˜¯å¦å¼ºåˆ¶è¦æ±‚ dll å­˜åœ¨ã€æ˜¯å¦å…è®¸ Lua åº“ç¼ºå¤±ï¼‰ä»¥åŠç›¸å…³çš„ç‰©ç†è·¯å¾„å’Œæœ‰ç•Œé˜Ÿåˆ—é…ç½®å¯¹è±¡
+    // ¿ØÖÆÔËĞĞÊ±µÄĞĞÎª¿ª¹Ø¡£°üº¬ RASP Æô¶¯Ğ£Ñé±êÖ¾£¨ÊÇ·ñÇ¿ÖÆÒªÇó dll ´æÔÚ¡¢ÊÇ·ñÔÊĞí Lua ¿âÈ±Ê§£©ÒÔ¼°Ïà¹ØµÄÎïÀíÂ·¾¶ºÍÓĞ½ç¶ÓÁĞÅäÖÃ¶ÔÏó
     struct AmsiIpcRuntimeConfig {
         bool amsiIpcEnabled = true;
         bool enableRealIpc = true;
@@ -45,18 +45,10 @@ namespace Engine {
         bool Start(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error);
         bool Stop(uint32_t timeoutMs, std::string &error);
 
-        bool PauseDetection(uint32_t timeoutMs, std::string &error);
-        bool ResumeDetection(uint32_t timeoutMs, std::string &error);
-        bool Unload(uint32_t timeoutMs, std::string &error);
         bool UpdateRules(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error);
         bool EnterUpgradeUnloadingState(const std::string &stateVersion, std::string &error);
         bool EnterUpgradeUnloadingState(const std::string &stateVersion, const std::string &requiredDllHash, std::string &error);
         bool RestorePreUpgradeSnapshot(std::string &error);
-        bool Reload(uint32_t timeoutMs, std::string &error);
-
-        bool IsRunning() const;
-        AmsiIpcRuntimeStats GetStats() const;
-        AmsiIpcBroadcastSummary GetLastBroadcastSummary(const std::string &command) const;
 
     private:
         struct Impl;
