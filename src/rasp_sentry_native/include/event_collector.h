@@ -1,5 +1,5 @@
 #pragma once
-// event_collector.h - 16-thread named pipe server on \\.\pipe\amsi_detect_events.
+// event_collector.h - named pipe server for event-like JSONL payloads.
 // Receives JSONL lines from all RASP modules and appends them to daily log files.
 // Also detects "drain-ack" events and enqueues them for AmsiStagingWatcher.
 
@@ -34,6 +34,11 @@ public:
     };
 
     explicit EventCollector(std::string logDir);
+    EventCollector(std::string logDir,
+                   std::wstring pipeName,
+                   std::string filePrefix,
+                   int threadCount,
+                   bool enableDrainAckQueue);
     ~EventCollector();
 
     void Start();
@@ -44,6 +49,10 @@ public:
 
 private:
     std::string       m_logDir;
+    std::wstring      m_pipeName;
+    std::string       m_filePrefix;
+    int               m_threadCount = kThreadCount;
+    bool              m_enableDrainAckQueue = true;
     bool              m_started = false;
     CRITICAL_SECTION  m_fileLock;
     DrainAckQueue     m_drainQueue;

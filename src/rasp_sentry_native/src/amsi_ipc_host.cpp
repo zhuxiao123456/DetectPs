@@ -83,9 +83,9 @@ bool AmsiIpcHost::Start()
     }
 
     if (config_.strictHostGuardMode &&
-        (!adapters_.ruleProvider || !adapters_.eventSink || !adapters_.controlStatusSink)) {
+        (!adapters_.ruleProvider || !adapters_.eventSink || !adapters_.logSink || !adapters_.controlStatusSink)) {
         SentryLog_Error("Program",
-                        "AmsiIpcHost strict HostGuard mode requires ruleProvider, eventSink, and controlStatusSink");
+                        "AmsiIpcHost strict HostGuard mode requires ruleProvider, eventSink, logSink, and controlStatusSink");
         return false;
     }
 
@@ -105,6 +105,15 @@ bool AmsiIpcHost::Start()
         if (config_.enableDemoStagingWatcher) {
             stagingWatcher_.reset(new AmsiStagingWatcher(config_.stagingDir, eventCollector_->GetDrainQueue()));
         }
+    }
+    if (!adapters_.logSink) {
+        const std::wstring logsPipeName = OrDefaultPipeName(config_.logsPipeName,
+                                                            amsi_ipc::kLogsPipeName);
+        logCollector_.reset(new EventCollector(config_.logDir,
+                                               logsPipeName,
+                                               "rasp-logs",
+                                               ClampThreadCount(config_.logPipeThreads),
+                                               false));
     }
     if (!adapters_.controlStatusSink) {
         controlStatusCollector_.reset(new ControlStatusCollector(config_.logDir));
@@ -132,6 +141,29 @@ bool AmsiIpcHost::Start()
     stage_ = StartStage::EventCollector;
     SentryLog_Info("Program", "EventCollector started - %d threads on amsi_detect_events",
                    EventCollector::kThreadCount);
+
+    if (adapters_.logSink) {
+        injectedLogChannel_.reset(new amsi_ipc::AmsiEventChannel(*adapters_.logSink));
+        const std::wstring logsPipeName = OrDefaultPipeName(config_.logsPipeName,
+                                                            amsi_ipc::kLogsPipeName);
+        const int logPipeThreads = ClampThreadCount(config_.logPipeThreads);
+        injectedLogPipePool_.reset(new amsi_ipc::NamedPipeServerPool(
+            logsPipeName,
+            logPipeThreads,
+            *injectedLogChannel_,
+            0,
+            65536,
+            PIPE_ACCESS_INBOUND,
+            GENERIC_WRITE));
+        if (!injectedLogPipePool_->Start()) {
+            SentryLog_Error("Program", "Failed to start one or more injected log pipe worker thread(s)");
+        }
+    } else {
+        logCollector_->Start();
+    }
+    stage_ = StartStage::LogCollector;
+    SentryLog_Info("Program", "LogCollector started - %d threads on amsi_detect_logs",
+                   ClampThreadCount(config_.logPipeThreads));
 
     if (adapters_.controlStatusSink) {
         injectedControlStatusChannel_.reset(new amsi_ipc::AmsiControlStatusChannel(*adapters_.controlStatusSink));
@@ -210,6 +242,12 @@ void AmsiIpcHost::Stop()
     if (stage >= static_cast<int>(StartStage::ControlStatusCollector) && injectedControlStatusPipePool_) {
         injectedControlStatusPipePool_->Stop();
     }
+    if (stage >= static_cast<int>(StartStage::LogCollector) && logCollector_) {
+        logCollector_->Stop();
+    }
+    if (stage >= static_cast<int>(StartStage::LogCollector) && injectedLogPipePool_) {
+        injectedLogPipePool_->Stop();
+    }
     if (stage >= static_cast<int>(StartStage::EventCollector) && eventCollector_) {
         eventCollector_->Stop();
     }
@@ -224,6 +262,9 @@ void AmsiIpcHost::Stop()
     injectedControlStatusPipePool_.reset();
     injectedControlStatusChannel_.reset();
     controlStatusCollector_.reset();
+    injectedLogPipePool_.reset();
+    injectedLogChannel_.reset();
+    logCollector_.reset();
     injectedEventPipePool_.reset();
     injectedEventChannel_.reset();
     eventCollector_.reset();

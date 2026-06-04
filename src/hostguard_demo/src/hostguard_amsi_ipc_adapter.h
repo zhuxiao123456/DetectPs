@@ -39,6 +39,7 @@ struct HostGuardAmsiIpcConfig {
 
     int rulePipeThreads = 16;
     int eventPipeThreads = 4;
+    int logPipeThreads = 4;
     int statusPipeThreads = 4;
 
     std::size_t maxRuleResponseBytes = 4 * 1024 * 1024;
@@ -68,6 +69,7 @@ struct HostGuardAmsiIpcConfig {
 
     std::wstring rulesPipeName;
     std::wstring eventsPipeName;
+    std::wstring logsPipeName;
     std::wstring controlStatusPipeName;
     std::wstring configPipeName;
 };
@@ -353,6 +355,8 @@ private:
 class EventPipeClassifier {
 public:
     static HostGuardAmsiEventEnvelope Classify(const std::string& rawJson);
+    static HostGuardAmsiEventEnvelope ClassifyEventPipe(const std::string& rawJson);
+    static HostGuardAmsiEventEnvelope ClassifyLogPipe(const std::string& rawJson);
 };
 
 class BroadcastTracker {
@@ -409,6 +413,7 @@ public:
     void SetAdapterDiagCallback(std::function<void(const HostGuardAmsiAdapterDiag& diag)> cb);
 
     bool InjectRawEventForTest(const std::string& rawJson);
+    bool InjectRawLogForTest(const std::string& rawJson);
     bool InjectStatusForTest(const std::string& rawJson);
 
     bool SubmitRawEventPayload(const std::string& rawJson) { return InjectRawEventForTest(rawJson); }
@@ -424,6 +429,7 @@ private:
                                   amsi_ipc::AmsiRuleResponse& out,
                                   std::string& error);
     bool EnqueueRawEventFromIpc(const std::string& rawJson);
+    bool EnqueueRawLogFromIpc(const std::string& rawJson);
     bool EnqueueStatusFromIpc(const std::string& rawJson);
     std::string NextBroadcastId();
     void MarkFaulted(const std::string& error);

@@ -26,6 +26,7 @@ struct HostGuardDemoOptions {
     bool enableDemoStagingWatcher = false;
     std::wstring rulesPipeName = LR"(\\.\pipe\amsi_detect_rules_demo)";
     std::wstring eventsPipeName = LR"(\\.\pipe\amsi_detect_events_demo)";
+    std::wstring logsPipeName = LR"(\\.\pipe\amsi_detect_logs_demo)";
     std::wstring controlStatusPipeName = LR"(\\.\pipe\amsi_detect_control_status_demo)";
     std::wstring configPipeName = LR"(\\.\pipe\amsi_detect_config_demo)";
 
@@ -69,6 +70,7 @@ private:
 
     std::unique_ptr<HostGuardFileRuleProvider> ruleProvider_;
     std::unique_ptr<HostGuardJsonlEventSink> eventSink_;
+    std::unique_ptr<HostGuardJsonlEventSink> logSink_;
     std::unique_ptr<HostGuardJsonlControlStatusSink> controlStatusSink_;
     std::unique_ptr<hostguard_demo::HostGuardAmsiIpcModule> amsiIpcModule_;
     std::unique_ptr<AmsiIpcHost> host_;

@@ -68,6 +68,7 @@ void ConfigureRealIpcTestPipes(hostguard_demo::HostGuardAmsiIpcConfig& config, c
     config.enableRealIpc = true;
     config.rulesPipeName = TestPipeName((base + L"_rules").c_str());
     config.eventsPipeName = TestPipeName((base + L"_events").c_str());
+    config.logsPipeName = TestPipeName((base + L"_logs").c_str());
     config.controlStatusPipeName = TestPipeName((base + L"_status").c_str());
     config.configPipeName = TestPipeName((base + L"_config").c_str());
 }
@@ -329,8 +330,10 @@ int main()
 
         ok &= Expect(WritePipePayload(config.eventsPipeName, R"({"cat":"Detection","id":"d1"})"),
                      "real event pipe detection write succeeds");
+        ok &= Expect(WritePipePayload(config.logsPipeName, R"({"cat":"diag","sensor":"RaspLog"})"),
+                     "real log pipe diagnostic log write succeeds");
         ok &= Expect(WritePipePayload(config.eventsPipeName, R"({"cat":"diag","sensor":"RaspLog"})"),
-                     "real event pipe diagnostic log write succeeds");
+                     "real event pipe diagnostic payload is accepted but not treated as log");
         ok &= Expect(WritePipePayload(config.eventsPipeName,
                                       R"({"cat":"drain-ack","sensor":"RaspLog","broadcastId":"b1"})"),
                      "real event pipe drain ack write succeeds");
@@ -343,9 +346,9 @@ int main()
                          const auto status = adapter.GetStatus();
                          return status.drainAckReceived == 1 &&
                                 status.drainAckCorrelated == 1 &&
-                                status.unknownEventReceived == 1;
+                                status.unknownEventReceived == 2;
                      }, 1000),
-                     "real event pipe classifies drain ack and unknown payload");
+                     "real event pipe classifies drain ack and non-event payloads");
         ok &= Expect(!adapter.GetRecentAdapterDiag().empty(),
                      "unknown real event payload writes adapter diag");
         adapter.Stop();
@@ -388,6 +391,8 @@ int main()
         ok &= Expect(adapter.Start(error), "real broadcaster adapter Start succeeds");
         ok &= Expect(!PipeServerExists(config.configPipeName),
                      "HostGuard real IPC adapter does not serve legacy config pipe");
+        ok &= Expect(WritePipePayload(config.logsPipeName, R"({"cat":"diag","probe":"log-pipe"})"),
+                     "HostGuard real IPC adapter serves diagnostic log pipe");
 
         HostGuardAmsiBroadcastResult reload;
         HostGuardAmsiBroadcastResult pause;

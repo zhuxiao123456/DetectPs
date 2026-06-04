@@ -35,10 +35,27 @@ bool EventCollector::DrainAckQueue::TryDequeue(std::string& out)
 // ── EventCollector ────────────────────────────────────────────────────────────
 
 EventCollector::EventCollector(std::string logDir)
+    : EventCollector(std::move(logDir),
+                     amsi_ipc::kEventsPipeName,
+                     "rasp-events",
+                     kThreadCount,
+                     true)
+{
+}
+
+EventCollector::EventCollector(std::string logDir,
+                               std::wstring pipeName,
+                               std::string filePrefix,
+                               int threadCount,
+                               bool enableDrainAckQueue)
     : m_logDir(std::move(logDir)),
+      m_pipeName(std::move(pipeName)),
+      m_filePrefix(std::move(filePrefix)),
+      m_threadCount(threadCount),
+      m_enableDrainAckQueue(enableDrainAckQueue),
       m_eventChannel(*this),
-      m_eventPipePool(amsi_ipc::kEventsPipeName,
-                      kThreadCount,
+      m_eventPipePool(m_pipeName,
+                      m_threadCount,
                       m_eventChannel,
                       0,
                       65536,
@@ -93,7 +110,7 @@ void EventCollector::AppendLine(const std::string& jsonLine)
     _snprintf_s(dateBuf, sizeof(dateBuf), _TRUNCATE,
                 "%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
 
-    std::string path = m_logDir + "\\rasp-events-" + dateBuf + ".jsonl";
+    std::string path = m_logDir + "\\" + m_filePrefix + "-" + dateBuf + ".jsonl";
 
     EnterCriticalSection(&m_fileLock);
     HANDLE hFile = CreateFileA(path.c_str(),
@@ -112,7 +129,7 @@ void EventCollector::AppendLine(const std::string& jsonLine)
 
     SentryLog_Info("EventCollector", "Appended event to %s", path.c_str());
 
-    // Forward drain-ack events to AmsiStagingWatcher
-    if (jsonLine.find("\"cat\":\"drain-ack\"") != std::string::npos)
+    // Forward drain-ack events to AmsiStagingWatcher only for the event pipe.
+    if (m_enableDrainAckQueue && jsonLine.find("\"cat\":\"drain-ack\"") != std::string::npos)
         m_drainQueue.Enqueue(jsonLine);
 }

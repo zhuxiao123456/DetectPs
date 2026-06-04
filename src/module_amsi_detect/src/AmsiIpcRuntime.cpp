@@ -38,6 +38,7 @@ namespace Engine {
 
         const wchar_t *kRulesPipeName = L"\\\\.\\pipe\\amsi_detect_rules";
         const wchar_t *kEventsPipeName = L"\\\\.\\pipe\\amsi_detect_events";
+        const wchar_t *kLogsPipeName = L"\\\\.\\pipe\\amsi_detect_logs";
         const wchar_t *kControlStatusPipeName = L"\\\\.\\pipe\\amsi_detect_control_status";
         constexpr DWORD kRulePipeOutBufferBytes = 512 * 1024;
         constexpr DWORD kRulePipeInBufferBytes = 256;
@@ -355,14 +356,17 @@ namespace Engine {
 
         std::unique_ptr<RuntimeRuleProvider> ruleProvider;
         std::unique_ptr<RuntimeEventSink> eventSink;
+        std::unique_ptr<RuntimeEventSink> logSink;
         std::unique_ptr<RuntimeControlStatusSink> statusSink;
 
         std::unique_ptr<amsi_ipc::AmsiRuleChannel> ruleChannel;
         std::unique_ptr<amsi_ipc::AmsiEventChannel> eventChannel;
+        std::unique_ptr<amsi_ipc::AmsiEventChannel> logChannel;
         std::unique_ptr<amsi_ipc::AmsiControlStatusChannel> statusChannel;
 
         std::unique_ptr<amsi_ipc::NamedPipeServerPool> rulePool;
         std::unique_ptr<amsi_ipc::NamedPipeServerPool> eventPool;
+        std::unique_ptr<amsi_ipc::NamedPipeServerPool> logPool;
         std::unique_ptr<amsi_ipc::NamedPipeServerPool> statusPool;
         BoundedPayloadQueue detectionQueue;
         BoundedPayloadQueue dllDiagQueue;
@@ -415,14 +419,17 @@ namespace Engine {
         void ResetRuntimeObjects() {
             acceptingPayload.store(false);
             statusPool.reset();
+            logPool.reset();
             eventPool.reset();
             rulePool.reset();
 
             statusChannel.reset();
+            logChannel.reset();
             eventChannel.reset();
             ruleChannel.reset();
 
             statusSink.reset();
+            logSink.reset();
             eventSink.reset();
             ruleProvider.reset();
         }
@@ -463,6 +470,9 @@ namespace Engine {
         void StopPools() {
             if (statusPool) {
                 statusPool->Stop();
+            }
+            if (logPool) {
+                logPool->Stop();
             }
             if (eventPool) {
                 eventPool->Stop();
@@ -589,21 +599,27 @@ namespace Engine {
                 }
                 return;
             }
-            // ?????? +1?????? dllDiagQueue.TryPush ????????????????????? dllDiagDropped
-            if (kind == AmsiIpcPayloadKind::DllDiagnosticLog) {
-                dllDiagReceived.fetch_add(1);
-                if (!dllDiagQueue.TryPush(MakeEnvelope(kind, payload))) {
-                    dllDiagDropped.fetch_add(1);
-                }
-                return;
-            }
-
             if (kind == AmsiIpcPayloadKind::DrainAck) {
                 drainAckReceived.fetch_add(1);
                 return;
             }
 
             unknownEventReceived.fetch_add(1);
+        }
+
+        void SubmitDllDiagnosticPayload(const std::string &payload) {
+            if (!acceptingPayload.load()) {
+                return;
+            }
+            if (payload.size() > AmsiGlobalConfRef.GetMaxPayloadBytes()) {
+                oversizedPayloadDropped.fetch_add(1);
+                return;
+            }
+
+            dllDiagReceived.fetch_add(1);
+            if (!dllDiagQueue.TryPush(MakeEnvelope(AmsiIpcPayloadKind::DllDiagnosticLog, payload))) {
+                dllDiagDropped.fetch_add(1);
+            }
         }
 
         /**
@@ -824,6 +840,12 @@ namespace Engine {
             m_impl->ResetRuntimeObjects();
             return false;
         }
+        if (PipeHasExistingServer(kLogsPipeName)) {
+            error = "production logs pipe already has a server";
+            m_impl->StopQueuesAndWorkers(3000);
+            m_impl->ResetRuntimeObjects();
+            return false;
+        }
         if (PipeHasExistingServer(kControlStatusPipeName)) {
             error = "production control status pipe already has a server";
             m_impl->StopQueuesAndWorkers(3000);
@@ -836,6 +858,11 @@ namespace Engine {
                 m_impl->SubmitEventPayload(payload);
             }
         }));
+        m_impl->logSink.reset(new RuntimeEventSink([this](const std::string &payload) {
+            if (m_impl && m_impl->acceptingPayload.load()) {
+                m_impl->SubmitDllDiagnosticPayload(payload);
+            }
+        }));
         m_impl->statusSink.reset(new RuntimeControlStatusSink([this](const std::string &payload) {
             if (m_impl && m_impl->acceptingPayload.load()) {
                 m_impl->SubmitStatusPayload(payload);
@@ -844,6 +871,7 @@ namespace Engine {
 
         m_impl->ruleChannel.reset(new amsi_ipc::AmsiRuleChannel(*m_impl->ruleProvider));
         m_impl->eventChannel.reset(new amsi_ipc::AmsiEventChannel(*m_impl->eventSink));
+        m_impl->logChannel.reset(new amsi_ipc::AmsiEventChannel(*m_impl->logSink));
         m_impl->statusChannel.reset(new amsi_ipc::AmsiControlStatusChannel(*m_impl->statusSink));
 
         m_impl->rulePool.reset(
@@ -854,6 +882,9 @@ namespace Engine {
         m_impl->eventPool.reset(
                 new amsi_ipc::NamedPipeServerPool(kEventsPipeName, AmsiGlobalConfRef.GetEventPipeThreads(),
                                                   *m_impl->eventChannel));
+        m_impl->logPool.reset(
+                new amsi_ipc::NamedPipeServerPool(kLogsPipeName, AmsiGlobalConfRef.GetEventPipeThreads(),
+                                                  *m_impl->logChannel));
         m_impl->statusPool.reset(
                 new amsi_ipc::NamedPipeServerPool(kControlStatusPipeName, AmsiGlobalConfRef.GetStatusPipeThreads(),
                                                   *m_impl->statusChannel));
@@ -868,6 +899,13 @@ namespace Engine {
         }
         if (!m_impl->eventPool->Start()) {
             error = "start events pipe failed";
+            m_impl->StopPools();
+            m_impl->StopQueuesAndWorkers(3000);
+            m_impl->ResetRuntimeObjects();
+            return false;
+        }
+        if (!m_impl->logPool->Start()) {
+            error = "start logs pipe failed";
             m_impl->StopPools();
             m_impl->StopQueuesAndWorkers(3000);
             m_impl->ResetRuntimeObjects();

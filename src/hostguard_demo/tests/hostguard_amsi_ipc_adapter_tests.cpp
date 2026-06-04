@@ -46,19 +46,23 @@ int main()
     bool ok = true;
 
     {
-        const auto detection = EventPipeClassifier::Classify(R"({"cat":"Detection","sensor":"RaspLog"})");
+        const auto detection = EventPipeClassifier::ClassifyEventPipe(R"({"cat":"Detection","sensor":"RaspLog"})");
         ok &= Expect(detection.kind == HostGuardAmsiMessageKind::Detection,
-                     "cat Detection wins over sensor fallback");
+                     "event pipe classifies Detection as detection");
 
-        const auto drain = EventPipeClassifier::Classify(
+        const auto drain = EventPipeClassifier::ClassifyEventPipe(
             R"({"cat":"drain-ack","sensor":"RaspLog","broadcastId":"b1"})");
         ok &= Expect(drain.kind == HostGuardAmsiMessageKind::DrainAck,
-                     "cat drain-ack wins over sensor RaspLog");
+                     "event pipe classifies drain-ack as drain ack");
         ok &= Expect(drain.broadcastId == "b1", "classifier extracts broadcastId");
 
-        const auto diag = EventPipeClassifier::Classify(R"({"sensor":"RaspLog","pattern":"amsi-log"})");
+        const auto eventDiag = EventPipeClassifier::ClassifyEventPipe(R"({"sensor":"RaspLog","pattern":"amsi-log"})");
+        ok &= Expect(eventDiag.kind == HostGuardAmsiMessageKind::Unknown,
+                     "event pipe does not treat RaspLog as diagnostic fallback");
+
+        const auto diag = EventPipeClassifier::ClassifyLogPipe(R"({"sensor":"RaspLog","pattern":"amsi-log"})");
         ok &= Expect(diag.kind == HostGuardAmsiMessageKind::DiagnosticLog,
-                     "sensor RaspLog is diagnostic fallback when cat is absent");
+                     "log pipe classifies payload as diagnostic log");
     }
 
     {
@@ -187,7 +191,7 @@ int main()
             ++detections;
         });
         ok &= Expect(adapter.Start(error), "adapter Start succeeds for isolation test");
-        ok &= Expect(adapter.InjectRawEventForTest(R"({"cat":"diag","sensor":"RaspLog"})"), "diag submits");
+        ok &= Expect(adapter.InjectRawLogForTest(R"({"cat":"diag","sensor":"RaspLog"})"), "diag submits");
         auto logEnteredFuture = logEntered.get_future();
         ok &= Expect(WaitFuture(logEnteredFuture, 1000), "log callback is entered");
         ok &= Expect(adapter.InjectRawEventForTest(R"({"cat":"Detection"})"), "detection submits while log callback blocks");
@@ -230,8 +234,8 @@ int main()
         });
         ok &= Expect(adapter.Start(error), "adapter Start succeeds for diag suppression test");
         const std::string repeated = R"({"cat":"diag","sensor":"RaspLog","pattern":"amsi-log","desc":"same"})";
-        ok &= Expect(adapter.InjectRawEventForTest(repeated), "first repeated diag submits");
-        ok &= Expect(adapter.InjectRawEventForTest(repeated), "second repeated diag submits");
+        ok &= Expect(adapter.InjectRawLogForTest(repeated), "first repeated diag submits");
+        ok &= Expect(adapter.InjectRawLogForTest(repeated), "second repeated diag submits");
         ok &= Expect(WaitUntil([&]() {
                          const auto status = adapter.GetStatus();
                          return logs.load() == 1 && status.dllDiagnosticLogSuppressed == 1;

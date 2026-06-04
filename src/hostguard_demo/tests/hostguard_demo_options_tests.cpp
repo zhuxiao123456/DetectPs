@@ -41,6 +41,8 @@ int main()
                      "production mode uses formal rules pipe");
         ok &= Expect(options.eventsPipeName == LR"(\\.\pipe\amsi_detect_events)",
                      "production mode uses formal events pipe");
+        ok &= Expect(options.logsPipeName == LR"(\\.\pipe\amsi_detect_logs)",
+                     "production mode uses formal logs pipe");
         ok &= Expect(options.controlStatusPipeName == LR"(\\.\pipe\amsi_detect_control_status)",
                      "production mode uses formal control status pipe");
         ok &= Expect(options.configPipeName == LR"(\\.\pipe\amsi_detect_config)",

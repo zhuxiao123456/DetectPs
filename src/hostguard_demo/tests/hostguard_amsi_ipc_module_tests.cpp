@@ -68,6 +68,7 @@ hostguard_demo::HostGuardAmsiIpcConfig RealIpcConfig(const wchar_t* suffix)
     const std::wstring base = std::wstring(suffix) + L"_";
     config.rulesPipeName = TestPipeName((base + L"rules").c_str());
     config.eventsPipeName = TestPipeName((base + L"events").c_str());
+    config.logsPipeName = TestPipeName((base + L"logs").c_str());
     config.controlStatusPipeName = TestPipeName((base + L"status").c_str());
     config.configPipeName = TestPipeName((base + L"config").c_str());
     return config;

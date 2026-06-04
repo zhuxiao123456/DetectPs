@@ -37,14 +37,17 @@ struct AmsiIpcHostConfig {
     bool strictHostGuardMode = false;
     bool enableConfigPipe = true;
     int rulePipeThreads = 16;
+    int logPipeThreads = 4;
     std::wstring rulesPipeName;
     std::wstring eventsPipeName;
+    std::wstring logsPipeName;
     std::wstring controlStatusPipeName;
     std::wstring configPipeName;
 };
 
 struct AmsiIpcHostAdapters {
     amsi_ipc::IAmsiEventSink* eventSink = nullptr;
+    amsi_ipc::IAmsiEventSink* logSink = nullptr;
     amsi_ipc::IAmsiControlStatusSink* controlStatusSink = nullptr;
     amsi_ipc::IAmsiRuleProvider* ruleProvider = nullptr;
 };
@@ -74,6 +77,7 @@ private:
     enum class StartStage {
         None,
         EventCollector,
+        LogCollector,
         ControlStatusCollector,
         RuleServer,
         ConfigBroadcaster,
@@ -87,9 +91,12 @@ private:
     StartStage stage_ = StartStage::None;
 
     std::unique_ptr<EventCollector> eventCollector_;
+    std::unique_ptr<EventCollector> logCollector_;
     std::unique_ptr<ControlStatusCollector> controlStatusCollector_;
     std::unique_ptr<amsi_ipc::AmsiEventChannel> injectedEventChannel_;
     std::unique_ptr<amsi_ipc::NamedPipeServerPool> injectedEventPipePool_;
+    std::unique_ptr<amsi_ipc::AmsiEventChannel> injectedLogChannel_;
+    std::unique_ptr<amsi_ipc::NamedPipeServerPool> injectedLogPipePool_;
     std::unique_ptr<amsi_ipc::AmsiControlStatusChannel> injectedControlStatusChannel_;
     std::unique_ptr<amsi_ipc::NamedPipeServerPool> injectedControlStatusPipePool_;
     std::unique_ptr<RuleServer> ruleServer_;

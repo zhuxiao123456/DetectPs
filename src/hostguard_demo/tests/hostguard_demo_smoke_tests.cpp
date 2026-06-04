@@ -299,6 +299,7 @@ int main()
     adapterRealOptions.amsiIpc.useProductionPipes = false;
     adapterRealOptions.rulesPipeName = TestPipeName(L"adapter_rules");
     adapterRealOptions.eventsPipeName = TestPipeName(L"adapter_events");
+    adapterRealOptions.logsPipeName = TestPipeName(L"adapter_logs");
     adapterRealOptions.controlStatusPipeName = TestPipeName(L"adapter_status");
     adapterRealOptions.configPipeName = TestPipeName(L"adapter_config");
 
@@ -314,9 +315,13 @@ int main()
                  "adapter real IPC rule pipe serves injected provider content");
     ok &= Expect(WriteOnlyPipe(adapterRealOptions.eventsPipeName, R"({"cat":"Detection","pipeEvent":2})"),
                  "adapter real IPC event pipe accepts detection payload");
+    ok &= Expect(WriteOnlyPipe(adapterRealOptions.logsPipeName, R"({"cat":"diag","pipeLog":2})"),
+                 "adapter real IPC log pipe accepts diagnostic payload");
     Sleep(100);
     ok &= Expect(ReadFileText(hostguard_demo::DailyJsonlPath(logDir, "rasp-events")).find(R"({"cat":"Detection","pipeEvent":2})") != std::string::npos,
                  "adapter detection callback reaches JSONL sink");
+    ok &= Expect(ReadFileText(hostguard_demo::DailyJsonlPath(logDir, "rasp-logs")).find(R"({"cat":"diag","pipeLog":2})") != std::string::npos,
+                 "adapter diagnostic log callback reaches JSONL sink");
     ok &= Expect(WriteOnlyPipe(adapterRealOptions.controlStatusPipeName, R"({"pipeStatus":2})"),
                  "adapter real IPC status pipe accepts raw status payload");
     Sleep(100);
@@ -334,6 +339,7 @@ int main()
     conflictingLegacyOptions.logDir = logDir;
     conflictingLegacyOptions.rulesPipeName = adapterRealOptions.rulesPipeName;
     conflictingLegacyOptions.eventsPipeName = adapterRealOptions.eventsPipeName;
+    conflictingLegacyOptions.logsPipeName = adapterRealOptions.logsPipeName;
     conflictingLegacyOptions.controlStatusPipeName = adapterRealOptions.controlStatusPipeName;
     conflictingLegacyOptions.configPipeName = adapterRealOptions.configPipeName;
     HostGuardDemoApp conflictingLegacyApp(conflictingLegacyOptions);
@@ -347,6 +353,7 @@ int main()
     options.logDir = logDir;
     options.rulesPipeName = TestPipeName(L"rules");
     options.eventsPipeName = TestPipeName(L"events");
+    options.logsPipeName = TestPipeName(L"logs");
     options.controlStatusPipeName = TestPipeName(L"status");
     options.configPipeName = TestPipeName(L"config");
 
@@ -369,6 +376,14 @@ int main()
     Sleep(100);
     ok &= Expect(ReadFileText(hostguard_demo::DailyJsonlPath(logDir, "rasp-events")).find(R"({"pipeEvent":1})") != std::string::npos,
                  "app event pipe reaches JSONL sink");
+    const bool wroteLog = WriteOnlyPipe(options.logsPipeName, R"({"pipeLog":1})");
+    if (!wroteLog) {
+        std::fprintf(stderr, "log pipe write failed, lastError=%lu\n", GetLastError());
+    }
+    ok &= Expect(wroteLog, "app log pipe accepts payload");
+    Sleep(100);
+    ok &= Expect(ReadFileText(hostguard_demo::DailyJsonlPath(logDir, "rasp-logs")).find(R"({"pipeLog":1})") != std::string::npos,
+                 "app log pipe reaches JSONL sink");
     const bool wroteStatus = WriteOnlyPipe(options.controlStatusPipeName, R"({"pipeStatus":1})");
     if (!wroteStatus) {
         std::fprintf(stderr, "status pipe write failed, lastError=%lu\n", GetLastError());

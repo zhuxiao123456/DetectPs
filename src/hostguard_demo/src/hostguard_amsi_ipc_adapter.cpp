@@ -80,13 +80,16 @@ public:
         AmsiIpcHostConfig hostConfig = AmsiIpcHostConfig::ForHostGuard();
         hostConfig.rulesPipeName = config.rulesPipeName;
         hostConfig.eventsPipeName = config.eventsPipeName;
+        hostConfig.logsPipeName = config.logsPipeName;
         hostConfig.controlStatusPipeName = config.controlStatusPipeName;
         hostConfig.configPipeName = config.configPipeName;
         hostConfig.rulePipeThreads = config.rulePipeThreads;
+        hostConfig.logPipeThreads = config.logPipeThreads;
 
         AmsiIpcHostAdapters adapters;
         adapters.ruleProvider = &ruleProvider_;
         adapters.eventSink = &eventSink_;
+        adapters.logSink = &logSink_;
         adapters.controlStatusSink = &statusSink_;
 
         host_.reset(new AmsiIpcHost(hostConfig, adapters));
@@ -163,6 +166,22 @@ private:
         HostGuardAmsiIpcRuntime& runtime_;
     };
 
+    class RuntimeLogSink final : public amsi_ipc::IAmsiEventSink {
+    public:
+        explicit RuntimeLogSink(HostGuardAmsiIpcRuntime& runtime)
+            : runtime_(runtime)
+        {
+        }
+
+        void OnEventLine(const amsi_ipc::AmsiEventLine& event) override
+        {
+            runtime_.owner_.EnqueueRawLogFromIpc(event.payload);
+        }
+
+    private:
+        HostGuardAmsiIpcRuntime& runtime_;
+    };
+
     class RuntimeStatusSink final : public amsi_ipc::IAmsiControlStatusSink {
     public:
         explicit RuntimeStatusSink(HostGuardAmsiIpcRuntime& runtime)
@@ -182,6 +201,7 @@ private:
     HostGuardAmsiIpcAdapter& owner_;
     RuntimeRuleProvider ruleProvider_{*this};
     RuntimeEventSink eventSink_{*this};
+    RuntimeLogSink logSink_{*this};
     RuntimeStatusSink statusSink_{*this};
     std::unique_ptr<AmsiIpcHost> host_;
 };
@@ -289,6 +309,11 @@ std::uint64_t AdapterDiagRingBuffer::dropped() const
 
 HostGuardAmsiEventEnvelope EventPipeClassifier::Classify(const std::string& rawJson)
 {
+    return ClassifyEventPipe(rawJson);
+}
+
+HostGuardAmsiEventEnvelope EventPipeClassifier::ClassifyEventPipe(const std::string& rawJson)
+{
     HostGuardAmsiEventEnvelope envelope;
     envelope.rawJson = rawJson;
     envelope.cat = ExtractJsonString(rawJson, "cat");
@@ -300,13 +325,21 @@ HostGuardAmsiEventEnvelope EventPipeClassifier::Classify(const std::string& rawJ
         envelope.kind = HostGuardAmsiMessageKind::Detection;
     } else if (envelope.cat == "drain-ack") {
         envelope.kind = HostGuardAmsiMessageKind::DrainAck;
-    } else if (envelope.cat == "diag") {
-        envelope.kind = HostGuardAmsiMessageKind::DiagnosticLog;
-    } else if (envelope.sensor == "RaspLog") {
-        envelope.kind = HostGuardAmsiMessageKind::DiagnosticLog;
     } else {
         envelope.kind = HostGuardAmsiMessageKind::Unknown;
     }
+    return envelope;
+}
+
+HostGuardAmsiEventEnvelope EventPipeClassifier::ClassifyLogPipe(const std::string& rawJson)
+{
+    HostGuardAmsiEventEnvelope envelope;
+    envelope.rawJson = rawJson;
+    envelope.cat = ExtractJsonString(rawJson, "cat");
+    envelope.sensor = ExtractJsonString(rawJson, "sensor");
+    envelope.pattern = ExtractJsonString(rawJson, "pattern");
+    envelope.broadcastId = ExtractJsonString(rawJson, "broadcastId");
+    envelope.kind = HostGuardAmsiMessageKind::DiagnosticLog;
     return envelope;
 }
 
@@ -685,6 +718,11 @@ bool HostGuardAmsiIpcAdapter::InjectRawEventForTest(const std::string& rawJson)
     return EnqueueRawEventFromIpc(rawJson);
 }
 
+bool HostGuardAmsiIpcAdapter::InjectRawLogForTest(const std::string& rawJson)
+{
+    return EnqueueRawLogFromIpc(rawJson);
+}
+
 bool HostGuardAmsiIpcAdapter::EnqueueRawEventFromIpc(const std::string& rawJson)
 {
     {
@@ -773,6 +811,38 @@ bool HostGuardAmsiIpcAdapter::EnqueueRawEventFromIpc(const std::string& rawJson)
         AddDiag("warn", "adapter", "unknown event pipe payload");
         return true;
     }
+}
+
+bool HostGuardAmsiIpcAdapter::EnqueueRawLogFromIpc(const std::string& rawJson)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!status_.started || status_.stopping) {
+            return false;
+        }
+        if (rawJson.size() > config_.maxEventBytes) {
+            ++status_.dllDiagnosticLogDropped;
+            status_.lastError = "log pipe payload exceeds maxEventBytes";
+            return false;
+        }
+    }
+
+    auto envelope = EventPipeClassifier::ClassifyLogPipe(rawJson);
+    const bool pushed = dllLogQueue_.Push(envelope);
+    bool dropped = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (pushed) {
+            ++status_.dllDiagnosticLogReceived;
+        } else {
+            ++status_.dllDiagnosticLogDropped;
+            dropped = true;
+        }
+    }
+    if (dropped) {
+        AddDiag("warn", "adapter", "DLL diagnostic log dropped");
+    }
+    return pushed || config_.dropDllDiagnosticLogOnQueueFull;
 }
 
 bool HostGuardAmsiIpcAdapter::InjectStatusForTest(const std::string& rawJson)

@@ -39,7 +39,7 @@ LegacyDiagForwardStatus LegacyDiagPipeWriter::Send(std::string_view payload)
     }
 
     const DWORD expected = static_cast<DWORD>(payload.size());
-    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_events",
+    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_logs",
                                GENERIC_WRITE,
                                0,
                                nullptr,

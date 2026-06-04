@@ -54,6 +54,7 @@ void ApplyHostGuardPipeMode(HostGuardDemoOptions& options, HostGuardPipeMode mod
         options.amsiIpc.useProductionPipes = true;
         options.rulesPipeName = LR"(\\.\pipe\amsi_detect_rules)";
         options.eventsPipeName = LR"(\\.\pipe\amsi_detect_events)";
+        options.logsPipeName = LR"(\\.\pipe\amsi_detect_logs)";
         options.controlStatusPipeName = LR"(\\.\pipe\amsi_detect_control_status)";
         options.configPipeName = LR"(\\.\pipe\amsi_detect_config)";
         return;
@@ -62,6 +63,7 @@ void ApplyHostGuardPipeMode(HostGuardDemoOptions& options, HostGuardPipeMode mod
     options.amsiIpc.useProductionPipes = false;
     options.rulesPipeName = LR"(\\.\pipe\amsi_detect_rules_demo)";
     options.eventsPipeName = LR"(\\.\pipe\amsi_detect_events_demo)";
+    options.logsPipeName = LR"(\\.\pipe\amsi_detect_logs_demo)";
     options.controlStatusPipeName = LR"(\\.\pipe\amsi_detect_control_status_demo)";
     options.configPipeName = LR"(\\.\pipe\amsi_detect_config_demo)";
 }
@@ -93,6 +95,11 @@ bool HostGuardDemoApp::Start()
                       " events pipe is already served: " + NarrowAscii(options_.eventsPipeName);
         return false;
     }
+    if (PipeServerExists(options_.logsPipeName)) {
+        startError_ = std::string(HostGuardPipeModeName(options_.pipeMode)) +
+                      " logs pipe is already served: " + NarrowAscii(options_.logsPipeName);
+        return false;
+    }
     if (PipeServerExists(options_.controlStatusPipeName)) {
         startError_ = std::string(HostGuardPipeModeName(options_.pipeMode)) +
                       " control status pipe is already served: " +
@@ -102,7 +109,8 @@ bool HostGuardDemoApp::Start()
     hostguard_demo::EnsureDirectory(options_.logDir);
 
     ruleProvider_.reset(new HostGuardFileRuleProvider(options_.rulesPath));
-    eventSink_.reset(new HostGuardJsonlEventSink(options_.logDir));
+    eventSink_.reset(new HostGuardJsonlEventSink(options_.logDir, "rasp-events"));
+    logSink_.reset(new HostGuardJsonlEventSink(options_.logDir, "rasp-logs"));
     controlStatusSink_.reset(new HostGuardJsonlControlStatusSink(options_.logDir));
 
     if (options_.amsiIpc.enabled) {
@@ -113,6 +121,7 @@ bool HostGuardDemoApp::Start()
         adapterConfig.useProductionPipes = options_.amsiIpc.useProductionPipes;
         adapterConfig.rulesPipeName = options_.rulesPipeName;
         adapterConfig.eventsPipeName = options_.eventsPipeName;
+        adapterConfig.logsPipeName = options_.logsPipeName;
         adapterConfig.controlStatusPipeName = options_.controlStatusPipeName;
         adapterConfig.configPipeName = options_.configPipeName;
 
@@ -127,8 +136,8 @@ bool HostGuardDemoApp::Start()
             }
         };
         context.dllDiagnosticLogBus = [this](const hostguard_demo::HostGuardAmsiEventEnvelope& log) {
-            if (eventSink_) {
-                eventSink_->OnEventLine(amsi_ipc::AmsiEventLine{log.rawJson});
+            if (logSink_) {
+                logSink_->OnEventLine(amsi_ipc::AmsiEventLine{log.rawJson});
             }
         };
         context.statusBus = [this](const std::string& rawJson) {
@@ -148,6 +157,7 @@ bool HostGuardDemoApp::Start()
             startError_ = "HostGuardAmsiIpcModule Init failed: " + error;
             amsiIpcModule_.reset();
             controlStatusSink_.reset();
+            logSink_.reset();
             eventSink_.reset();
             ruleProvider_.reset();
             return false;
@@ -159,6 +169,7 @@ bool HostGuardDemoApp::Start()
             amsiIpcModule_->UnInit();
             amsiIpcModule_.reset();
             controlStatusSink_.reset();
+            logSink_.reset();
             eventSink_.reset();
             ruleProvider_.reset();
         }
@@ -171,12 +182,14 @@ bool HostGuardDemoApp::Start()
     config.enableDemoStagingWatcher = options_.enableDemoStagingWatcher;
     config.rulesPipeName = options_.rulesPipeName;
     config.eventsPipeName = options_.eventsPipeName;
+    config.logsPipeName = options_.logsPipeName;
     config.controlStatusPipeName = options_.controlStatusPipeName;
     config.configPipeName = options_.configPipeName;
 
     AmsiIpcHostAdapters adapters;
     adapters.ruleProvider = ruleProvider_.get();
     adapters.eventSink = eventSink_.get();
+    adapters.logSink = logSink_.get();
     adapters.controlStatusSink = controlStatusSink_.get();
 
     host_.reset(new AmsiIpcHost(config, adapters));
@@ -185,6 +198,7 @@ bool HostGuardDemoApp::Start()
         startError_ = "AmsiIpcHost failed to start";
         host_.reset();
         controlStatusSink_.reset();
+        logSink_.reset();
         eventSink_.reset();
         ruleProvider_.reset();
     }
@@ -202,6 +216,7 @@ void HostGuardDemoApp::Stop()
     host_.reset();
     amsiIpcModule_.reset();
     controlStatusSink_.reset();
+    logSink_.reset();
     eventSink_.reset();
     ruleProvider_.reset();
     started_ = false;
@@ -320,6 +335,7 @@ void HostGuardDemoApp::PrintStatus(std::ostream& output) const
            << "logDir: " << options_.logDir << '\n'
            << "rulesPipeName: " << NarrowAscii(options_.rulesPipeName) << '\n'
            << "eventsPipeName: " << NarrowAscii(options_.eventsPipeName) << '\n'
+           << "logsPipeName: " << NarrowAscii(options_.logsPipeName) << '\n'
            << "controlStatusPipeName: " << NarrowAscii(options_.controlStatusPipeName) << '\n'
            << "configPipeName: disabled\n"
            << "configPipeEnabled: no\n"
