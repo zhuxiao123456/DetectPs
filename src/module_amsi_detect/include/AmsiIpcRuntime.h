@@ -49,6 +49,7 @@ namespace Engine {
         bool EnterUpgradeUnloadingState(const std::string &stateVersion, std::string &error);
         bool EnterUpgradeUnloadingState(const std::string &stateVersion, const std::string &requiredDllHash, std::string &error);
         bool RestorePreUpgradeSnapshot(std::string &error);
+        bool RestorePreUpgradeSnapshotWithDllHash(const std::string &requiredDllHash, std::string &error);
 
     private:
         struct Impl;

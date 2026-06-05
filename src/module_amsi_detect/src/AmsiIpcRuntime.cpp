@@ -1053,4 +1053,46 @@ namespace Engine {
         error.clear();
         return true;
     }
+    /**
+     * Restore the pre-upgrade running snapshot after the DLL file has already been replaced,
+     * but the new rule snapshot failed to publish.
+     *
+     * Why this is different from RestorePreUpgradeSnapshot():
+     * - RestorePreUpgradeSnapshot() restores both the old rules and the old requiredDllHash.
+     * - After UPDATE_SUCCESS_REPLACE / UPDATE_SUCCESS_MOVE, new processes will load the new DLL file.
+     * - If we restore the old requiredDllHash, those new processes will see a hash mismatch and bypass forever.
+     *
+     * Therefore this method keeps the pre-upgrade rule content, but overwrites requiredDllHash with
+     * the hash of the DLL that is now installed on disk. This prevents the runtime from staying in
+     * unloading state and allows newly started processes to keep detecting with the last known-good rules.
+     */
+    bool AmsiIpcRuntime::RestorePreUpgradeSnapshotWithDllHash(const std::string &requiredDllHash, std::string &error) {
+        if (!m_impl->initialized.load()) {
+            error = "amsi ipc runtime is not initialized";
+            return false;
+        }
+        if (!m_impl->hasPreUpgradeSnapshot) {
+            error.clear();
+            return true;
+        }
+        if (!m_impl->ruleProvider) {
+            error = "amsi rule provider is not initialized";
+            return false;
+        }
+
+        AmsiDetect::AmsiRuleSnapshot restoreSnapshot = m_impl->preUpgradeSnapshot;
+        restoreSnapshot.requiredDllHash = requiredDllHash;
+
+        AmsiDetect::AmsiRuleSnapshot providerSnapshot;
+        if (!BuildProviderSnapshot(restoreSnapshot, providerSnapshot, error)) {
+            return false;
+        }
+        if (!m_impl->ruleProvider->UpdateSnapshot(providerSnapshot, error)) {
+            return false;
+        }
+        m_impl->snapshot = providerSnapshot;
+        m_impl->hasPreUpgradeSnapshot = false;
+        error.clear();
+        return true;
+    }
 }

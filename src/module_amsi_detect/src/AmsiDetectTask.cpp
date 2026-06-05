@@ -564,6 +564,26 @@ namespace Engine {
         // 更新provider中的规则快照内容.
         if (!m_amsiIpcRuntime->UpdateRules(snapshot, error)) {
             ErrorLogf1(GetLoggerPtr(), "Update amsi ipc rules failed: %s.", error);
+
+            // 规则发布失败时不能让 provider 继续停留在 upgrade/unloading 状态，否则 DLL 会持续 bypass。
+            // 这里按 DLL 文件是否已经实际替换来选择恢复方式：
+            // 1. UPDATE_SUCCESS_REPLACE / UPDATE_SUCCESS_MOVE：磁盘上的 DLL 已经是新文件，新启动进程会加载新 DLL。
+            //    因此恢复旧规则时必须把 requiredDllHash 改成新 DLL hash，否则新进程会因为 hash 不一致继续 bypass。
+            // 2. UPDATE_SUCCESS_REBOOT：当前 DLL 文件还没有被替换，只是登记了重启后替换，恢复原始 pre-upgrade snapshot 即可。
+            // 3. UPDATE_SUCCESS：DLL hash 一致，没有进入 unloading，UpdateRules 失败后继续沿用旧 provider 快照，不需要恢复。
+            std::string restoreError;
+            if (updateResult.code == AmsiDetectDllManager::UPDATE_SUCCESS_REPLACE ||
+                updateResult.code == AmsiDetectDllManager::UPDATE_SUCCESS_MOVE) {
+                if (!m_amsiIpcRuntime->RestorePreUpgradeSnapshotWithDllHash(updateResult.targetDllHash, restoreError)) {
+                    WarningLogf1(GetLoggerPtr(), "Restore amsi ipc snapshot with new dll hash failed: %s.", restoreError);
+                }
+            } else if (updateResult.code == AmsiDetectDllManager::UPDATE_SUCCESS_REBOOT) {
+                if (!m_amsiIpcRuntime->RestorePreUpgradeSnapshot(restoreError)) {
+                    WarningLogf1(GetLoggerPtr(), "Restore amsi ipc running snapshot after dll update failure failed: %s.",
+                                 restoreError);
+                }
+            }
+
             ClearTmpDirAndSendFailedReason("update ipc rules failed");
             return;
         }
