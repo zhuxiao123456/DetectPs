@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "globalMode": "block",
+  "globalLibraries": [],
+  "trust_process": [],
+  "rules": [
+    {
+      "id": "AMSI-REGEX-TIMEOUT-PROBE",
+      "sensor": "AmsiProvider",
+      "enabled": true,
+      "mode": "alert",
+      "description": "Test-only PCRE2 match_limit probe rule",
+      "urlPatterns": [],
+      "methods": [],
+      "confidence": 1,
+      "config": {
+        "regexField": "body",
+        "regexPatterns": [
+          "(?s)REGEX_TIMEOUT_PROBE:(?:a|aa)+$"
+        ]
+      }
+    }
+  ]
+}

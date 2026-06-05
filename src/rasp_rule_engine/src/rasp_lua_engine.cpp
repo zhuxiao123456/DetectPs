@@ -127,6 +127,10 @@ void RecordRegexLimit(int rc, ScanExecutionContext* exec)
         exec->regexLimitHit = true;
         exec->regexLimitType = "match_limit";
         exec->MarkTimeout("regex_limit_hit");
+    } else if (rc == PCRE2_ERROR_JIT_STACKLIMIT) {
+        exec->regexLimitHit = true;
+        exec->regexLimitType = "jit_stack_limit";
+        exec->MarkTimeout("regex_limit_hit");
     } else if (rc == PCRE2_ERROR_DEPTHLIMIT) {
         exec->regexLimitHit = true;
         exec->regexLimitType = "depth_limit";
@@ -146,6 +150,8 @@ const char* RegexErrorName(int rc)
         return "nomatch";
     case PCRE2_ERROR_MATCHLIMIT:
         return "match_limit";
+    case PCRE2_ERROR_JIT_STACKLIMIT:
+        return "jit_stack_limit";
     case PCRE2_ERROR_DEPTHLIMIT:
         return "depth_limit";
     case PCRE2_ERROR_HEAPLIMIT:
@@ -168,7 +174,8 @@ bool ShouldLogRegexFailure(int rc)
 
 RaspDiagSeverity RegexFailureSeverity(int rc)
 {
-    if (rc == PCRE2_ERROR_MATCHLIMIT || rc == PCRE2_ERROR_DEPTHLIMIT || rc == PCRE2_ERROR_HEAPLIMIT)
+    if (rc == PCRE2_ERROR_MATCHLIMIT || rc == PCRE2_ERROR_JIT_STACKLIMIT ||
+        rc == PCRE2_ERROR_DEPTHLIMIT || rc == PCRE2_ERROR_HEAPLIMIT)
         return RaspDiagSeverity::Warning;
     return RaspDiagSeverity::Error;
 }

@@ -181,6 +181,39 @@ int main()
 
     {
         RaspLuaEngine engine;
+        g_capturedLog.clear();
+        g_capturedSeverity = RaspDiagSeverity::Info;
+        engine.SetLogFn(CaptureLog);
+        engine.SetLeveledLogFn(CaptureLeveledLog);
+        ScanExecutionContext exec;
+        exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
+
+        std::string subject = "REGEX_TIMEOUT_PROBE:" + std::string(4096, 'a') + "b";
+        std::string matched;
+        bool ok = engine.MatchesAnyRegex({"(?s)REGEX_TIMEOUT_PROBE:(?:a|aa)+$"}, subject, matched, &exec);
+        if (!Expect(!ok, "JIT stack limited regex probe does not match"))
+            return 1;
+        if (!Expect(exec.regexLimitHit, "JIT stack limit is treated as a regex limit"))
+            return 1;
+        if (!Expect(exec.timedOut, "JIT stack limit marks scan execution context timed out"))
+            return 1;
+        if (!Expect(exec.timeoutReason == "regex_limit_hit", "JIT stack limit records regex limit timeout reason"))
+            return 1;
+        if (!Expect(exec.regexLimitType == "jit_stack_limit" || exec.regexLimitType == "match_limit" ||
+                    exec.regexLimitType == "depth_limit" || exec.regexLimitType == "heap_limit",
+                    "regex limit type records the concrete PCRE2 resource limit"))
+            return 1;
+        if (!Expect(g_capturedLog.find("jit_stack_limit") != std::string::npos ||
+                    g_capturedLog.find("match_limit") != std::string::npos ||
+                    g_capturedLog.find("depth_limit") != std::string::npos ||
+                    g_capturedLog.find("heap_limit") != std::string::npos,
+                    "PCRE2 resource limit is logged with a concrete type"))
+            return 1;
+        if (!Expect(g_capturedSeverity == RaspDiagSeverity::Warning, "PCRE2 resource limit is logged as warning"))
+            return 1;
+    }
+    {
+        RaspLuaEngine engine;
         engine.SetLogFn(SilentLog);
         if (!Expect(engine.RegexCacheSizeForTesting() == 0, "new engine starts with empty regex cache"))
             return 1;
