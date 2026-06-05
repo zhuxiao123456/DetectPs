@@ -11,6 +11,8 @@
 #include <memory>
 #include <mutex>
 
+#include "legacy_diag_json_builder.h"
+
 class AmsiRuleEngine;
 
 enum class EngineState {
@@ -110,6 +112,7 @@ public:
     EngineState GetState() const;
     long ActiveScanCount() const { return m_activeScans.load(); }
     void Log(const char* fmt, ...) const;
+    void LogWithSeverity(RaspDiagSeverity severity, const char* fmt, ...) const;
 
 private:
     friend class ScanGuard;

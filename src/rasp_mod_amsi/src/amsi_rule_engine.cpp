@@ -349,6 +349,10 @@ static void RaspLuaLog(const char* msg) {
     GetAmsiEngineRuntime().Log("%s", msg ? msg : "");
 }
 
+static void RaspLuaLogWithSeverity(RaspDiagSeverity severity, const char* msg) {
+    GetAmsiEngineRuntime().LogWithSeverity(severity, "%s", msg ? msg : "");
+}
+
 // =========================================================================
 // ParseAndSwap — 接收从 rasp_sentry（守护进程）传来的 JSON 配置，解析并热替换当前内存中的安全策略
 //
@@ -386,6 +390,7 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
 
     auto luaEngine = std::make_shared<RaspLuaEngine>();
     luaEngine->SetLogFn(RaspLuaLog);
+    luaEngine->SetLeveledLogFn(RaspLuaLogWithSeverity);
     PrecompileAll(configs, effectiveLib, *luaEngine);
     return std::make_shared<RuleSnapshot>(
         RuleSnapshot{std::move(configs), std::move(trustProcessPaths), std::move(luaEngine), hasGlobalMode, globalMode});

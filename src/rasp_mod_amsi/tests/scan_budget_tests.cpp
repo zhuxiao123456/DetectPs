@@ -26,6 +26,21 @@ void SilentLog(const char*)
 {
 }
 
+std::string g_capturedLog;
+RaspDiagSeverity g_capturedSeverity = RaspDiagSeverity::Info;
+
+void CaptureLog(const char* msg)
+{
+    if (msg)
+        g_capturedLog += msg;
+}
+
+void CaptureLeveledLog(RaspDiagSeverity severity, const char* msg)
+{
+    g_capturedSeverity = severity;
+    CaptureLog(msg);
+}
+
 struct LuaBytecodeWriter
 {
     std::string bytes;
@@ -142,7 +157,10 @@ int main()
 
     {
         RaspLuaEngine engine;
-        engine.SetLogFn(SilentLog);
+        g_capturedLog.clear();
+        g_capturedSeverity = RaspDiagSeverity::Info;
+        engine.SetLogFn(CaptureLog);
+        engine.SetLeveledLogFn(CaptureLeveledLog);
         ScanExecutionContext exec;
         exec.budget.pcre2MatchLimit = 1;
         exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
@@ -154,6 +172,10 @@ int main()
         if (!Expect(!ok, "catastrophic regex does not match under tiny match limit"))
             return 1;
         if (!Expect(exec.regexLimitHit, "PCRE2 match/depth/heap limit hit is recorded"))
+            return 1;
+        if (!Expect(g_capturedLog.find("regex_limit") != std::string::npos, "PCRE2 regex limit is logged"))
+            return 1;
+        if (!Expect(g_capturedSeverity == RaspDiagSeverity::Warning, "PCRE2 regex limit is logged as warning"))
             return 1;
     }
 

@@ -352,6 +352,24 @@ void EngineRuntime::Log(const char* fmt, ...) const
     engine->Log("%s", buf);
 }
 
+void EngineRuntime::LogWithSeverity(RaspDiagSeverity severity, const char* fmt, ...) const
+{
+    AmsiRuleEngine* engine = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        engine = m_engine.get();
+    }
+    if (!engine)
+        return;
+
+    char buf[1024];
+    va_list va;
+    va_start(va, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, va);
+    va_end(va);
+    engine->LogWithSeverity(severity, "%s", buf);
+}
+
 void EngineRuntime::ReleaseScan()
 {
     long remaining = --m_activeScans;

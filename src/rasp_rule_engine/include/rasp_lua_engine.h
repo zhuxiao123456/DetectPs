@@ -1,20 +1,20 @@
 #pragma once
 // =========================================================================
-// rasp_lua_engine.h â€” Shared Lua 5.4 sandbox for native RASP modules.
+// rasp_lua_engine.h ¡ª Shared Lua 5.4 sandbox for native RASP modules.
 //
 // Used by rasp_mod_iis7 and rasp_mod_amsi (statically linked via
 // rasp_rule_engine). Each module owns a RaspLuaEngine instance.
 //
 // Design principles:
 //   Open context: each module populates only the fields it knows about.
-//     Scripts see only what was pushed â€” no cross-module leakage.
+//     Scripts see only what was pushed ¡ª no cross-module leakage.
 //     A new module adds zero changes to this header.
 //   Log injection: each module supplies its own RaspLuaLogFn backend.
-//     IIS7 â†’ OutputDebugStringA wrapper.
+//     IIS7 ¡ú OutputDebugStringA wrapper.
 //     AMSI -> RaspLog wrapper (ring buffer -> amsi_detect_events IPC).
 //   Per-request lua_State: no shared VM state, no lock contention.
 //   Precompile cache: scripts are syntax-checked and cached by ruleId at
-//     rulebook load time. Run() reads from cache â€” no re-parse per call.
+//     rulebook load time. Run() reads from cache ¡ª no re-parse per call.
 // =========================================================================
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -28,6 +28,7 @@
 #include <mutex>
 
 #include "rasp_scan_budget.h"
+#include "legacy_diag_json_builder.h"
 
 extern "C" {
 #include "lua.h"
@@ -42,15 +43,15 @@ extern "C" {
 struct pcre2_real_code_8;
 #endif
 
-// â”€â”€ Context: open field-bag design â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Context: open field-bag design ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 // Each module populates only the fields it needs for its sensor scripts.
-// Lua scripts only see the keys that were pushed â€” no cross-module field
+// Lua scripts only see the keys that were pushed ¡ª no cross-module field
 // leakage, no nil-access errors from fields the module never set.
 struct RaspLuaField
 {
     std::string name;
     std::string value;
-    bool        isBinary = false;  // true â†’ lua_pushlstring (preserves null bytes in body)
+    bool        isBinary = false;  // true ¡ú lua_pushlstring (preserves null bytes in body)
 };
 
 struct RaspLuaContext
@@ -60,14 +61,15 @@ struct RaspLuaContext
     std::string                      arrayFieldName;           // key for the array field
 };
 
-// â”€â”€ Log injection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Log injection ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 // Supply a module-specific backend before calling Precompile/Run.
 // The function receives an already-formatted, null-terminated string.
 // IIS7: [](const char* m){ OutputDebugStringA(m); }     (wraps local RaspLog)
-// AMSI: [](const char* m){ RaspLog("%s", m); }          (ring buffer â†’ IPC)
+// AMSI: [](const char* m){ RaspLog("%s", m); }          (ring buffer ¡ú IPC)
 using RaspLuaLogFn = void(*)(const char* msg);
+using RaspLuaLeveledLogFn = void(*)(RaspDiagSeverity severity, const char* msg);
 
-// â”€â”€ Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Result ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 struct RaspLuaResult
 {
     bool        matched = false;
@@ -77,7 +79,7 @@ struct RaspLuaResult
     std::string timeoutReason;
 };
 
-// â”€â”€ Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ Engine ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 class RaspLuaEngine
 {
 public:
@@ -85,10 +87,11 @@ public:
 
     // Inject module-specific logging backend. Call before Precompile/Run.
     void SetLogFn(RaspLuaLogFn fn);
+    void SetLeveledLogFn(RaspLuaLeveledLogFn fn);
 
     // Syntax-check combinedSrc (libSource + "\n" + ruleScript) and cache under ruleId.
     // On syntax error: logs via m_logFn and does NOT cache.
-    // IsLoaded returns false â†’ module falls back to C++ checks.
+    // IsLoaded returns false ¡ú module falls back to C++ checks.
     void Precompile(const std::string& ruleId,
                     const std::string& payload,
                     bool isBytecode = false);
@@ -136,11 +139,13 @@ public:
     // Called by LuaPrint (a static free function in rasp_lua_engine.cpp that reads the
     // engine pointer from the Lua registry). Must be public so the free function can reach it.
     void Log(const char* msg) const;
+    void LogWithSeverity(RaspDiagSeverity severity, const char* msg) const;
 
 private:
     mutable std::mutex                           m_mutex;
     std::unordered_map<std::string, std::string> m_sources; // ruleId -> source or bytecode payload
     RaspLuaLogFn                                 m_logFn = nullptr;
+    RaspLuaLeveledLogFn                          m_leveledLogFn = nullptr;
 
 #ifdef RASP_PCRE2_AVAILABLE
     // Snapshot-local PCRE2 compiled-pattern cache. AMSI RuleSnapshot owns one
