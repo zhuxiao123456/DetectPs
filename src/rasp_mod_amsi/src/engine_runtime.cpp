@@ -19,6 +19,19 @@ bool DefaultEngineInitializer(AmsiRuleEngine& engine)
     return true;
 }
 
+void EmitRuntimeLog(AmsiRuleEngine* engine, RaspDiagSeverity severity, const char* msg)
+{
+    if (engine) {
+        engine->LogWithSeverity(severity, "%s", msg ? msg : "");
+        return;
+    }
+
+#ifdef _DEBUG
+    if (msg)
+        OutputDebugStringA(msg);
+#endif
+}
+
 } // namespace
 
 const char* EngineStateName(EngineState state)
@@ -149,16 +162,24 @@ ScanGuard EngineRuntime::TryEnterScan()
     bool rejected = false;
     EngineState rejectedState = EngineState::Uninitialized;
     long active = 0;
+    AmsiRuleEngine* logEngine = nullptr;
+    AmsiRuleEngine* scanEngine = nullptr;
     const bool pausedAtEntry = m_detectionPaused.load(std::memory_order_relaxed);
-    std::lock_guard<std::mutex> lock(m_mutex);
-    const bool bypassAtEntry = m_engine && m_engine->ShouldBypassScanFast();
-    // Pause/resume and Host liveness are entry gates: scans that already hold a
-    // guard continue; the next scan entrance observes the gate and returns NoMatch.
-    if (pausedAtEntry || bypassAtEntry ||
-        (m_state != EngineState::Ready && m_state != EngineState::Reloading) || !m_engine) {
-        rejected = true;
-        rejectedState = m_state;
-        active = m_activeScans.load();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        const bool bypassAtEntry = m_engine && m_engine->ShouldBypassScanFast();
+        // Pause/resume and Host liveness are entry gates: scans that already hold a
+        // guard continue; the next scan entrance observes the gate and returns NoMatch.
+        if (pausedAtEntry || bypassAtEntry ||
+            (m_state != EngineState::Ready && m_state != EngineState::Reloading) || !m_engine) {
+            rejected = true;
+            rejectedState = m_state;
+            active = m_activeScans.load();
+            logEngine = m_engine.get();
+        } else {
+            ++m_activeScans;
+            scanEngine = m_engine.get();
+        }
     }
 
     if (rejected) {
@@ -169,17 +190,16 @@ ScanGuard EngineRuntime::TryEnterScan()
             uint64_t suppressed = m_suppressedScanRejectTelemetry.exchange(0);
             char msg[320];
             snprintf(msg, sizeof(msg),
-                     "[RaspAmsi] telemetry event=scan_enter_rejected state=%s detail=%s active=%ld suppressed=%llu tid=%lu\n",
+                     "telemetry event=scan_enter_rejected state=%s detail=%s active=%ld suppressed=%llu tid=%lu\n",
                      EngineStateName(rejectedState), EngineStateName(rejectedState),
                      active, static_cast<unsigned long long>(suppressed), GetCurrentThreadId());
-            OutputDebugStringA(msg);
+            EmitRuntimeLog(logEngine, RaspDiagSeverity::Debug, msg);
         } else {
             m_suppressedScanRejectTelemetry.fetch_add(1);
         }
         return {};
     }
-    ++m_activeScans;
-    return ScanGuard(this, m_engine.get());
+    return ScanGuard(this, scanEngine);
 }
 
 void EngineRuntime::PauseDetection()
@@ -208,11 +228,13 @@ bool EngineRuntime::CanAttemptReload() const
 ReloadGuard EngineRuntime::TryEnterReload(const char* reason)
 {
     EngineState rejectedState = EngineState::Uninitialized;
+    AmsiRuleEngine* logEngine = nullptr;
     bool entered = false;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         if (m_state != EngineState::Ready || !m_engine) {
             rejectedState = m_state;
+            logEngine = m_engine.get();
         } else {
             SetStateLocked(EngineState::Reloading, reason ? reason : "reload_begin");
             entered = true;
@@ -228,7 +250,7 @@ ReloadGuard EngineRuntime::TryEnterReload(const char* reason)
              "[RaspAmsi] telemetry event=reload_rejected state=%s detail=%s active=%ld tid=%lu\n",
              EngineStateName(rejectedState), EngineStateName(rejectedState),
              ActiveScanCount(), GetCurrentThreadId());
-    OutputDebugStringA(msg);
+    EmitRuntimeLog(logEngine, RaspDiagSeverity::Warning, msg);
     return {};
 }
 
@@ -246,7 +268,9 @@ bool EngineRuntime::BeginShutdown(const char* reason, DWORD drainTimeoutMs)
 
     bool drained = WaitForActiveScansToDrain(drainTimeoutMs);
     if (!drained) {
-        Log("[RaspAmsi] telemetry shutdown_drain_timeout active=%ld", ActiveScanCount());
+        LogWithSeverity(RaspDiagSeverity::Warning,
+                        "[RaspAmsi] telemetry shutdown_drain_timeout active=%ld",
+                        ActiveScanCount());
         EnterInert("shutdown_drain_timeout");
         return false;
     }
@@ -300,10 +324,12 @@ void EngineRuntime::EmitTelemetry(const char* event, const char* detail) const
 {
     EngineState state;
     long active;
+    AmsiRuleEngine* engine = nullptr;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         state = m_state;
         active = m_activeScans.load();
+        engine = m_engine.get();
     }
 
     char msg[256];
@@ -311,7 +337,7 @@ void EngineRuntime::EmitTelemetry(const char* event, const char* detail) const
              "[RaspAmsi] telemetry event=%s state=%s detail=%s active=%ld tid=%lu\n",
              event ? event : "", EngineStateName(state), detail ? detail : "",
              active, GetCurrentThreadId());
-    OutputDebugStringA(msg);
+    EmitRuntimeLog(engine, RaspDiagSeverity::Info, msg);
 }
 
 bool EngineRuntime::TryBeginReload()
@@ -414,7 +440,7 @@ void EngineRuntime::SetStateLocked(EngineState next, const char* reason)
              "[RaspAmsi] telemetry state_transition old=%s new=%s reason=%s active=%ld\n",
              EngineStateName(old), EngineStateName(next),
              reason ? reason : "", m_activeScans.load());
-    OutputDebugStringA(msg);
+    EmitRuntimeLog(m_engine.get(), RaspDiagSeverity::Debug, msg);
 }
 
 EngineRuntime& GetAmsiEngineRuntime()

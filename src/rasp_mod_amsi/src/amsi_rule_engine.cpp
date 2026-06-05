@@ -345,6 +345,15 @@ static void RaspLog(const char *fmt, ...) {
     GetAmsiEngineRuntime().Log("%s", buf);
 }
 
+static void RaspLogWithSeverity(RaspDiagSeverity severity, const char *fmt, ...) {
+    char buf[1024];
+    va_list va;
+    va_start(va, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, va);
+    va_end(va);
+    GetAmsiEngineRuntime().LogWithSeverity(severity, "%s", buf);
+}
+
 static void RaspLuaLog(const char* msg) {
     GetAmsiEngineRuntime().Log("%s", msg ? msg : "");
 }
@@ -373,7 +382,7 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     RaspGlobalMode globalMode = RaspGlobalMode::Block;
     bool hasGlobalMode = false;
     if (!ParseRulesJson(json, lib, rawRules, nullptr, &rawTrustProcessPaths, &globalMode, &hasGlobalMode) || rawRules.empty()) {
-        Log("[RaspAmsi] BuildNextSnapshot: no rules parsed");
+        LogWithSeverity(RaspDiagSeverity::Warning, "[RaspAmsi] BuildNextSnapshot: no rules parsed");
         return {};
     }
 
@@ -439,7 +448,10 @@ static void EmitScanBudgetTelemetry(const ScanExecutionContext& exec)
              exec.regexLimitType.empty() ? "none" : exec.regexLimitType.c_str(),
              exec.regexSubjectTruncated ? 1 : 0,
              exec.matchedBeforeTimeout ? 1 : 0);
+    RaspLogWithSeverity(RaspDiagSeverity::Warning, "%s", msg);
+#ifdef _DEBUG
     OutputDebugStringA(msg);
+#endif
 }
 
 void AmsiRuleEngine::PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
@@ -451,7 +463,7 @@ void AmsiRuleEngine::PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
     m_libSource = effectiveLib;
 
     auto snap = std::atomic_load(&m_snapshot);
-    Log("[RaspAmsi] ParseAndSwap: %zu AmsiProvider rule(s) loaded",
+    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] ParseAndSwap: %zu AmsiProvider rule(s) loaded",
         snap ? snap->rules.size() : 0u);
 }
 
@@ -579,7 +591,7 @@ void AmsiRuleEngine::OnReloadSignal() {
         runtime.ResumeDetection();
         guard.Complete(true, "published_recovered_after_host_lost");
         SendRuleLoadResult(true, 0, "", requestedMetadata);
-        Log("[RaspAmsi] Reload succeeded after host lost - detection resumed");
+        LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] Reload succeeded after host lost - detection resumed");
         return;
     }
 
@@ -587,7 +599,7 @@ void AmsiRuleEngine::OnReloadSignal() {
     MarkWaitingResumeAfterHostLost(false);
     runtime.ResumeDetection();
     guard.Complete(true, "published_running");
-    Log("[RaspAmsi] Reload succeeded - detection resumed");
+    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] Reload succeeded - detection resumed");
     SendRuleLoadResult(true, 0, "", requestedMetadata);
     return;
 
@@ -620,14 +632,14 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
         if (Base64Decode(rule.scriptBodyBase64, decoded)) {
             const bool isBytecode = (rule.scriptEncoding == "bytecode");
             if (isBytecode) {
-                Log("[RaspAmsi] PrecompileAll: rule=%s scriptEncoding=bytecode accepted",
+                LogWithSeverity(RaspDiagSeverity::Debug, "[RaspAmsi] PrecompileAll: rule=%s scriptEncoding=bytecode accepted",
                     rule.id.c_str());
                 luaEngine.Precompile(rule.id, decoded, true);
                 continue;
             }
 
             if (!rule.scriptEncoding.empty() && rule.scriptEncoding != "source") {
-                Log("[RaspAmsi] PrecompileAll: unknown scriptEncoding=%s rule=%s, treating as source",
+                LogWithSeverity(RaspDiagSeverity::Warning, "[RaspAmsi] PrecompileAll: unknown scriptEncoding=%s rule=%s, treating as source",
                     rule.scriptEncoding.c_str(), rule.id.c_str());
             }
 
@@ -636,7 +648,7 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
                                    : libSource + "\n" + decoded;
             luaEngine.Precompile(rule.id, combined, false);
         } else {
-            Log("[RaspAmsi] PrecompileAll: base64 decode failed rule=%s", rule.id.c_str());
+            LogWithSeverity(RaspDiagSeverity::Warning, "[RaspAmsi] PrecompileAll: base64 decode failed rule=%s", rule.id.c_str());
         }
     }
 }
@@ -678,9 +690,9 @@ DWORD WINAPI AmsiRuleEngine::UnloadThreadProc(LPVOID)
     Sleep(200);
 
     EngineRuntime& runtime = GetAmsiEngineRuntime();
-    runtime.Log("[RaspAmsi] UnloadThreadProc: entering inert mode and stopping background threads");
+    runtime.LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] UnloadThreadProc: entering inert mode and stopping background threads");
     runtime.BeginShutdown("unload_signal", 200);
-    runtime.Log("[RaspAmsi] UnloadThreadProc: background threads stopped");
+    runtime.LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] UnloadThreadProc: background threads stopped");
 
     char pid[12];
     char ackLine[192];
@@ -700,18 +712,18 @@ DWORD WINAPI AmsiRuleEngine::UnloadThreadProc(LPVOID)
 }
 
 void AmsiRuleEngine::OnUnloadSignal() {
-    Log("[RaspAmsi] OnUnloadSignal: unload requested - entering inert mode");
+    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] OnUnloadSignal: unload requested - entering inert mode");
 
     HANDLE hThread = CreateThread(nullptr, 0, UnloadThreadProc, nullptr, 0, nullptr);
     if (hThread)
         CloseHandle(hThread);
     else
-        Log("[RaspAmsi] OnUnloadSignal: failed to create unload thread - inert mode remains active");
+        LogWithSeverity(RaspDiagSeverity::Error, "[RaspAmsi] OnUnloadSignal: failed to create unload thread - inert mode remains active");
 }
 
 void AmsiRuleEngine::OnPauseDetectionSignal()
 {
-    Log("[RaspAmsi] OnPauseDetectionSignal: detection paused");
+    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] OnPauseDetectionSignal: detection paused");
     MarkDetectionPausedByHostState(true);
     GetAmsiEngineRuntime().PauseDetection();
 }
@@ -733,7 +745,7 @@ void AmsiRuleEngine::OnResumeDetectionSignal()
 
     MarkDetectionPausedByHostState(false);
     MarkWaitingResumeAfterHostLost(false);
-    Log("[RaspAmsi] AMSI detection resumed");
+    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] AMSI detection resumed");
     GetAmsiEngineRuntime().ResumeDetection();
 }
 
@@ -806,7 +818,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     std::string matchedTrustProcess;
     if (TrustProcessMatches(snap->trustProcessPaths, scanContext, &matchedTrustProcess)) {
         SendTrustProcessSkipStatus(*scanContext->process, matchedTrustProcess);
-        Log("[RaspAmsi] trust_process skip: parentProcessPath=%s matched=%s",
+        LogWithSeverity(RaspDiagSeverity::Debug, "[RaspAmsi] trust_process skip: parentProcessPath=%s matched=%s",
             scanContext->process->parentProcessPath.c_str(),
             matchedTrustProcess.c_str());
         return results;
@@ -920,7 +932,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             }
         } else if (!matched && rule.regexChecks.empty() &&
                    !luaEngine.IsLoaded(rule.id) && rule.regexPatterns.empty()) {
-            Log("[RaspAmsi] Evaluate: rule=%s has no regexChecks, no Lua, and no regexPatterns — skipping",
+            LogWithSeverity(RaspDiagSeverity::Warning, "[RaspAmsi] Evaluate: rule=%s has no regexChecks, no Lua, and no regexPatterns — skipping",
                 rule.id.c_str());
             continue;
         }
@@ -1026,7 +1038,10 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
                  normalized.decodedUtf16Le ? 1 : 0,
                  normalized.decodedBase64 ? 1 : 0,
                  normalized.hadNullBytes ? 1 : 0);
+        RaspLogWithSeverity(RaspDiagSeverity::Debug, "%s", msg);
+#ifdef _DEBUG
         OutputDebugStringA(msg);
+#endif
     }
 
     auto results = Evaluate("AmsiProvider", ctx);  // 调用真正的 Evaluate 函数
