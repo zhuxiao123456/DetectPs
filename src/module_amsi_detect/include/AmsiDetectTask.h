@@ -47,6 +47,7 @@ namespace Engine {
 
     private:
         bool m_autoBlock{false};
+        int m_maxScanContentBytes{DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES};
         std::set<std::string> m_trustProcess;
 
         bool m_isDetecting{false};

@@ -207,19 +207,28 @@ bool Base64Decode(const std::string& input, std::string& out)
     return !out.empty();
 }
 
-std::string ApplyViewLimit(const std::string& input, bool& truncated)
+std::string ApplyViewLimit(const std::string& input, size_t maxBytes, bool& truncated)
 {
-    if (input.size() <= ScriptInputNormalizer::kMaxNormalizedBodyBytes)
+    if (maxBytes == 0) {
+        truncated = !input.empty();
+        return {};
+    }
+    if (input.size() <= maxBytes)
         return input;
     truncated = true;
+    const size_t markerLen = strlen(kTruncatedMarker);
+    if (maxBytes <= markerLen)
+        return input.substr(0, maxBytes);
+
+    const size_t payloadBudget = maxBytes - markerLen;
+    const size_t prefixBytes = (payloadBudget * 3) / 4;
+    const size_t suffixBytes = payloadBudget - prefixBytes;
+
     std::string out;
-    out.reserve(ScriptInputNormalizer::kPrefixBytes +
-                ScriptInputNormalizer::kSuffixBytes +
-                strlen(kTruncatedMarker));
-    out.append(input.data(), ScriptInputNormalizer::kPrefixBytes);
+    out.reserve(maxBytes);
+    out.append(input.data(), prefixBytes);
     out.append(kTruncatedMarker);
-    out.append(input.data() + input.size() - ScriptInputNormalizer::kSuffixBytes,
-               ScriptInputNormalizer::kSuffixBytes);
+    out.append(input.data() + input.size() - suffixBytes, suffixBytes);
     return out;
 }
 
@@ -231,6 +240,13 @@ const char* ScriptInputNormalizer::TruncatedMarker()
 }
 
 NormalizedScriptInput ScriptInputNormalizer::Normalize(const char* sample, ULONG sampleLen) const
+{
+    return Normalize(sample, sampleLen, kMaxNormalizedBodyBytes);
+}
+
+NormalizedScriptInput ScriptInputNormalizer::Normalize(const char* sample,
+                                                       ULONG sampleLen,
+                                                       size_t maxNormalizedBodyBytes) const
 {
     NormalizedScriptInput result;
     result.rawLen = sampleLen;
@@ -276,7 +292,7 @@ NormalizedScriptInput ScriptInputNormalizer::Normalize(const char* sample, ULONG
         }
     }
 
-    result.normalized = ApplyViewLimit(primary, result.truncated);
+    result.normalized = ApplyViewLimit(primary, maxNormalizedBodyBytes, result.truncated);
     result.normalizedLen = result.normalized.size();
     return result;
 }

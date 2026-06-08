@@ -66,7 +66,7 @@ protected:
     void OnPauseDetectionSignal() override;
     void OnResumeDetectionSignal() override;
 
-    const char* ModuleName()      const override { return "rasp_mod_amsi"; }
+    const char* ModuleName()      const override { return "hss_amsi"; }
     const char* LogEventPattern() const override { return "amsi-log"; }
     size_t ActiveRuleCountForStatus() const override;
     void FillDiagnosticLogContext(LegacyDiagJsonBuildInput& input) const override;
@@ -78,6 +78,7 @@ protected:
         std::shared_ptr<RaspLuaEngine> luaEngine;
         bool hasGlobalMode = false;
         RaspGlobalMode globalMode = RaspGlobalMode::Block;
+        uint32_t maxScanContentBytes = kDefaultMaxScanContentBytes;
     };
 
     std::shared_ptr<const RuleSnapshot> BuildNextSnapshot(

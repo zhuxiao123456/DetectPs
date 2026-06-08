@@ -3,6 +3,7 @@
 // =========================================================================
 
 #include <new>
+#include <vector>
 
 #include "../include/rasp_mod_amsi.h"
 #include "../include/amsi_rule_engine.h"
@@ -83,7 +84,8 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
                          static_cast<ULONG>(sizeof(contentSize)),
                          reinterpret_cast<PBYTE>(&contentSize), &cbOut);
 
-    char sample[1024] = {};
+    static constexpr ULONG kMaxAmsiReadBytes = kMaxMaxScanContentBytes;
+    std::vector<char> sample(kMaxAmsiReadBytes + 1, '\0');
     ULONG sampleRead = 0;
 
     PVOID contentAddr = nullptr;
@@ -92,23 +94,23 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
                                        static_cast<ULONG>(sizeof(contentAddr)),
                                        reinterpret_cast<PBYTE>(&contentAddr), &addrOut)) &&
         contentAddr != nullptr && contentSize > 0) {
-        ULONG toCopy = static_cast<ULONG>(min(contentSize, static_cast<ULONGLONG>(sizeof(sample) - 1)));
-        memcpy(sample, contentAddr, toCopy);
+        ULONG toCopy = static_cast<ULONG>(min(contentSize, static_cast<ULONGLONG>(sample.size() - 1)));
+        memcpy(sample.data(), contentAddr, toCopy);
         sampleRead = toCopy;
     } else {
-        HRESULT hrRead = stream->Read(0, static_cast<ULONG>(sizeof(sample) - 1),
-                                      reinterpret_cast<unsigned char *>(sample), &sampleRead);
+        HRESULT hrRead = stream->Read(0, static_cast<ULONG>(sample.size() - 1),
+                                      reinterpret_cast<unsigned char *>(sample.data()), &sampleRead);
         runtime.LogWithSeverity(RaspDiagSeverity::Debug,
                                 "[AMSI:Scan] content via Read hr=0x%08X read=%lu",
                                 static_cast<unsigned>(hrRead), sampleRead);
     }
 
-    if (sampleRead < static_cast<ULONG>(sizeof(sample)))
+    if (sampleRead < static_cast<ULONG>(sample.size()))
         sample[sampleRead] = '\0';
 
-    const char *evalSample = sample;
+    const char *evalSample = sample.data();
     ULONG evalLen = sampleRead;
-    char narrowBuf[1024] = {};
+    std::vector<char> narrowBuf(kMaxAmsiReadBytes + 1, '\0');
 
     if (sampleRead >= 4) {
         bool hasBom = (static_cast<unsigned char>(sample[0]) == 0xFF &&
@@ -124,14 +126,14 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
         }
 
         if (likelyWide) {
-            const wchar_t *wptr = reinterpret_cast<const wchar_t *>(hasBom ? sample + 2 : sample);
+            const wchar_t *wptr = reinterpret_cast<const wchar_t *>(hasBom ? sample.data() + 2 : sample.data());
             int wlen = static_cast<int>((sampleRead - (hasBom ? 2u : 0u)) / sizeof(wchar_t));
             int nb = WideCharToMultiByte(CP_UTF8, 0, wptr, wlen,
-                                         narrowBuf, static_cast<int>(sizeof(narrowBuf) - 1),
+                                         narrowBuf.data(), static_cast<int>(narrowBuf.size() - 1),
                                          nullptr, nullptr);
             if (nb > 0) {
                 narrowBuf[nb] = '\0';
-                evalSample = narrowBuf;
+                evalSample = narrowBuf.data();
                 evalLen = static_cast<ULONG>(nb);
             }
         }

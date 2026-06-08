@@ -244,6 +244,35 @@ int main()
     }
 
     {
+        auto missing = Parse(R"json({"rules":[{"id":"r"}]})json");
+        if (!Expect(missing.maxScanContentBytes == kDefaultMaxScanContentBytes,
+                    "missing maxScanContentBytes uses default"))
+            return 1;
+
+        auto configured = Parse(R"json({"maxScanContentBytes":4096,"rules":[{"id":"r"}]})json");
+        if (!Expect(configured.hasMaxScanContentBytes, "configured maxScanContentBytes is marked present"))
+            return 1;
+        if (!Expect(configured.maxScanContentBytes == 4096,
+                    "configured maxScanContentBytes parses"))
+            return 1;
+
+        auto tooSmall = Parse(R"json({"maxScanContentBytes":1,"rules":[{"id":"r"}]})json");
+        if (!Expect(tooSmall.maxScanContentBytes == kMinMaxScanContentBytes,
+                    "small maxScanContentBytes clamps to minimum"))
+            return 1;
+
+        auto tooLarge = Parse(R"json({"maxScanContentBytes":999999,"rules":[{"id":"r"}]})json");
+        if (!Expect(tooLarge.maxScanContentBytes == kMaxMaxScanContentBytes,
+                    "large maxScanContentBytes clamps to maximum"))
+            return 1;
+
+        auto invalid = Parse(R"json({"maxScanContentBytes":"8192","rules":[{"id":"r"}]})json");
+        if (!Expect(invalid.maxScanContentBytes == kDefaultMaxScanContentBytes,
+                    "invalid maxScanContentBytes uses default"))
+            return 1;
+    }
+
+    {
         auto result = Parse(R"json({"globalLibraries":"bGliLXNpbmdsZQ==","rules":[]})json");
         if (!Expect(!result.ok, "bundle without valid rules is reported as failure"))
             return 1;

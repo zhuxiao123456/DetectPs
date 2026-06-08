@@ -368,7 +368,15 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     std::vector<std::string> rawTrustProcessPaths;
     RaspGlobalMode globalMode = RaspGlobalMode::Block;
     bool hasGlobalMode = false;
-    if (!ParseRulesJson(json, lib, rawRules, nullptr, &rawTrustProcessPaths, &globalMode, &hasGlobalMode) || rawRules.empty()) {
+    uint32_t maxScanContentBytes = kDefaultMaxScanContentBytes;
+    if (!ParseRulesJson(json,
+                        lib,
+                        rawRules,
+                        nullptr,
+                        &rawTrustProcessPaths,
+                        &globalMode,
+                        &hasGlobalMode,
+                        &maxScanContentBytes) || rawRules.empty()) {
         LogWithSeverity(RaspDiagSeverity::Warning, "BuildNextSnapshot: no rules parsed");
         return {};
     }
@@ -389,7 +397,12 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     luaEngine->SetLeveledLogFn(RaspLuaLogWithSeverity);
     PrecompileAll(configs, effectiveLib, *luaEngine);
     return std::make_shared<RuleSnapshot>(
-            RuleSnapshot{std::move(configs), std::move(trustProcessPaths), std::move(luaEngine), hasGlobalMode, globalMode});
+            RuleSnapshot{std::move(configs),
+                         std::move(trustProcessPaths),
+                         std::move(luaEngine),
+                         hasGlobalMode,
+                         globalMode,
+                         maxScanContentBytes});
 }
 
 bool AmsiRuleEngine::ShouldBlockRule(const RuleSnapshot& snapshot,
@@ -641,7 +654,12 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
 void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
     std::shared_ptr<const RuleSnapshot> next =
             std::make_shared<RuleSnapshot>(
-                    RuleSnapshot{std::move(rules), {}, std::make_shared<RaspLuaEngine>(), false, RaspGlobalMode::Block});
+                    RuleSnapshot{std::move(rules),
+                                 {},
+                                 std::make_shared<RaspLuaEngine>(),
+                                 false,
+                                 RaspGlobalMode::Block,
+                                 kDefaultMaxScanContentBytes});
     std::atomic_store(&m_snapshot, next);
 }
 
@@ -1004,23 +1022,28 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
         ctx.fields.push_back({"processCaptureStatus", ProcessCaptureStatusToString(process.status)});
         ctx.fields.push_back({"processRetryState", ProcessRetryStateToString(process.retryState)});
     }
+    auto snap = std::atomic_load(&m_snapshot);
+    const size_t maxScanContentBytes = snap
+        ? snap->maxScanContentBytes
+        : kDefaultMaxScanContentBytes;
+
     // true代表 isBinary
-    NormalizedScriptInput normalized = m_inputNormalizer.Normalize(sample, sampleLen);
+    NormalizedScriptInput normalized = m_inputNormalizer.Normalize(
+        sample,
+        sampleLen,
+        maxScanContentBytes);
     if (!normalized.normalized.empty()) {
         ctx.fields.push_back({"body", normalized.normalized, true});
         ctx.fields.push_back({"script_content", TruncateForEventField(normalized.normalized, kMaxScriptContentEventBytes)});
-#ifdef _DEBUG
-        char msg[256];
-        snprintf(msg, sizeof(msg),
-                 "rawLen=%zu normalizedLen=%zu truncated=%d utf16=%d b64=%d nulls=%d\n",
-                 normalized.rawLen,
-                 normalized.normalizedLen,
-                 normalized.truncated ? 1 : 0,
-                 normalized.decodedUtf16Le ? 1 : 0,
-                 normalized.decodedBase64 ? 1 : 0,
-                 normalized.hadNullBytes ? 1 : 0);
-        OutputDebugStringA(msg);
-#endif
+        LogWithSeverity(RaspDiagSeverity::Debug,
+                        "normalizer rawLen=%zu normalizedLen=%zu maxScanContentBytes=%zu truncated=%d utf16=%d b64=%d nulls=%d",
+                        normalized.rawLen,
+                        normalized.normalizedLen,
+                        maxScanContentBytes,
+                        normalized.truncated ? 1 : 0,
+                        normalized.decodedUtf16Le ? 1 : 0,
+                        normalized.decodedBase64 ? 1 : 0,
+                        normalized.hadNullBytes ? 1 : 0);
     }
 
     auto results = Evaluate("AmsiProvider", ctx);  // 调用真正的 Evaluate 函数

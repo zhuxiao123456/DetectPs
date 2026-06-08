@@ -75,6 +75,7 @@ namespace Engine {
             return -1;
         }
         m_autoBlock = taskPolicy->IsAutoBlock();
+        m_maxScanContentBytes = taskPolicy->GetMaxScanContentBytes();
         m_trustProcess = taskPolicy->GetTrustProcess();
 
         m_isDetecting = false;
@@ -265,6 +266,7 @@ namespace Engine {
         } else {
             ruleJson["globalMode"] = "audit";
         }
+        ruleJson["maxScanContentBytes"] = m_maxScanContentBytes;
 
         if (!m_trustProcess.empty()) {
             JsonUtils::JsonValue trustProcessJson;

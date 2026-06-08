@@ -30,4 +30,7 @@ public:
 
     static const char* TruncatedMarker();
     NormalizedScriptInput Normalize(const char* sample, ULONG sampleLen) const;
+    NormalizedScriptInput Normalize(const char* sample,
+                                    ULONG sampleLen,
+                                    size_t maxNormalizedBodyBytes) const;
 };

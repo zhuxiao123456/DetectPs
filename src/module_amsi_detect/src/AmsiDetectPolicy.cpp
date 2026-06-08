@@ -16,6 +16,33 @@ namespace Engine {
     using namespace SDK;
     using namespace AmsiDetect;
 
+    namespace {
+        int ClampMaxScanContentBytes(int value)
+        {
+            if (value < MIN_AMSI_MAX_SCAN_CONTENT_BYTES) {
+                return MIN_AMSI_MAX_SCAN_CONTENT_BYTES;
+            }
+            if (value > MAX_AMSI_MAX_SCAN_CONTENT_BYTES) {
+                return MAX_AMSI_MAX_SCAN_CONTENT_BYTES;
+            }
+            return value;
+        }
+
+        int ReadMaxScanContentBytes(const JsonUtils::JsonValue &contentValue)
+        {
+            if (!contentValue.isMember("maxScanContentBytes")) {
+                return DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES;
+            }
+
+            const JsonUtils::JsonValue &value = contentValue["maxScanContentBytes"];
+            if (!value.isInt()) {
+                return DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES;
+            }
+
+            return ClampMaxScanContentBytes(value.asInt());
+        }
+    }
+
     AmsiDetectPolicy::AmsiDetectPolicy(const std::string &featureName) : FeaturePolicy(featureName)
     {
     }
@@ -67,6 +94,8 @@ namespace Engine {
         }
 
         m_autoBlock = JsonUtils::GetBoolValue(contentValue, "auto_block", false);
+        m_maxScanContentBytes = ReadMaxScanContentBytes(contentValue);
+
         JsonUtils::JsonValue trustProcessArray;
         parseRight = JsonUtils::GetArrayValue(contentValue, "trust_process", trustProcessArray);
         if (!parseRight) {

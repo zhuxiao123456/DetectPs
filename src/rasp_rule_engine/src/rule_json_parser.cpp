@@ -5,6 +5,15 @@
 
 namespace {
 
+uint32_t ClampMaxScanContentBytes(int value)
+{
+    if (value < static_cast<int>(kMinMaxScanContentBytes))
+        return kMinMaxScanContentBytes;
+    if (value > static_cast<int>(kMaxMaxScanContentBytes))
+        return kMaxMaxScanContentBytes;
+    return static_cast<uint32_t>(value);
+}
+
 bool Base64Decode(const std::string& input, std::string& output)
 {
     static const int kDecodeTable[128] = {
@@ -180,6 +189,14 @@ bool ParseBundleObject(RuleJsonParser::Parser& p,
                     result.globalMode = RaspGlobalMode::Audit;
                     result.hasGlobalMode = true;
                 }
+            } else {
+                p.skip_value();
+            }
+        } else if (key == "maxScanContentBytes") {
+            int value = 0;
+            if (p.read_int(value)) {
+                result.maxScanContentBytes = ClampMaxScanContentBytes(value);
+                result.hasMaxScanContentBytes = true;
             } else {
                 p.skip_value();
             }
@@ -413,6 +430,14 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
                     result.globalMode = RaspGlobalMode::Audit;
                     result.hasGlobalMode = true;
                 }
+            } else {
+                p.skip_value();
+            }
+        } else if (key == "maxScanContentBytes") {
+            int value = 0;
+            if (p.read_int(value)) {
+                result.maxScanContentBytes = ClampMaxScanContentBytes(value);
+                result.hasMaxScanContentBytes = true;
             } else {
                 p.skip_value();
             }

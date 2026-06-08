@@ -70,6 +70,41 @@ TEST_F(AmsiDetectTaskPolicyTest, Parse_MissingAutoBlock_DefaultsFalse) {
     EXPECT_FALSE(taskPolicy.IsAutoBlock());
 }
 
+TEST_F(AmsiDetectTaskPolicyTest, Parse_MissingMaxScanContentBytes_Defaults8192) {
+    AmsiDetectTaskPolicy taskPolicy("amsi_detect_task");
+    std::string content = R"({"auto_block":true,"trust_process":[]})";
+    ASSERT_TRUE(taskPolicy.Parse(content));
+    EXPECT_EQ(taskPolicy.GetMaxScanContentBytes(), DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES);
+}
+
+TEST_F(AmsiDetectTaskPolicyTest, Parse_MaxScanContentBytesConfigured) {
+    AmsiDetectTaskPolicy taskPolicy("amsi_detect_task");
+    std::string content = R"({"auto_block":true,"trust_process":[],"maxScanContentBytes":16384})";
+    ASSERT_TRUE(taskPolicy.Parse(content));
+    EXPECT_EQ(taskPolicy.GetMaxScanContentBytes(), 16384);
+}
+
+TEST_F(AmsiDetectTaskPolicyTest, Parse_MaxScanContentBytesClampedToMin) {
+    AmsiDetectTaskPolicy taskPolicy("amsi_detect_task");
+    std::string content = R"({"auto_block":true,"trust_process":[],"maxScanContentBytes":1})";
+    ASSERT_TRUE(taskPolicy.Parse(content));
+    EXPECT_EQ(taskPolicy.GetMaxScanContentBytes(), MIN_AMSI_MAX_SCAN_CONTENT_BYTES);
+}
+
+TEST_F(AmsiDetectTaskPolicyTest, Parse_MaxScanContentBytesClampedToMax) {
+    AmsiDetectTaskPolicy taskPolicy("amsi_detect_task");
+    std::string content = R"({"auto_block":true,"trust_process":[],"maxScanContentBytes":999999})";
+    ASSERT_TRUE(taskPolicy.Parse(content));
+    EXPECT_EQ(taskPolicy.GetMaxScanContentBytes(), MAX_AMSI_MAX_SCAN_CONTENT_BYTES);
+}
+
+TEST_F(AmsiDetectTaskPolicyTest, Parse_MaxScanContentBytesStringUsesDefault) {
+    AmsiDetectTaskPolicy taskPolicy("amsi_detect_task");
+    std::string content = R"({"auto_block":true,"trust_process":[],"maxScanContentBytes":"16384"})";
+    ASSERT_TRUE(taskPolicy.Parse(content));
+    EXPECT_EQ(taskPolicy.GetMaxScanContentBytes(), DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES);
+}
+
 TEST_F(AmsiDetectTaskPolicyTest, Parse_TrustProcessIsLowercased) {
     AmsiDetectTaskPolicy taskPolicy("amsi_detect_task");
     std::string content = R"({"auto_block":true,"trust_process":["C:\\Windows\\CMD.EXE"]})";

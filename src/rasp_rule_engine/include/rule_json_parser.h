@@ -1,11 +1,16 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "rasp_rule_base.h"
+
+constexpr uint32_t kDefaultMaxScanContentBytes = 8192;
+constexpr uint32_t kMinMaxScanContentBytes = 1024;
+constexpr uint32_t kMaxMaxScanContentBytes = 65536;
 
 struct RuleParseResult {
     bool ok = false;
@@ -16,6 +21,8 @@ struct RuleParseResult {
     std::vector<std::string> trustProcessPaths;
     bool hasGlobalMode = false;
     RaspGlobalMode globalMode = RaspGlobalMode::Block;
+    bool hasMaxScanContentBytes = false;
+    uint32_t maxScanContentBytes = kDefaultMaxScanContentBytes;
     std::string error;
 };
 

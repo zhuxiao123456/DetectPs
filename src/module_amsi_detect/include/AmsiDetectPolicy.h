@@ -13,6 +13,10 @@
 
 namespace Engine {
 
+    constexpr int DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES = 8192;
+    constexpr int MIN_AMSI_MAX_SCAN_CONTENT_BYTES = 1024;
+    constexpr int MAX_AMSI_MAX_SCAN_CONTENT_BYTES = 65536;
+
     class AmsiDetectPolicy : public Framework::FeaturePolicy {
     public:
         explicit AmsiDetectPolicy(const std::string &featureName);
@@ -36,8 +40,13 @@ namespace Engine {
             return m_trustProcess;
         }
 
+        int GetMaxScanContentBytes() const {
+            return m_maxScanContentBytes;
+        }
+
     private:
         bool m_autoBlock = false;
+        int m_maxScanContentBytes = DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES;
         std::set<std::string> m_trustProcess;
     };
 }

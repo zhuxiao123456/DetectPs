@@ -146,7 +146,8 @@ protected:
         RuleBundleMetadata*                          metadataOut = nullptr,
         std::vector<std::string>*                    trustProcessOut = nullptr,
         RaspGlobalMode*                              globalModeOut = nullptr,
-        bool*                                        hasGlobalModeOut = nullptr);
+        bool*                                        hasGlobalModeOut = nullptr,
+        uint32_t*                                    maxScanContentBytesOut = nullptr);
 
     // Virtual factory override to return module-specific derived type.
     // Default returns new RaspRuleBase().

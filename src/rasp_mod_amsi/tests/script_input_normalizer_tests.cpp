@@ -126,8 +126,31 @@ int main()
         if (!Expect(out.normalized.find("TAIL_IEX") != std::string::npos,
                     "suffix is preserved after truncation"))
             return 1;
-        if (!Expect(out.normalized.size() <= 4096 + std::string("\n/*<rasp_truncated>*/\n").size(),
-                    "normalized body stays within 4KB plus marker"))
+        if (!Expect(out.normalized.size() <= 4096,
+                    "normalized body stays within 4KB including marker"))
+            return 1;
+    }
+
+    {
+        std::string sample = Repeat('A', 7000) + "TAIL_DYNAMIC_LIMIT";
+        auto out = normalizer.Normalize(sample.data(), static_cast<ULONG>(sample.size()), 8192);
+        if (!Expect(!out.truncated, "custom 8KB limit keeps 7KB sample intact"))
+            return 1;
+        if (!Expect(out.normalized.find("TAIL_DYNAMIC_LIMIT") != std::string::npos,
+                    "custom limit preserves tail without truncation"))
+            return 1;
+    }
+
+    {
+        std::string sample = Repeat('B', 9000) + "TAIL_DYNAMIC_LIMIT";
+        auto out = normalizer.Normalize(sample.data(), static_cast<ULONG>(sample.size()), 8192);
+        if (!Expect(out.truncated, "custom 8KB limit truncates larger sample"))
+            return 1;
+        if (!Expect(out.normalized.find("TAIL_DYNAMIC_LIMIT") != std::string::npos,
+                    "custom limit still preserves suffix"))
+            return 1;
+        if (!Expect(out.normalized.size() <= 8192,
+                    "custom limit bounds normalized body including marker"))
             return 1;
     }
 
