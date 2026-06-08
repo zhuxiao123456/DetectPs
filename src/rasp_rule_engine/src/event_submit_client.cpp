@@ -1,4 +1,4 @@
-#include "event_submit_client.h"
+#include "../include/event_submit_client.h"
 
 #include <cstdio>
 #include <sstream>
@@ -107,21 +107,12 @@ EventJsonBuildResult EventJsonBuilder::BuildDetection(const EventJsonBuildInput&
     const std::string confidence = input.confidence ? std::to_string(input.confidence) : "70";
 
     std::ostringstream oss;
-    oss << "{\"id\":\"" << JsonEscape(input.eventId) << "\","
-        << "\"ts\":\"" << JsonEscape(input.timestamp) << "\","
-        << "\"sev\":\"" << JsonEscape(severity) << "\","
+    oss << "{\"sev\":\"" << JsonEscape(severity) << "\","
         << "\"act\":\"" << JsonEscape(result.decision) << "\","
         << "\"cat\":\"Detection\","
-        << "\"mod\":\"" << JsonEscape(input.moduleName) << "\","
-        << "\"sensor\":\"" << JsonEscape(input.sensor) << "\","
         << "\"rule\":\"" << JsonEscape(input.ruleId) << "\","
         << "\"desc\":\"" << JsonEscape(input.description) << "\","
-        << "\"appName\":\"" << JsonEscape(input.appName) << "\","
-        << "\"contentName\":\"" << JsonEscape(input.contentName) << "\","
         << "\"confidence\":\"" << JsonEscape(confidence) << "\","
-        << "\"ip\":\"" << JsonEscape(input.ip) << "\","
-        << "\"ua\":\"" << JsonEscape(input.ua) << "\","
-        << "\"pattern\":\"" << JsonEscape(result.payload) << "\","
         << "\"processPid\":\"" << input.processPid << "\","
         << "\"processName\":\"" << JsonEscape(input.processName) << "\","
         << "\"processPath\":\"" << JsonEscape(input.processPath) << "\","

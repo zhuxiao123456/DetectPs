@@ -12,7 +12,6 @@
 #include <mutex>
 
 #include "legacy_diag_json_builder.h"
-
 class AmsiRuleEngine;
 
 enum class EngineState {

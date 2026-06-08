@@ -64,7 +64,6 @@ const char* SeverityToString(RaspDiagSeverity severity)
 LegacyDiagJsonBuildResult LegacyDiagJsonBuilder::Build(const LegacyDiagJsonBuildInput& input) const
 {
     const std::string desc = EscapeLegacyDiagJson(input.message);
-    const std::string pattern = EscapeLegacyDiagJson(input.pattern);
     const std::string dllInstanceId = EscapeLegacyDiagJson(input.dllInstanceId);
     const std::string processName = EscapeLegacyDiagJson(input.processName);
     const std::string processPath = EscapeLegacyDiagJson(input.processPath);
@@ -77,9 +76,7 @@ LegacyDiagJsonBuildResult LegacyDiagJsonBuilder::Build(const LegacyDiagJsonBuild
         line,
         sizeof(line),
         "{\"sev\":\"%s\",\"cat\":\"diag\","
-        "\"sensor\":\"RaspLog\","
         "\"desc\":\"%s\","
-        "\"pattern\":\"%s\","
         "\"dllInstanceId\":\"%s\","
         "\"pid\":%lu,"
         "\"processName\":\"%s\","
@@ -89,7 +86,6 @@ LegacyDiagJsonBuildResult LegacyDiagJsonBuilder::Build(const LegacyDiagJsonBuild
         "\"parentProcessPath\":\"%s\"}",
         severity,
         desc.c_str(),
-        pattern.c_str(),
         dllInstanceId.c_str(),
         static_cast<unsigned long>(input.pid),
         processName.c_str(),

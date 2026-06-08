@@ -16,7 +16,6 @@ struct LegacyDiagJsonBuildInput {
     std::string id;
     std::string timestamp;
     std::string module;
-    std::string pattern;
     std::string message;
     std::string dllInstanceId;
     uint32_t pid = 0;

@@ -1,4 +1,4 @@
-#include "legacy_diag_log_forwarder.h"
+#include "../include/legacy_diag_log_forwarder.h"
 
 LegacyDiagLogForwarder::LegacyDiagLogForwarder(ILegacyDiagBytesWriter& writer)
     : writer_(writer)
@@ -17,4 +17,3 @@ LegacyDiagForwardStatus LegacyDiagLogForwarder::Forward(std::string_view compact
 
     return writer_.Send(compactJson);
 }
-

@@ -44,6 +44,54 @@
 static INIT_ONCE s_logCsOnce = INIT_ONCE_STATIC_INIT;
 static std::atomic<long> s_hostLivenessThreads{0};
 
+static std::atomic<int> s_minCsaLogLevel{0};
+
+static int SeverityToCsaLevel(RaspDiagSeverity severity)
+{
+    switch (severity) {
+        case RaspDiagSeverity::Debug:   return 7;
+        case RaspDiagSeverity::Info:    return 6;
+        case RaspDiagSeverity::Warning: return 4;
+        case RaspDiagSeverity::Error:   return 3;
+        default:                        return 6;
+    }
+}
+
+static void LoadAmsiLogConfOnce()
+{
+    static std::atomic<bool> loaded{false};
+    bool expected = false;
+    if (!loaded.compare_exchange_strong(expected, true)) {
+        return;
+    }
+    wchar_t dllDir[MAX_PATH] = {};
+    HMODULE hMod = GetModuleHandleW(L"hss_amsi.dll");
+    if (hMod && GetModuleFileNameW(hMod, dllDir, MAX_PATH)) {
+        wchar_t* lastSlash = wcsrchr(dllDir, L'\\');
+        if (lastSlash) {
+            *(lastSlash + 1) = L'\0';
+        }
+        wcscat_s(dllDir, MAX_PATH, L"amsi_log.conf");
+    } else {
+        wcscpy_s(dllDir, MAX_PATH, L"amsi_log.conf");
+    }
+    HANDLE hFile = CreateFileW(dllDir, GENERIC_READ, FILE_SHARE_READ,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    char buf[32] = {};
+    DWORD bytesRead = 0;
+    if (ReadFile(hFile, buf, sizeof(buf) - 1, &bytesRead, nullptr) && bytesRead > 0) {
+        buf[bytesRead] = '\0';
+        int level = atoi(buf);
+        if (level > 0) {
+            s_minCsaLogLevel.store(level, std::memory_order_relaxed);
+        }
+    }
+    CloseHandle(hFile);
+}
+
 namespace {
 
 struct HostStateEnvelope {
@@ -336,6 +384,27 @@ void RaspSentryBase::LogWithSeverity(RaspDiagSeverity severity, const char* fmt,
 
 void RaspSentryBase::VLogWithSeverity(RaspDiagSeverity severity, const char* fmt, va_list ap) const
 {
+    LoadAmsiLogConfOnce();
+
+    int minLevel = s_minCsaLogLevel.load(std::memory_order_relaxed);
+    if (minLevel > 0 && SeverityToCsaLevel(severity) > minLevel) {
+#ifdef _DEBUG
+        char buf[1024];
+        int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+        if (n >= (int)sizeof(buf)) {
+            static const char kTrunc[] = "...<truncated>";
+            memcpy(buf + sizeof(buf) - sizeof(kTrunc), kTrunc, sizeof(kTrunc));
+        }
+        int len = (int)strlen(buf);
+        if (len > 0 && buf[len - 1] != '\n' && len < (int)sizeof(buf) - 1) {
+            buf[len] = '\n';
+            buf[len + 1] = '\0';
+        }
+        OutputDebugStringA(buf);
+#endif
+        return;
+    }
+
     char buf[1024];
     int n = vsnprintf(buf, sizeof(buf), fmt, ap);
 
@@ -345,14 +414,15 @@ void RaspSentryBase::VLogWithSeverity(RaspDiagSeverity severity, const char* fmt
         memcpy(buf + sizeof(buf) - sizeof(kTrunc), kTrunc, sizeof(kTrunc));
     }
 
+#ifdef _DEBUG
     int len = (int)strlen(buf);
     if (len > 0 && buf[len - 1] != '\n' && len < (int)sizeof(buf) - 1)
     {
         buf[len]     = '\n';
         buf[len + 1] = '\0';
     }
-
     OutputDebugStringA(buf);
+#endif
 
     // Cast away const - ring buffer mutation is logically non-observable to callers.
     const_cast<RaspSentryBase*>(this)->EnqueueLog(buf, severity);
@@ -453,12 +523,11 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
                                    std::string& libSourceOut,
                                    RuleBundleMetadata& metadataOut)
 {
-    LogWithSeverity(RaspDiagSeverity::Info, "[%s] ConnectSentry: connecting to amsi_detect_rules", ModuleName());
     metadataOut = RuleBundleMetadata{};
 
     if (!WaitNamedPipeW(L"\\\\.\\pipe\\amsi_detect_rules", 100))
     {
-        Log("[%s] ConnectSentry: pipe not available", ModuleName());
+        LogWithSeverity(RaspDiagSeverity::Warning, "ConnectSentry: pipe not available");
         return false;
     }
 
@@ -467,14 +536,14 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
                                OPEN_EXISTING, 0, nullptr);
     if (hPipe == INVALID_HANDLE_VALUE)
     {
-        Log("[%s] ConnectSentry: CreateFileW failed GLE=%lu", ModuleName(), GetLastError());
+        LogWithSeverity(RaspDiagSeverity::Error, "ConnectSentry: CreateFileW failed GLE=%lu", GetLastError());
         return false;
     }
 
     DWORD mode = PIPE_READMODE_MESSAGE;
     if (!SetNamedPipeHandleState(hPipe, &mode, nullptr, nullptr))
     {
-        Log("[%s] ConnectSentry: SetNamedPipeHandleState failed GLE=%lu", ModuleName(), GetLastError());
+        LogWithSeverity(RaspDiagSeverity::Error, "ConnectSentry: SetNamedPipeHandleState failed GLE=%lu", GetLastError());
         CloseHandle(hPipe);
         return false;
     }
@@ -483,7 +552,7 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
     DWORD written = 0;
     if (!WriteFile(hPipe, req, (DWORD)strlen(req), &written, nullptr) || written == 0)
     {
-        Log("[%s] ConnectSentry: WriteFile failed GLE=%lu", ModuleName(), GetLastError());
+        LogWithSeverity(RaspDiagSeverity::Error, "ConnectSentry: WriteFile failed GLE=%lu", GetLastError());
         CloseHandle(hPipe);
         return false;
     }
@@ -497,12 +566,10 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
 
     if (!ok || bytesRead == 0)
     {
-        Log("[%s] ConnectSentry: ReadFile failed GLE=%lu bytes=%lu", ModuleName(), readErr, bytesRead);
+        LogWithSeverity(RaspDiagSeverity::Error, "ConnectSentry: ReadFile failed GLE=%lu bytes=%lu", readErr, bytesRead);
         return false;
     }
     response.resize(bytesRead);
-
-    Log("[%s] ConnectSentry: received %lu bytes - parsing", ModuleName(), bytesRead);
 
     RuleBundleMetadata envelopeMetadata;
     HostStateEnvelope envelope;
@@ -517,8 +584,8 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
             MarkRuleSnapshotReady(false);
             MarkWaitingResumeAfterHostLost(true);
             LogWithSeverity(RaspDiagSeverity::Warning,
-                            "[%s] ConnectSentry: host requested DLL unloading stateVersion=%s - entering upgrade inert mode",
-                            ModuleName(), envelope.stateVersion.c_str());
+                            "ConnectSentry: host requested DLL unloading stateVersion=%s - entering upgrade inert mode",
+                            envelope.stateVersion.c_str());
             OnUnloadSignal();
             return false;
         }
@@ -532,8 +599,7 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
                 MarkRuleSnapshotReady(false);
                 MarkWaitingResumeAfterHostLost(true);
                 LogWithSeverity(RaspDiagSeverity::Warning,
-                                "[%s] ConnectSentry: requiredDllHash mismatch required=%s current=%s - entering upgrade inert mode",
-                                ModuleName(),
+                                "ConnectSentry: requiredDllHash mismatch required=%s current=%s - entering upgrade inert mode",
                                 requiredDllHash.c_str(),
                                 currentDllHash.empty() ? "unknown" : currentDllHash.c_str());
                 OnUnloadSignal();
@@ -541,26 +607,22 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
             }
         }
         if (m_upgradeInert.load(std::memory_order_acquire)) {
-            Log("[%s] ConnectSentry: ignoring host state=%s because upgrade inert is already set",
-                ModuleName(), runtimeState.c_str());
+            LogWithSeverity(RaspDiagSeverity::Warning, "ConnectSentry: ignoring host state=%s because upgrade inert is already set",
+                runtimeState.c_str());
             return false;
         }
         if (runtimeState != "running") {
             LogWithSeverity(RaspDiagSeverity::Warning,
-                            "[%s] ConnectSentry: unsupported host desiredRuntimeState=%s state=%s",
-                            ModuleName(), runtimeState.c_str(), envelope.state.c_str());
+                            "ConnectSentry: unsupported host desiredRuntimeState=%s state=%s",
+                            runtimeState.c_str(), envelope.state.c_str());
             return false;
         }
         if (envelope.rulesJson.empty()) {
-            LogWithSeverity(RaspDiagSeverity::Warning,
-                            "[%s] ConnectSentry: host state envelope missing rules",
-                            ModuleName());
+            LogWithSeverity(RaspDiagSeverity::Warning, "ConnectSentry: host state envelope missing rules");
             return false;
         }
         response = envelope.rulesJson;
         envelopeMetadata.version = envelope.ruleVersion;
-        Log("[%s] ConnectSentry: host desiredRuntimeState=running stateVersion=%s ruleVersion=%s",
-            ModuleName(), envelope.stateVersion.c_str(), envelope.ruleVersion.c_str());
     }
 
     jsonOut = response;
@@ -580,9 +642,6 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
     if (metadataOut.hash.empty()) {
         metadataOut.hash = envelopeMetadata.hash;
     }
-
-    Log("[%s] ConnectSentry: %zu rule(s) found, lib=%zu bytes, version=%zu bytes, hash=%zu bytes",
-        ModuleName(), dummy.size(), libSourceOut.size(), metadataOut.version.size(), metadataOut.hash.size());
     return true;
 }
 
@@ -651,7 +710,7 @@ bool RaspSentryBase::ParseRulesJson(
     if (hasGlobalModeOut)
         *hasGlobalModeOut = result.hasGlobalMode;
     if (maxScanContentBytesOut)
-        *maxScanContentBytesOut = result.maxScanContentBytes;
+    *maxScanContentBytesOut = result.maxScanContentBytes;
     libSourceOut = std::move(result.libSource);
     rulesOut = std::move(result.rules);
     return result.ok;
@@ -678,14 +737,14 @@ static std::string SentryGenerateEventId()
     return std::string(buf);
 }
 
-static std::string SentryUtcTimestamp()
+static std::string LocalCompactTimestamp()
 {
     SYSTEMTIME st;
-    GetSystemTime(&st);
+    GetLocalTime(&st);
     char buf[32];
-    snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+    snprintf(buf, sizeof(buf), "%04d%02d%02d %02d:%02d:%02d",
              st.wYear, st.wMonth, st.wDay,
-             st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+             st.wHour, st.wMinute, st.wSecond);
     return std::string(buf);
 }
 
@@ -736,7 +795,7 @@ EnqueueResult RaspSentryBase::TrySubmitDetectionEvent(const RaspEvalResult& resu
 {
     EventJsonBuildInput input;
     input.eventId = SentryGenerateEventId();
-    input.timestamp = SentryUtcTimestamp();
+    input.timestamp = LocalCompactTimestamp();
     input.moduleName = ModuleName();
     input.ruleId = result.ruleId;
     input.sensor = result.sensor;
@@ -804,12 +863,23 @@ void RaspSentryBase::SendRuleLoadResult(bool success,
     const size_t ruleCount = ActiveRuleCountForStatus();
     const RuleBundleMetadata activeMetadata = ActiveRuleMetadataForStatus();
 
-    char json[2048];
+    LegacyDiagJsonBuildInput diagInput;
+    FillDiagnosticLogContext(diagInput);
+
+    char parentPidBuf[32];
+    snprintf(parentPidBuf, sizeof(parentPidBuf), "%lu", static_cast<unsigned long>(diagInput.parentPid));
+
+    char json[3072];
     _snprintf_s(json, sizeof(json), _TRUNCATE,
                 "{\"msgType\":\"RULE_LOAD_RESULT\","
                 "\"module\":\"amsi_detect\","
                 "\"dllInstanceId\":\"%s\","
                 "\"pid\":%s,"
+                "\"processName\":\"%s\","
+                "\"processPath\":\"%s\","
+                "\"parentPid\":%s,"
+                "\"parentProcessName\":\"%s\","
+                "\"parentProcessPath\":\"%s\","
                 "\"timestamp\":\"%s\","
                 "\"requestedVersion\":\"%s\","
                 "\"requestedHash\":\"%s\","
@@ -821,7 +891,12 @@ void RaspSentryBase::SendRuleLoadResult(bool success,
                 "\"errorMessage\":\"%s\"}",
                 ControlStatusJsonEscape(dllInstanceId).c_str(),
                 pidText.c_str(),
-                ControlStatusJsonEscape(SentryUtcTimestamp()).c_str(),
+                ControlStatusJsonEscape(diagInput.processName).c_str(),
+                ControlStatusJsonEscape(diagInput.processPath).c_str(),
+                parentPidBuf,
+                ControlStatusJsonEscape(diagInput.parentProcessName).c_str(),
+                ControlStatusJsonEscape(diagInput.parentProcessPath).c_str(),
+                ControlStatusJsonEscape(LocalCompactTimestamp()).c_str(),
                 ControlStatusJsonEscape(requestedMetadata.version).c_str(),
                 ControlStatusJsonEscape(requestedMetadata.hash).c_str(),
                 ControlStatusJsonEscape(activeMetadata.version).c_str(),
@@ -836,8 +911,7 @@ void RaspSentryBase::SendRuleLoadResult(bool success,
                                OPEN_EXISTING, 0, nullptr);
     if (hPipe == INVALID_HANDLE_VALUE)
     {
-        Log("[%s] SendRuleLoadResult: control status pipe unavailable GLE=%lu",
-            ModuleName(), GetLastError());
+        LogWithSeverity(RaspDiagSeverity::Warning, "SendRuleLoadResult: control status pipe unavailable GLE=%lu", GetLastError());
         return;
     }
 
@@ -845,8 +919,7 @@ void RaspSentryBase::SendRuleLoadResult(bool success,
     const DWORD expected = static_cast<DWORD>(strlen(json));
     if (!WriteFile(hPipe, json, expected, &written, nullptr) || written != expected)
     {
-        Log("[%s] SendRuleLoadResult: WriteFile failed GLE=%lu written=%lu expected=%lu",
-            ModuleName(), GetLastError(), written, expected);
+        LogWithSeverity(RaspDiagSeverity::Warning, "SendRuleLoadResult: WriteFile failed GLE=%lu written=%lu expected=%lu", GetLastError(), written, expected);
     }
     CloseHandle(hPipe);
 }
@@ -887,7 +960,11 @@ std::string RaspSentryBase::ActiveEffectiveSnapshotHash() const
     std::lock_guard<std::mutex> lock(m_ruleMetadataMutex);
     return m_activeEffectiveSnapshotHash;
 }
-// =========================================================================
+
+/**
+ * 新增日志添加进程信息
+ * @param input
+ */
 void RaspSentryBase::FillDiagnosticLogContext(LegacyDiagJsonBuildInput& input) const
 {
     DWORD pid = GetCurrentProcessId();
@@ -922,12 +999,11 @@ DWORD WINAPI RaspSentryBase::LogForwardThreadProc(LPVOID param)
 
             LegacyDiagJsonBuildInput input;
             input.id = SentryGenerateEventId();
-            input.timestamp = SentryUtcTimestamp();
+            input.timestamp = LocalCompactTimestamp();
             input.module = self->ModuleName();
-            input.pattern = self->LogEventPattern();
             input.message = entryText;
             input.severity = entrySeverity;
-            self->FillDiagnosticLogContext(input);
+            self->FillDiagnosticLogContext(input);  // 填充信息
 
             LegacyDiagJsonBuildResult built = LegacyDiagJsonBuilder().Build(input);
             const std::string& compactJson = built.compactJson;
@@ -972,8 +1048,7 @@ DWORD WINAPI RaspSentryBase::HostLivenessThreadProc(LPVOID param)
 
             const bool wasAlive = self->m_hostAlive.exchange(true, std::memory_order_acq_rel);
             if (!wasAlive) {
-                self->Log("[%s] Host rule pipe visible again, waiting active rule poll/reload before detection resumes",
-                          self->ModuleName());
+                self->Log("Host rule pipe visible again, waiting active rule poll/reload before detection resumes");
             }
 
             self->SleepHostLivenessInterruptible(self->m_probeIntervalMs);
@@ -984,8 +1059,7 @@ DWORD WINAPI RaspSentryBase::HostLivenessThreadProc(LPVOID param)
             firstFailureTick = now;
             if (!graceLogged) {
                 self->LogWithSeverity(RaspDiagSeverity::Debug,
-                                      "[%s] Host liveness probe failed, entering grace period",
-                                      self->ModuleName());
+                                      "Host liveness probe failed, entering grace period");
                 graceLogged = true;
             }
         }
@@ -1002,8 +1076,7 @@ DWORD WINAPI RaspSentryBase::HostLivenessThreadProc(LPVOID param)
 
             if (!lostLogged) {
                 self->LogWithSeverity(RaspDiagSeverity::Warning,
-                                      "[%s] Host liveness lost, pause AMSI detection until host reload/resume",
-                                      self->ModuleName());
+                                      "Host liveness lost, pause AMSI detection until host reload/resume");
                 lostLogged = true;
             }
         }
@@ -1024,8 +1097,7 @@ DWORD WINAPI RaspSentryBase::HostLivenessThreadProc(LPVOID param)
 DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
 {
     auto* self = static_cast<RaspSentryBase*>(param);
-    self->Log("[%s] RulePollThread: started - retry=%lums interval=%lums",
-              self->ModuleName(), self->m_rulePollRetryIntervalMs, self->m_rulePollIntervalMs);
+    self->LogWithSeverity(RaspDiagSeverity::Debug,"RulePollThread: started - retry=%lums interval=%lums", self->m_rulePollRetryIntervalMs, self->m_rulePollIntervalMs);
 
     while (self->m_running.load(std::memory_order_acquire))
     {
@@ -1051,8 +1123,7 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
         RuleBundleMetadata requestedMetadata;
         if (!self->ConnectSentry(json, lib, requestedMetadata)) {
             if (!self->IsRuleSnapshotReady()) {
-                self->Log("[%s] RulePollThread: host/rules unavailable - detection remains bypassed",
-                          self->ModuleName());
+                self->Log("RulePollThread: host/rules unavailable - detection remains bypassed");
             }
             continue;
         }
@@ -1080,8 +1151,7 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
             if (self->m_hostDetectionPaused.load(std::memory_order_acquire)) {
                 self->MarkDetectionPausedByHostState(false);
                 self->MarkWaitingResumeAfterHostLost(false);
-                self->Log("[%s] RulePollThread: host running with current rules - detection resumed",
-                          self->ModuleName());
+                self->Log("RulePollThread: host running with current rules - detection resumed");
             }
             continue;
         }
@@ -1092,8 +1162,7 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
             self->MarkRuleSnapshotReady(true);
             self->MarkDetectionPausedByHostState(false);
             self->MarkWaitingResumeAfterHostLost(false);
-            self->Log("[%s] RulePollThread: rules loaded version=%s hash=%s - detection resumed",
-                      self->ModuleName(), requestedMetadata.version.c_str(), requestedMetadata.hash.c_str());
+            self->Log("RulePollThread: rules loaded version=%s hash=%s - detection resumed", requestedMetadata.version.c_str(), requestedMetadata.hash.c_str());
             self->SendRuleLoadResult(true, 0, "", requestedMetadata);
             continue;
         }
@@ -1102,12 +1171,11 @@ DWORD WINAPI RaspSentryBase::SentryRetryThreadProc(LPVOID param)
         self->MarkDetectionPausedByHostState(true);
         self->MarkWaitingResumeAfterHostLost(true);
         self->LogWithSeverity(RaspDiagSeverity::Warning,
-                              "[%s] RulePollThread: rule load failed - detection remains bypassed",
-                              self->ModuleName());
+                              "RulePollThread: rule load failed - detection remains bypassed");
         self->SendRuleLoadResult(false, 3, "active rule poll load failed", requestedMetadata);
     }
 
-    self->Log("[%s] RulePollThread: exiting", self->ModuleName());
+    self->Log("RulePollThread: exiting");
     return 0;
 }
 // =========================================================================
@@ -1140,7 +1208,7 @@ void RaspSentryBase::Initialize()
     // (IIS7 and AMSI both set the proxy before calling base Initialize via
     //  the existing pattern see their OnBeginInit hooks.)
 
-    Log("[%s] Initialize: starting - all config via rasp_sentry IPC", ModuleName());
+    LogWithSeverity(RaspDiagSeverity::Debug,"Initialize: starting - all config via sentry IPC");
 
     std::string json, lib;
     RuleBundleMetadata requestedMetadata;
@@ -1156,7 +1224,7 @@ void RaspSentryBase::Initialize()
         MarkRuleSnapshotReady(true);
         MarkDetectionPausedByHostState(false);
         MarkWaitingResumeAfterHostLost(false);
-        Log("[%s] Initialize: rules loaded from sentry", ModuleName());
+        LogWithSeverity(RaspDiagSeverity::Debug, "Initialize: rules loaded from sentry");
         SendRuleLoadResult(true, 0, "", requestedMetadata);
     }
     else
@@ -1169,15 +1237,13 @@ void RaspSentryBase::Initialize()
                            connected ? 3 : 1,
                            connected ? "initial rule load failed" : "rules pipe unavailable",
                            requestedMetadata);
-        Log("[%s] Initialize: sentry unavailable - pass-through; active rule polling will retry",
-            ModuleName());
+        Log("Initialize: sentry unavailable - pass-through; active rule polling will retry");
     }
 
     m_retryThread = CreateThread(nullptr, 0, SentryRetryThreadProc, this, 0, nullptr);
     if (m_retryThread == INVALID_HANDLE_VALUE || m_retryThread == nullptr) {
         LogWithSeverity(RaspDiagSeverity::Warning,
-                        "[%s] Initialize: failed to start active rule poll thread GLE=%lu",
-                        ModuleName(), GetLastError());
+                        "Initialize: failed to start active rule poll thread GLE=%lu", GetLastError());
         m_retryThread = INVALID_HANDLE_VALUE;
     }
     m_hostLivenessThread = CreateThread(nullptr, 0, HostLivenessThreadProc, this, 0, nullptr);
@@ -1187,13 +1253,12 @@ void RaspSentryBase::Initialize()
         MarkDetectionPausedByHostState(true);
         MarkWaitingResumeAfterHostLost(true);
         LogWithSeverity(RaspDiagSeverity::Warning,
-                        "[%s] Initialize: failed to start host liveness watcher GLE=%lu - detection paused",
-                        ModuleName(), GetLastError());
+                        "Initialize: failed to start host liveness watcher GLE=%lu - detection paused", GetLastError());
         m_hostLivenessThread = INVALID_HANDLE_VALUE;
     }
     m_logThread    = CreateThread(nullptr, 0, LogForwardThreadProc,  this, 0, nullptr);
 
-    Log("[%s] Initialize: RulePollThread + HostLivenessThread + LogForwardThread started", ModuleName());
+    LogWithSeverity(RaspDiagSeverity::Debug,"Initialize: RulePollThread + HostLivenessThread + LogForwardThread started");
 }
 
 void RaspSentryBase::Shutdown()

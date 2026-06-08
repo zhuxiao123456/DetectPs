@@ -67,7 +67,6 @@ protected:
     void OnResumeDetectionSignal() override;
 
     const char* ModuleName()      const override { return "hss_amsi"; }
-    const char* LogEventPattern() const override { return "amsi-log"; }
     size_t ActiveRuleCountForStatus() const override;
     void FillDiagnosticLogContext(LegacyDiagJsonBuildInput& input) const override;
 

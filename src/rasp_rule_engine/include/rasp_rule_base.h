@@ -6,9 +6,9 @@
 
 #pragma once
 // =========================================================================
-// rasp_rule_base.h â€” Shared base rule struct for all RASP native modules.
+// rasp_rule_base.h ¡ª Shared base rule struct for all RASP native modules.
 //
-// All per-module rule types (Iis7RaspRuleConfig, AmsiRaspRuleConfig, â€¦)
+// All per-module rule types (Iis7RaspRuleConfig, AmsiRaspRuleConfig, ¡­)
 // derive from RaspRuleBase.  Common fields live here so rasp_sentry_base
 // can parse them once without knowing module-specific extensions.
 // =========================================================================
@@ -16,9 +16,9 @@
 #include <string>
 #include <vector>
 
-// â”€â”€ RaspRuleMode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ RaspRuleMode ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 // Replaces the three mutually-exclusive bool flags in the old RaspRuleConfig
-// (blockMode / auditMode / offMode) and the AmsiRuleMode enum â€” one enum
+// (blockMode / auditMode / offMode) and the AmsiRuleMode enum ¡ª one enum
 // for both modules.
 enum class RaspRuleMode {
     Off = 0, Audit = 1, Block = 2
@@ -28,26 +28,26 @@ enum class RaspGlobalMode {
     Block = 0, Audit = 1
 };
 
-// â”€â”€ RegexCondition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ RegexCondition ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 // Controls how multiple regexChecks are combined:
-//   Any â€” gate passes when at least one check matches (OR semantics, default).
-//   All â€” gate passes only when every check matches (AND semantics).
+//   Any ¡ª gate passes when at least one check matches (OR semantics, default).
+//   All ¡ª gate passes only when every check matches (AND semantics).
 enum class RegexCondition {
     Any = 0, All = 1
 };
 
-// â”€â”€ RegexCheck â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ RegexCheck ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 // One named check inside a regexChecks array.
-//   id       â€” æ£€æŸ¥é¡¹æ ‡è¯†ç¬¦ï¼Œæš´éœ²ç»™ Lua ä½œä¸º context.regex_matches[i]
-//   field    â€” è¦åŒ¹é…çš„å­—æ®µï¼Œç©ºå­—ç¬¦ä¸² â†’ ä½¿ç”¨ä¼ æ„Ÿå™¨é»˜è®¤å­—æ®µ
-//   patterns â€” PCRE2 æ­£åˆ™è¡¨è¾¾å¼æ¨¡å¼æ•°ç»„ï¼ŒOR è¯­ä¹‰ï¼ˆé¦–ä¸ªåŒ¹é…å³è§¦å‘æ£€æŸ¥ï¼‰
+//   id       ¡ª ¼ì²éÏî±êÊ¶·û£¬±©Â¶¸ø Lua ×÷Îª context.regex_matches[i]
+//   field    ¡ª ÒªÆ¥ÅäµÄ×Ö¶Î£¬¿Õ×Ö·û´® ¡ú Ê¹ÓÃ´«¸ĞÆ÷Ä¬ÈÏ×Ö¶Î
+//   patterns ¡ª PCRE2 ÕıÔò±í´ïÊ½Ä£Ê½Êı×é£¬OR ÓïÒå£¨Ê×¸öÆ¥Åä¼´´¥·¢¼ì²é£©
 struct RegexCheck {
     std::string id;
     std::string field;
     std::vector <std::string> patterns;
 };
 
-// â”€â”€ RaspRuleBase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ©¤©¤ RaspRuleBase ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
 // Fields common to every rule in every module.
 // Module-specific fields live in derived structs: <Module>RaspRuleConfig.
 struct RaspRuleBase {
@@ -60,23 +60,23 @@ struct RaspRuleBase {
     std::string scriptBodyBase64;                // cleared after Precompile
     std::string scriptEncoding;                  // "" / "source" (default) / "bytecode"
     std::string scriptEval;                      // "exclusive" | "additional"
-    int confidence;  // è®¾ç½®ç½®ä¿¡åº¦
+    int confidence;  // ÉèÖÃÖÃĞÅ¶È
     int scriptTimeoutInstructions = 500000; // scriptTimeoutMs * 50000; min 500000
 
-    // â”€â”€ Legacy single-field regex (config.regexField + config.regexPatterns) â”€â”€
+    // ©¤©¤ Legacy single-field regex (config.regexField + config.regexPatterns) ©¤©¤
     // Fires the rule immediately on first pattern match; Lua is not invoked.
-    // regexField: field to match ("body", "url", "ua", â€¦); empty â†’ sensor default.
+    // regexField: field to match ("body", "url", "ua", ¡­); empty ¡ú sensor default.
     // regexPatterns: PCRE2 patterns tested in order (OR semantics).
     std::string regexField;
     std::vector <std::string> regexPatterns;
 
-    // â”€â”€ Multi-check regex gate (config.regexChecks + config.regexCondition) â”€â”€
+    // ©¤©¤ Multi-check regex gate (config.regexChecks + config.regexCondition) ©¤©¤
     // Acts as a named pre-filter: gate must pass before Lua runs (or fires directly
     // if no script is configured).  Matched check IDs are exposed to Lua as
     // context.regex_matches so scripts can branch on which checks fired.
     // regexChecks:    array of {id, field, patterns} checks.
     // regexCondition: Any (OR, default) or All (AND).
-    std::vector <RegexCheck> regexChecks;  // æ­£åˆ™è¡¨è¾¾å¼
+    std::vector <RegexCheck> regexChecks;  // ÕıÔò±í´ïÊ½
     RegexCondition regexCondition = RegexCondition::Any;
 
     bool IsOff() const { return mode == RaspRuleMode::Off; }

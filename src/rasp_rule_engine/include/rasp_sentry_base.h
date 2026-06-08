@@ -213,8 +213,7 @@ protected:
     virtual void OnPauseDetectionSignal() {}
     virtual void OnResumeDetectionSignal() {}
 
-    virtual const char* ModuleName()      const = 0; // e.g. "rasp_mod_iis7"
-    virtual const char* LogEventPattern() const = 0; // e.g. "iis7-log"
+    virtual const char* ModuleName()      const = 0;
     virtual size_t ActiveRuleCountForStatus() const { return 0; }
 
 private:

@@ -26,35 +26,35 @@
 
 namespace {
 
-constexpr uint32_t kLuaHookInstructionStep = 1000;
-constexpr const char* kLuaBudgetRegistryKey = "rasp_scan_budget";
+    constexpr uint32_t kLuaHookInstructionStep = 1000;
+    constexpr const char* kLuaBudgetRegistryKey = "rasp_scan_budget";
 
-bool IsLua54BytecodePayload(const std::string& payload)
-{
-    static const unsigned char kLua54Magic[] = {0x1b, 'L', 'u', 'a', 0x54};
-    return payload.size() >= sizeof(kLua54Magic) &&
-           std::memcmp(payload.data(), kLua54Magic, sizeof(kLua54Magic)) == 0;
-}
-
-struct LuaBytecodeReader
-{
-    const char* data = nullptr;
-    size_t size = 0;
-    bool consumed = false;
-};
-
-const char* ReadLuaBytecode(lua_State*, void* userData, size_t* size)
-{
-    auto* reader = static_cast<LuaBytecodeReader*>(userData);
-    if (!reader || reader->consumed) {
-        *size = 0;
-        return nullptr;
+    bool IsLua54BytecodePayload(const std::string& payload)
+    {
+        static const unsigned char kLua54Magic[] = {0x1b, 'L', 'u', 'a', 0x54};
+        return payload.size() >= sizeof(kLua54Magic) &&
+               std::memcmp(payload.data(), kLua54Magic, sizeof(kLua54Magic)) == 0;
     }
 
-    reader->consumed = true;
-    *size = reader->size;
-    return reader->data;
-}
+    struct LuaBytecodeReader
+    {
+        const char* data = nullptr;
+        size_t size = 0;
+        bool consumed = false;
+    };
+
+    const char* ReadLuaBytecode(lua_State*, void* userData, size_t* size)
+    {
+        auto* reader = static_cast<LuaBytecodeReader*>(userData);
+        if (!reader || reader->consumed) {
+            *size = 0;
+            return nullptr;
+        }
+
+        reader->consumed = true;
+        *size = reader->size;
+        return reader->data;
+    }
 
 } // namespace
 
@@ -197,7 +197,7 @@ void LogRegexFailure(const RaspLuaEngine* engine,
 
     char msg[512];
     snprintf(msg, sizeof(msg),
-             "[RaspLuaEngine] regex failure api=%s rc=%d error=%s subjectLen=%zu regexCalls=%u timedOut=%d reason=%s limitType=%s pattern=%s",
+             "[AmsiLuaEngine] regex failure api=%s rc=%d error=%s subjectLen=%zu regexCalls=%u timedOut=%d reason=%s limitType=%s pattern=%s",
              api ? api : "unknown",
              rc,
              RegexErrorName(rc),
@@ -241,7 +241,7 @@ pcre2_real_code_8 *RaspLuaEngine::GetOrCompilePcre2(const std::string &pattern) 
         pcre2_get_error_message(errcode, errbuf, sizeof(errbuf));
         char msg[512];
         snprintf(msg, sizeof(msg),
-                 "[RaspLuaEngine] regex compile error at offset %zu: %s  pattern=%s\n",
+                 "[AmsiLuaEngine] regex compile error at offset %zu: %s  pattern=%s\n",
                  (size_t)erroffset,
                  reinterpret_cast<const char *>(errbuf),
                  pattern.c_str());
@@ -331,9 +331,16 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
     }
     return false;
 }
-// Lua C functions: regex_match / regex_capture
+
+// ── Lua C functions: regex_match / regex_capture ──────────────────────────────
+/*
+ * 功能：注册到 Lua 内部的全局函数（供 Lua 脚本调用）。
+ * 流程：通过 LUA_REGISTRYINDEX 获取当前引擎的指针 -> 取出 Lua 栈中的参数（pattern, text）-> 调用 pcre2_match
+ * 关键安全设计：强制设置 pcre2_set_match_limit(mctx, 500000) 限制回溯步数 -> 返回结果给 Lua 栈。
+ * */
 static int lua_pcre2_match(lua_State *L)
 {
+    // regex_match(pattern, text) → boolean
     const char *pattern = luaL_checkstring(L, 1);
     size_t textLen = 0;
     const char *text = luaL_checklstring(L, 2, &textLen);
@@ -388,8 +395,10 @@ static int lua_pcre2_match(lua_State *L)
     lua_pushboolean(L, rc >= 0 ? 1 : 0);
     return 1;
 }
+
 static int lua_pcre2_capture(lua_State *L)
 {
+    // regex_capture(pattern, text) → string (first capture group) | nil
     const char *pattern = luaL_checkstring(L, 1);
     size_t textLen = 0;
     const char *text = luaL_checklstring(L, 2, &textLen);
@@ -545,7 +554,7 @@ void RaspLuaEngine::Precompile(const std::string &ruleId,
         if (!IsLua54BytecodePayload(payload)) {
             char msg[256];
             snprintf(msg, sizeof(msg),
-                     "[RaspLuaEngine] Precompile: rule=%s bytecode header invalid\n",
+                     "[AmsiLuaEngine] Precompile: rule=%s bytecode header invalid\n",
                      ruleId.c_str());
             Log(msg);
             return;
@@ -557,7 +566,7 @@ void RaspLuaEngine::Precompile(const std::string &ruleId,
         }
 
         char msg[256];
-        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Precompile: rule=%s bytecode cached (%zu bytes)\n",
+        snprintf(msg, sizeof(msg), "[AmsiLuaEngine] Precompile: rule=%s bytecode cached (%zu bytes)\n",
                  ruleId.c_str(), payload.size());
         Log(msg);
         return;
@@ -568,7 +577,7 @@ void RaspLuaEngine::Precompile(const std::string &ruleId,
     if (!L)
     {
         char msg[256];
-        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Precompile: luaL_newstate failed rule=%s\n",
+        snprintf(msg, sizeof(msg), "[AmsiLuaEngine] Precompile: luaL_newstate failed rule=%s\n",
                  ruleId.c_str());
         Log(msg);
         return;
@@ -579,7 +588,7 @@ void RaspLuaEngine::Precompile(const std::string &ruleId,
     {
         const char *err = lua_tostring(L, -1);
         char msg[512];
-        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Precompile: rule=%s syntax error: %s\n",
+        snprintf(msg, sizeof(msg), "[AmsiLuaEngine] Precompile: rule=%s syntax error: %s\n",
                  ruleId.c_str(), err ? err : "(null)");
         Log(msg);
         lua_close(L);
@@ -595,7 +604,7 @@ void RaspLuaEngine::Precompile(const std::string &ruleId,
     }
 
     char msg[256];
-    snprintf(msg, sizeof(msg), "[RaspLuaEngine] Precompile: rule=%s cached (%zu bytes)\n",
+    snprintf(msg, sizeof(msg), "[AmsiLuaEngine] Precompile: rule=%s cached (%zu bytes)\n",
              ruleId.c_str(), payload.size());
     Log(msg);
 }
@@ -619,12 +628,12 @@ void RaspLuaEngine::Reset()
 // ── RaspLuaEngine::Run ────────────────────────────────────────────────────────
 
 RaspLuaResult RaspLuaEngine::Run(
-    const std::string &ruleId,
-    const std::string &sensorName,
-    const RaspLuaContext &ctx,
-    int timeoutInstructions,
-    const std::vector<std::string> &matchedCheckIds,
-    ScanExecutionContext *exec)
+        const std::string &ruleId,
+        const std::string &sensorName,
+        const RaspLuaContext &ctx,
+        int timeoutInstructions,
+        const std::vector<std::string> &matchedCheckIds,
+        ScanExecutionContext *exec)
 {
     RaspLuaResult result;
 
@@ -655,8 +664,8 @@ RaspLuaResult RaspLuaEngine::Run(
 
     // ── Phase 2: 不安全的函数设置为nil(严格沙箱化) ───────────────────────────────────────
     const char *unsafe[] = {
-        "dofile", "loadfile", "require",
-        "collectgarbage", "rawset", "io", "os", "package", nullptr};
+            "dofile", "loadfile", "require",
+            "collectgarbage", "rawset", "io", "os", "package", nullptr};
     for (int k = 0; unsafe[k]; k++)
     {
         lua_pushnil(L);
@@ -705,7 +714,7 @@ RaspLuaResult RaspLuaEngine::Run(
     {
         const char *err = lua_tostring(L, -1);
         char msg[512];
-        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s load(%s): %s\n",
+        snprintf(msg, sizeof(msg), "[AmsiLuaEngine] Run: rule=%s load(%s): %s\n",
                  ruleId.c_str(), isBytecode ? "bytecode" : "source", err ? err : "(null)");
         Log(msg);
         ClearLuaBudgetHook(L);
@@ -716,7 +725,7 @@ RaspLuaResult RaspLuaEngine::Run(
     {
         const char *err = lua_tostring(L, -1);
         char msg[512];
-        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s chunk exec: %s\n",
+        snprintf(msg, sizeof(msg), "[AmsiLuaEngine] Run: rule=%s chunk exec: %s\n",
                  ruleId.c_str(), err ? err : "(null)");
         Log(msg);
         if (exec && exec->timedOut) {
@@ -733,7 +742,7 @@ RaspLuaResult RaspLuaEngine::Run(
     if (lua_type(L, -1) != LUA_TFUNCTION)
     {
         char msg[256];
-        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s 'rule' is not a function\n",
+        snprintf(msg, sizeof(msg), "[AmsiLuaEngine] Run: rule=%s 'rule' is not a function\n",
                  ruleId.c_str());
         Log(msg);
         ClearLuaBudgetHook(L);
@@ -789,7 +798,7 @@ RaspLuaResult RaspLuaEngine::Run(
     {
         const char *err = lua_tostring(L, -1);
         char msg[512];
-        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s call error: %s\n",
+        snprintf(msg, sizeof(msg), "[AmsiLuaEngine] Run: rule=%s call error: %s\n",
                  ruleId.c_str(), err ? err : "(null)");
         Log(msg);
         if (exec && exec->timedOut) {
@@ -822,7 +831,7 @@ RaspLuaResult RaspLuaEngine::Run(
     if (result.matched)
     {
         char msg[512];
-        snprintf(msg, sizeof(msg), "[RaspLuaEngine] Run: rule=%s MATCH desc=%s\n",
+        snprintf(msg, sizeof(msg), "[AmsiLuaEngine] Run: rule=%s MATCH desc=%s\n",
                  ruleId.c_str(), result.desc.c_str());
         Log(msg);
     }
