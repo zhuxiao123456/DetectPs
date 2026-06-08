@@ -8,44 +8,44 @@
 
 namespace {
 
-std::unique_ptr<AmsiRuleEngine> DefaultEngineFactory()
-{
-    return std::unique_ptr<AmsiRuleEngine>(new(std::nothrow) AmsiRuleEngine());
-}
-
-bool DefaultEngineInitializer(AmsiRuleEngine& engine)
-{
-    engine.Initialize();
-    return true;
-}
-
-void EmitRuntimeLog(AmsiRuleEngine* engine, RaspDiagSeverity severity, const char* msg)
-{
-    if (engine) {
-        engine->LogWithSeverity(severity, "%s", msg ? msg : "");
-        return;
+    std::unique_ptr<AmsiRuleEngine> DefaultEngineFactory()
+    {
+        return std::unique_ptr<AmsiRuleEngine>(new(std::nothrow) AmsiRuleEngine());
     }
 
+    bool DefaultEngineInitializer(AmsiRuleEngine& engine)
+    {
+        engine.Initialize();
+        return true;
+    }
+
+    void EmitRuntimeLog(AmsiRuleEngine* engine, RaspDiagSeverity severity, const char* msg)
+    {
+        if (engine) {
+            engine->LogWithSeverity(severity, "%s", msg ? msg : "");
+        }
+
 #ifdef _DEBUG
-    if (msg)
-        OutputDebugStringA(msg);
+        if (msg) {
+            OutputDebugStringA(msg);
+        }
 #endif
-}
+    }
 
 } // namespace
 
 const char* EngineStateName(EngineState state)
 {
     switch (state) {
-    case EngineState::Uninitialized: return "Uninitialized";
-    case EngineState::Initializing:  return "Initializing";
-    case EngineState::Ready:         return "Ready";
-    case EngineState::Reloading:     return "Reloading";
-    case EngineState::Stopping:      return "Stopping";
-    case EngineState::Inert:         return "Inert";
-    case EngineState::Stopped:       return "Stopped";
-    case EngineState::Faulted:       return "Faulted";
-    default:                         return "Unknown";
+        case EngineState::Uninitialized: return "Uninitialized";
+        case EngineState::Initializing:  return "Initializing";
+        case EngineState::Ready:         return "Ready";
+        case EngineState::Reloading:     return "Reloading";
+        case EngineState::Stopping:      return "Stopping";
+        case EngineState::Inert:         return "Inert";
+        case EngineState::Stopped:       return "Stopped";
+        case EngineState::Faulted:       return "Faulted";
+        default:                         return "Unknown";
     }
 }
 
@@ -129,6 +129,8 @@ EngineRuntime::~EngineRuntime()
 
 bool EngineRuntime::EnsureInitialized()
 {
+    AmsiRuleEngine* earlyLogEngine = nullptr;
+    const char* earlyLogMsg = nullptr;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         if (m_state == EngineState::Ready || m_state == EngineState::Reloading)
@@ -136,11 +138,22 @@ bool EngineRuntime::EnsureInitialized()
         if (m_state == EngineState::Inert ||
             m_state == EngineState::Stopping ||
             m_state == EngineState::Stopped ||
-            m_state == EngineState::Faulted)
-            return false;
-        if (m_state == EngineState::Initializing)
-            return false;
-        SetStateLocked(EngineState::Initializing, "ensure_initialized");
+            m_state == EngineState::Faulted) {
+                earlyLogEngine = m_engine.get();
+                earlyLogMsg = EngineStateName(m_state);
+        } else if (m_state == EngineState::Initializing) {
+                earlyLogEngine = m_engine.get();
+                earlyLogMsg = "Initializing";
+        } else {
+            SetStateLocked(EngineState::Initializing, "ensure_initialized");
+        }
+    }
+
+    if (earlyLogMsg != nullptr) {
+        char buf[256];
+        snprintf(buf, sizeof(buf), "[AMSI:Scan] Engine not available, state(%s)", earlyLogMsg);
+        EmitRuntimeLog(earlyLogEngine, RaspDiagSeverity::Debug, buf);
+        return false;
     }
 
     std::unique_ptr<AmsiRuleEngine> engine = m_factory ? m_factory() : nullptr;
@@ -189,8 +202,9 @@ ScanGuard EngineRuntime::TryEnterScan()
         if (emit && m_lastScanRejectTelemetryTick.compare_exchange_strong(last, now)) {
             uint64_t suppressed = m_suppressedScanRejectTelemetry.exchange(0);
             char msg[320];
+            // engine未ready,正在inert/stopping/faulted、检测暂停、host lost、规则未ready、策略旁路
             snprintf(msg, sizeof(msg),
-                     "telemetry event=scan_enter_rejected state=%s detail=%s active=%ld suppressed=%llu tid=%lu\n",
+                     "telemetry event=scan_enter_rejected state=%s detail=%s active=%ld suppressed=%llu tid=%lu",
                      EngineStateName(rejectedState), EngineStateName(rejectedState),
                      active, static_cast<unsigned long long>(suppressed), GetCurrentThreadId());
             EmitRuntimeLog(logEngine, RaspDiagSeverity::Debug, msg);
@@ -247,7 +261,7 @@ ReloadGuard EngineRuntime::TryEnterReload(const char* reason)
 
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "[RaspAmsi] telemetry event=reload_rejected state=%s detail=%s active=%ld tid=%lu\n",
+             "telemetry event=reload_rejected state=%s detail=%s active=%ld tid=%lu",
              EngineStateName(rejectedState), EngineStateName(rejectedState),
              ActiveScanCount(), GetCurrentThreadId());
     EmitRuntimeLog(logEngine, RaspDiagSeverity::Warning, msg);
@@ -268,9 +282,11 @@ bool EngineRuntime::BeginShutdown(const char* reason, DWORD drainTimeoutMs)
 
     bool drained = WaitForActiveScansToDrain(drainTimeoutMs);
     if (!drained) {
-        LogWithSeverity(RaspDiagSeverity::Warning,
-                        "[RaspAmsi] telemetry shutdown_drain_timeout active=%ld",
-                        ActiveScanCount());
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "telemetry shutdown_drain_timeout active=%ld",
+                 ActiveScanCount());
+        EmitRuntimeLog(engine, RaspDiagSeverity::Warning, buf);
         EnterInert("shutdown_drain_timeout");
         return false;
     }
@@ -287,9 +303,9 @@ bool EngineRuntime::WaitForActiveScansToDrain(DWORD timeoutMs)
     if (timeoutMs == 0)
         return m_activeScans.load() == 0;
     return m_scanDrained.wait_for(
-        lock,
-        std::chrono::milliseconds(timeoutMs),
-        [this]() { return m_activeScans.load() == 0; });
+            lock,
+            std::chrono::milliseconds(timeoutMs),
+            [this]() { return m_activeScans.load() == 0; });
 }
 
 void EngineRuntime::EnterInert(const char* reason)
@@ -334,7 +350,7 @@ void EngineRuntime::EmitTelemetry(const char* event, const char* detail) const
 
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "[RaspAmsi] telemetry event=%s state=%s detail=%s active=%ld tid=%lu\n",
+             "telemetry event=%s state=%s detail=%s active=%ld tid=%lu",
              event ? event : "", EngineStateName(state), detail ? detail : "",
              active, GetCurrentThreadId());
     EmitRuntimeLog(engine, RaspDiagSeverity::Info, msg);
@@ -437,7 +453,7 @@ void EngineRuntime::SetStateLocked(EngineState next, const char* reason)
 
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "[RaspAmsi] telemetry state_transition old=%s new=%s reason=%s active=%ld\n",
+             "telemetry state_transition old=%s new=%s reason=%s active=%ld",
              EngineStateName(old), EngineStateName(next),
              reason ? reason : "", m_activeScans.load());
     EmitRuntimeLog(m_engine.get(), RaspDiagSeverity::Debug, msg);

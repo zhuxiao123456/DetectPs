@@ -1,4 +1,4 @@
-﻿// =========================================================================
+// =========================================================================
 // amsi_provider.cpp - IAntimalwareProvider implementation
 // =========================================================================
 
@@ -40,33 +40,6 @@ IFACEMETHODIMP_(ULONG) CRaspAmsiProvider::Release() {
     return r;
 }
 
-static void LogAmsiScanContent(const char* content, ULONG len)
-{
-    EngineRuntime& runtime = GetAmsiEngineRuntime();
-
-    runtime.LogWithSeverity(RaspDiagSeverity::Debug, "[AMSI:ScanContent] len=%lu begin", len);
-
-    if (!content || len == 0) {
-        runtime.LogWithSeverity(RaspDiagSeverity::Debug, "[AMSI:ScanContent] empty");
-        return;
-    }
-
-    const ULONG maxDump = min(len, 4096UL);
-    const ULONG chunkSize = 700; // EngineRuntime::Log buffer is 1024 bytes; avoid truncation.
-
-    for (ULONG offset = 0; offset < maxDump; offset += chunkSize) {
-        ULONG n = min(chunkSize, maxDump - offset);
-        std::string chunk(content + offset, content + offset + n);
-        runtime.LogWithSeverity(RaspDiagSeverity::Debug, "[AMSI:ScanContent] offset=%lu data=%s", offset, chunk.c_str());
-    }
-
-    if (len > maxDump) {
-        runtime.LogWithSeverity(RaspDiagSeverity::Debug, "[AMSI:ScanContent] truncated originalLen=%lu dumped=%lu", len, maxDump);
-    }
-
-    runtime.LogWithSeverity(RaspDiagSeverity::Debug, "[AMSI:ScanContent] end");
-}
-
 IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result) {
     if (!result)
         return E_POINTER;
@@ -75,24 +48,19 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
 
     if (!stream) {
         GetAmsiEngineRuntime().LogWithSeverity(RaspDiagSeverity::Warning,
-            "[AMSI:Scan] Stream not ready");
-        OutputDebugStringA("[AMSI:Scan] Stream not ready\n");
+                                               "[AMSI:Scan] Stream not ready");
         return S_OK;
     }
 
     EngineRuntime& runtime = GetAmsiEngineRuntime();
     if (!runtime.EnsureInitialized()) {
-        // Runtime initialization failed before the engine/log transport is available.
-        // Keep debugger output here; exe-side diag logging starts after the engine exists.
-        OutputDebugStringA("[AMSI:Scan] Engine not available\n");
         return S_OK;
     }
 
     ScanGuard scan = runtime.TryEnterScan();
     if (!scan.IsActive() || !scan.Engine()) {
         runtime.LogWithSeverity(RaspDiagSeverity::Debug,
-            "[AMSI:Scan] runtime rejected scan - pass-through");
-        OutputDebugStringA("[AMSI:Scan] runtime rejected scan - pass-through\n");
+                                "[AMSI:Scan] runtime rejected scan - pass-through");
         return S_OK;
     }
 
@@ -115,7 +83,7 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
                          static_cast<ULONG>(sizeof(contentSize)),
                          reinterpret_cast<PBYTE>(&contentSize), &cbOut);
 
-    char sample[64*1024] = {};
+    char sample[1024] = {};
     ULONG sampleRead = 0;
 
     PVOID contentAddr = nullptr;
@@ -130,15 +98,9 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
     } else {
         HRESULT hrRead = stream->Read(0, static_cast<ULONG>(sizeof(sample) - 1),
                                       reinterpret_cast<unsigned char *>(sample), &sampleRead);
-        char dbgRead[128];
-        sprintf_s(dbgRead, "[AMSI:Scan] content via Read hr=0x%08X read=%lu\n",
-                  static_cast<unsigned>(hrRead), sampleRead);
         runtime.LogWithSeverity(RaspDiagSeverity::Debug,
-            "[AMSI:Scan] content via Read hr=0x%08X read=%lu",
-            static_cast<unsigned>(hrRead), sampleRead);
-#ifdef _DEBUG
-        OutputDebugStringA(dbgRead);
-#endif
+                                "[AMSI:Scan] content via Read hr=0x%08X read=%lu",
+                                static_cast<unsigned>(hrRead), sampleRead);
     }
 
     if (sampleRead < static_cast<ULONG>(sizeof(sample)))
@@ -146,7 +108,7 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
 
     const char *evalSample = sample;
     ULONG evalLen = sampleRead;
-    char narrowBuf[64*1024] = {};
+    char narrowBuf[1024] = {};
 
     if (sampleRead >= 4) {
         bool hasBom = (static_cast<unsigned char>(sample[0]) == 0xFF &&
@@ -176,16 +138,9 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
     }
 
     {
-        char dbgSize[256];
-        sprintf_s(dbgSize, "[AMSI:Scan] contentSize=%llu sampleRead=%lu evalLen=%lu\n",
-                  contentSize, sampleRead, evalLen);
         runtime.LogWithSeverity(RaspDiagSeverity::Debug,
-            "[AMSI:Scan] contentSize=%llu sampleRead=%lu evalLen=%lu",
-            contentSize, sampleRead, evalLen);
-        LogAmsiScanContent(evalSample, evalLen);
-#ifdef _DEBUG
-        OutputDebugStringA(dbgSize);
-#endif
+                                "[AMSI:Scan] contentSize=%llu sampleRead=%lu evalLen=%lu",
+                                contentSize, sampleRead, evalLen);
     }
 
     const ProcessContextSnapshot& process = GetProcessContextProvider().GetSnapshot();
@@ -194,13 +149,6 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
     scanContext.emitProcessPathFields = false;
 
     AmsiEvalResult eval = engine->Evaluate(contentName, appName, evalSample, evalLen, scanContext);
-    if (eval.ruleMatched) {
-        runtime.LogWithSeverity(RaspDiagSeverity::Debug,
-            "[AMSI:Scan] rule matched - event already sent by engine");
-#ifdef _DEBUG
-        OutputDebugStringA("[AMSI:Scan] rule matched - event already sent by engine\n");
-#endif
-    }
     if (eval.block)
         *result = AMSI_RESULT_DETECTED;
 

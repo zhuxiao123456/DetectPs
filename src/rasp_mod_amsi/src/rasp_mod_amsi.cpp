@@ -41,7 +41,10 @@ STDAPI DllRegisterServer()
 
     StringFromGUID2(CLSID_RaspAmsiProvider, clsidStr, 64);
 
+#ifdef _DEBUG
     OutputDebugStringA("[AMSI] Write to com interface\n");
+#endif
+
     wsprintfW(comKey, L"Software\\Classes\\CLSID\\%s\\InprocServer32", clsidStr);
     HRESULT hr = WriteRegistryString(HKEY_LOCAL_MACHINE, comKey, nullptr, dllPath);
     if (FAILED(hr))
@@ -51,14 +54,20 @@ STDAPI DllRegisterServer()
     if (FAILED(hr))
         return hr;
 
+#ifdef _DEBUG
     OutputDebugStringA("[AMSI] register amsi provider\n");
+#endif
+
     wsprintfW(amsiKey, L"Software\\Microsoft\\AMSI\\Providers\\%s", clsidStr);
     if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, amsiKey, 0, NULL, 0,
                         KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
         RegCloseKey(hKey);
     }
 
+#ifdef _DEBUG
     OutputDebugStringA("[AMSI] Registration done...\n");
+#endif
+
     return S_OK;
 }
 
@@ -76,7 +85,7 @@ STDAPI DllUnregisterServer()
 
     wchar_t amsiKey[256];
     wsprintfW(amsiKey, L"Software\\Classes\\CLSID\\%s", clsidStr);
-    RegDeleteKeyW(HKEY_LOCAL_MACHINE, amsiKey);
+    RegDeleteTreeW(HKEY_LOCAL_MACHINE, amsiKey);
 
     return S_OK;
 }

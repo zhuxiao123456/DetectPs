@@ -34,244 +34,243 @@
 #define DEFAULT_CONFIDENCE 70
 
 namespace {
-constexpr size_t kMaxScriptContentEventBytes = 8 * 1024;
+    constexpr size_t kMaxScriptContentEventBytes = 8 * 1024;
 
-std::string TruncateForEventField(const std::string& value, size_t maxBytes)
-{
-    if (value.size() <= maxBytes)
-        return value;
-    return value.substr(0, maxBytes);
-}
-
-
-uint32_t ParseUint32OrZero(const std::string& value)
-{
-    try {
-        return static_cast<uint32_t>(std::stoul(value));
-    } catch (...) {
-        return 0;
+    std::string TruncateForEventField(const std::string& value, size_t maxBytes)
+    {
+        if (value.size() <= maxBytes)
+            return value;
+        return value.substr(0, maxBytes);
     }
-}
 
-std::string NormalizePathForContains(std::string_view value)
-{
-    std::string normalized(value);
-    std::replace(normalized.begin(), normalized.end(), '/', '\\');
-    return normalized;
-}
 
-char LowerAscii(char ch)
-{
-    return static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-}
-
-bool ContainsIgnoreCase(std::string_view haystack, std::string_view needle)
-{
-    if (needle.empty())
-        return false;
-    if (needle.size() > haystack.size())
-        return false;
-
-    return std::search(
-               haystack.begin(),
-               haystack.end(),
-               needle.begin(),
-               needle.end(),
-               [](char lhs, char rhs) {
-                   return LowerAscii(lhs) == LowerAscii(rhs);
-               }) != haystack.end();
-}
-
-bool ContainsAnyIgnoreCaseNormalized(std::string_view normalizedHaystack,
-                                     const std::vector<std::string>& needles)
-{
-    for (const std::string& rawNeedle : needles) {
-        if (rawNeedle.empty())
-            continue;
-        std::string needle = NormalizePathForContains(rawNeedle);
-        if (ContainsIgnoreCase(normalizedHaystack, needle))
-            return true;
-    }
-    return false;
-}
-
-std::string TrimAscii(std::string_view value)
-{
-    size_t begin = 0;
-    size_t end = value.size();
-    while (begin < end && std::isspace(static_cast<unsigned char>(value[begin])))
-        ++begin;
-    while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1])))
-        --end;
-    return std::string(value.substr(begin, end - begin));
-}
-
-std::string NormalizeTrustedProcessPath(std::string_view value)
-{
-    std::string normalized = TrimAscii(value);
-    if (normalized.size() >= 2 && normalized.front() == '"' && normalized.back() == '"')
-        normalized = normalized.substr(1, normalized.size() - 2);
-    std::replace(normalized.begin(), normalized.end(), '/', '\\');
-    while (normalized.size() > 3 && normalized.back() == '\\')
-        normalized.pop_back();
-    return normalized;
-}
-
-bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs)
-{
-    return lhs.size() == rhs.size() &&
-           std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](char a, char b) {
-               return LowerAscii(a) == LowerAscii(b);
-           });
-}
-
-bool EndsWithExeIgnoreCase(std::string_view value)
-{
-    constexpr std::string_view suffix = ".exe";
-    return value.size() >= suffix.size() &&
-           EqualsIgnoreCase(value.substr(value.size() - suffix.size()), suffix);
-}
-
-bool IsAbsoluteWindowsExePath(std::string_view value)
-{
-    return value.size() >= 7 &&
-           std::isalpha(static_cast<unsigned char>(value[0])) &&
-           value[1] == ':' &&
-           value[2] == '\\' &&
-           EndsWithExeIgnoreCase(value);
-}
-
-std::vector<std::string> NormalizeTrustProcessPaths(const std::vector<std::string>& paths)
-{
-    std::vector<std::string> normalized;
-    normalized.reserve(paths.size());
-    for (const std::string& raw : paths) {
-        const std::string path = NormalizeTrustedProcessPath(raw);
-        if (!IsAbsoluteWindowsExePath(path))
-            continue;
-        normalized.push_back(path);
-    }
-    return normalized;
-}
-
-bool TrustProcessMatches(const std::vector<std::string>& trustedPaths,
-                         const ScanContext* scanContext,
-                         std::string* matchedTrustProcess)
-{
-    if (trustedPaths.empty() || !scanContext || !scanContext->process)
-        return false;
-    const ProcessContextSnapshot& process = *scanContext->process;
-    // The current AMSI detection surface is PowerShell-only, so trust_process
-    // is scoped by the scan entry point and only needs to match the parent path.
-    if (process.parentProcessPath.empty())
-        return false;
-
-    const std::string parentPath = NormalizeTrustedProcessPath(process.parentProcessPath);
-    if (!IsAbsoluteWindowsExePath(parentPath))
-        return false;
-
-    for (const std::string& trustedPath : trustedPaths) {
-        if (EqualsIgnoreCase(parentPath, trustedPath)) {
-            if (matchedTrustProcess)
-                *matchedTrustProcess = trustedPath;
-            return true;
+    uint32_t ParseUint32OrZero(const std::string& value)
+    {
+        try {
+            return static_cast<uint32_t>(std::stoul(value));
+        } catch (...) {
+            return 0;
         }
     }
-    return false;
-}
 
-std::string JsonEscapeLocal(const std::string& value)
-{
-    std::string out;
-    out.reserve(value.size() + 8);
-    for (unsigned char ch : value) {
-        switch (ch) {
-            case '\\': out += "\\\\"; break;
-            case '"': out += "\\\""; break;
-            case '\b': out += "\\b"; break;
-            case '\f': out += "\\f"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            default:
-                if (ch < 0x20) {
-                    char buf[7];
-                    snprintf(buf, sizeof(buf), "\\u%04x", ch);
-                    out += buf;
-                } else {
-                    out += static_cast<char>(ch);
-                }
-                break;
-        }
+    std::string NormalizePathForContains(std::string_view value)
+    {
+        std::string normalized(value);
+        std::replace(normalized.begin(), normalized.end(), '/', '\\');
+        return normalized;
     }
-    return out;
-}
 
-void SendTrustProcessSkipStatus(const ProcessContextSnapshot& process,
-                                const std::string& matchedTrustProcess)
-{
-    char json[2048];
-    _snprintf_s(json, sizeof(json), _TRUNCATE,
-                "{\"msgType\":\"TRUST_PROCESS_SKIP\","
-                "\"module\":\"rasp_mod_amsi\","
-                "\"processPath\":\"%s\","
-                "\"parentProcessPath\":\"%s\","
-                "\"matchedTrustProcess\":\"%s\","
-                "\"reason\":\"trusted_parent_process\"}",
-                JsonEscapeLocal(process.currentProcessPath).c_str(),
-                JsonEscapeLocal(process.parentProcessPath).c_str(),
-                JsonEscapeLocal(matchedTrustProcess).c_str());
+    char LowerAscii(char ch)
+    {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
 
-    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_control_status",
-                               GENERIC_WRITE, 0, nullptr,
-                               OPEN_EXISTING, 0, nullptr);
-    if (hPipe == INVALID_HANDLE_VALUE)
-        return;
+    bool ContainsIgnoreCase(std::string_view haystack, std::string_view needle)
+    {
+        if (needle.empty())
+            return false;
+        if (needle.size() > haystack.size())
+            return false;
 
-    DWORD written = 0;
-    const DWORD expected = static_cast<DWORD>(strlen(json));
-    WriteFile(hPipe, json, expected, &written, nullptr);
-    CloseHandle(hPipe);
-}
+        return std::search(
+                haystack.begin(),
+                haystack.end(),
+                needle.begin(),
+                needle.end(),
+                [](char lhs, char rhs) {
+                    return LowerAscii(lhs) == LowerAscii(rhs);
+                }) != haystack.end();
+    }
 
-bool ParentPathGatePasses(const AmsiRaspRuleConfig& rule, const ScanContext* scanContext)
-{
-    const bool hasAllow = !rule.parentPathAllowContains.empty();
-    const bool hasBlock = !rule.parentPathBlockContains.empty();
-    if (!hasAllow && !hasBlock)
+    bool ContainsAnyIgnoreCaseNormalized(std::string_view normalizedHaystack,
+                                         const std::vector<std::string>& needles)
+    {
+        for (const std::string& rawNeedle : needles) {
+            if (rawNeedle.empty())
+                continue;
+            std::string needle = NormalizePathForContains(rawNeedle);
+            if (ContainsIgnoreCase(normalizedHaystack, needle))
+                return true;
+        }
+        return false;
+    }
+
+    std::string TrimAscii(std::string_view value)
+    {
+        size_t begin = 0;
+        size_t end = value.size();
+        while (begin < end && std::isspace(static_cast<unsigned char>(value[begin])))
+            ++begin;
+        while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1])))
+            --end;
+        return std::string(value.substr(begin, end - begin));
+    }
+
+    std::string NormalizeTrustedProcessPath(std::string_view value)
+    {
+        std::string normalized = TrimAscii(value);
+        if (normalized.size() >= 2 && normalized.front() == '"' && normalized.back() == '"')
+            normalized = normalized.substr(1, normalized.size() - 2);
+        std::replace(normalized.begin(), normalized.end(), '/', '\\');
+        while (normalized.size() > 3 && normalized.back() == '\\')
+            normalized.pop_back();
+        return normalized;
+    }
+
+    bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs)
+    {
+        return lhs.size() == rhs.size() &&
+               std::equal(lhs.begin(), lhs.end(), rhs.begin(), [](char a, char b) {
+                   return LowerAscii(a) == LowerAscii(b);
+               });
+    }
+
+    bool EndsWithExeIgnoreCase(std::string_view value)
+    {
+        constexpr std::string_view suffix = ".exe";
+        return value.size() >= suffix.size() &&
+               EqualsIgnoreCase(value.substr(value.size() - suffix.size()), suffix);
+    }
+
+    bool IsAbsoluteWindowsExePath(std::string_view value)
+    {
+        return value.size() >= 7 &&
+               std::isalpha(static_cast<unsigned char>(value[0])) &&
+               value[1] == ':' &&
+               value[2] == '\\' &&
+               EndsWithExeIgnoreCase(value);
+    }
+
+    std::vector<std::string> NormalizeTrustProcessPaths(const std::vector<std::string>& paths)
+    {
+        std::vector<std::string> normalized;
+        normalized.reserve(paths.size());
+        for (const std::string& raw : paths) {
+            const std::string path = NormalizeTrustedProcessPath(raw);
+            if (!IsAbsoluteWindowsExePath(path))
+                continue;
+            normalized.push_back(path);
+        }
+        return normalized;
+    }
+
+    bool TrustProcessMatches(const std::vector<std::string>& trustedPaths,
+                             const ScanContext* scanContext,
+                             std::string* matchedTrustProcess)
+    {
+        if (trustedPaths.empty() || !scanContext || !scanContext->process)
+            return false;
+        const ProcessContextSnapshot& process = *scanContext->process;
+        // The current AMSI detection surface is PowerShell-only, so trust_process
+        // is scoped by the scan entry point and only needs to match the parent path.
+        if (process.parentProcessPath.empty())
+            return false;
+
+        const std::string parentPath = NormalizeTrustedProcessPath(process.parentProcessPath);
+        if (!IsAbsoluteWindowsExePath(parentPath))
+            return false;
+
+        for (const std::string& trustedPath : trustedPaths) {
+            if (EqualsIgnoreCase(parentPath, trustedPath)) {
+                if (matchedTrustProcess)
+                    *matchedTrustProcess = trustedPath;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::string JsonEscapeLocal(const std::string& value)
+    {
+        std::string out;
+        out.reserve(value.size() + 8);
+        for (unsigned char ch : value) {
+            switch (ch) {
+                case '\\': out += "\\\\"; break;
+                case '"': out += "\\\""; break;
+                case '\b': out += "\\b"; break;
+                case '\f': out += "\\f"; break;
+                case '\n': out += "\\n"; break;
+                case '\r': out += "\\r"; break;
+                case '\t': out += "\\t"; break;
+                default:
+                    if (ch < 0x20) {
+                        char buf[7];
+                        snprintf(buf, sizeof(buf), "\\u%04x", ch);
+                        out += buf;
+                    } else {
+                        out += static_cast<char>(ch);
+                    }
+                    break;
+            }
+        }
+        return out;
+    }
+
+    void SendTrustProcessSkipStatus(const ProcessContextSnapshot& process,
+                                    const std::string& matchedTrustProcess)
+    {
+        char json[2048];
+        _snprintf_s(json, sizeof(json), _TRUNCATE,
+                    "{\"msgType\":\"TRUST_PROCESS_SKIP\","
+                    "\"processPath\":\"%s\","
+                    "\"parentProcessPath\":\"%s\","
+                    "\"matchedTrustProcess\":\"%s\","
+                    "\"reason\":\"trusted_parent_process\"}",
+                    JsonEscapeLocal(process.currentProcessPath).c_str(),
+                    JsonEscapeLocal(process.parentProcessPath).c_str(),
+                    JsonEscapeLocal(matchedTrustProcess).c_str());
+
+        HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_control_status",
+                                   GENERIC_WRITE, 0, nullptr,
+                                   OPEN_EXISTING, 0, nullptr);
+        if (hPipe == INVALID_HANDLE_VALUE)
+            return;
+
+        DWORD written = 0;
+        const DWORD expected = static_cast<DWORD>(strlen(json));
+        WriteFile(hPipe, json, expected, &written, nullptr);
+        CloseHandle(hPipe);
+    }
+
+    bool ParentPathGatePasses(const AmsiRaspRuleConfig& rule, const ScanContext* scanContext)
+    {
+        const bool hasAllow = !rule.parentPathAllowContains.empty();
+        const bool hasBlock = !rule.parentPathBlockContains.empty();
+        if (!hasAllow && !hasBlock)
+            return true;
+
+        if (!scanContext || !scanContext->process || scanContext->process->parentProcessPath.empty())
+            return false;
+
+        const std::string parentPath = NormalizePathForContains(scanContext->process->parentProcessPath);
+        if (ContainsAnyIgnoreCaseNormalized(parentPath, rule.parentPathAllowContains))
+            return false;
+
+        if (hasBlock)
+            return ContainsAnyIgnoreCaseNormalized(parentPath, rule.parentPathBlockContains);
+
         return true;
-
-    if (!scanContext || !scanContext->process || scanContext->process->parentProcessPath.empty())
-        return false;
-
-    const std::string parentPath = NormalizePathForContains(scanContext->process->parentProcessPath);
-    if (ContainsAnyIgnoreCaseNormalized(parentPath, rule.parentPathAllowContains))
-        return false;
-
-    if (hasBlock)
-        return ContainsAnyIgnoreCaseNormalized(parentPath, rule.parentPathBlockContains);
-
-    return true;
-}
-
-thread_local const ScanContext* g_activeScanContext = nullptr;
-
-class ScopedScanContext {
-public:
-    explicit ScopedScanContext(const ScanContext& scanContext)
-        : previous_(g_activeScanContext)
-    {
-        g_activeScanContext = &scanContext;
     }
 
-    ~ScopedScanContext()
-    {
-        g_activeScanContext = previous_;
-    }
+    thread_local const ScanContext* g_activeScanContext = nullptr;
 
-private:
-    const ScanContext* previous_;
-};
+    class ScopedScanContext {
+    public:
+        explicit ScopedScanContext(const ScanContext& scanContext)
+                : previous_(g_activeScanContext)
+        {
+            g_activeScanContext = &scanContext;
+        }
+
+        ~ScopedScanContext()
+        {
+            g_activeScanContext = previous_;
+        }
+
+    private:
+        const ScanContext* previous_;
+    };
 
 } // namespace
 // ── WideToUtf8 ────────────────────────────────────────────────────────────
@@ -333,18 +332,6 @@ void AmsiRuleEngine::ParseRuleExtension(const std::string &key,
     }
 }
 
-// ── Module-scope RaspLog wrapper ──────────────────────────────────────────
-// amsi_provider.cpp calls RaspLog as a free function.
-// This thin wrapper forwards to the singleton's Log().
-static void RaspLog(const char *fmt, ...) {
-    char buf[1024];
-    va_list va;
-    va_start(va, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, va);
-    va_end(va);
-    GetAmsiEngineRuntime().Log("%s", buf);
-}
-
 static void RaspLogWithSeverity(RaspDiagSeverity severity, const char *fmt, ...) {
     char buf[1024];
     va_list va;
@@ -382,7 +369,7 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     RaspGlobalMode globalMode = RaspGlobalMode::Block;
     bool hasGlobalMode = false;
     if (!ParseRulesJson(json, lib, rawRules, nullptr, &rawTrustProcessPaths, &globalMode, &hasGlobalMode) || rawRules.empty()) {
-        LogWithSeverity(RaspDiagSeverity::Warning, "[RaspAmsi] BuildNextSnapshot: no rules parsed");
+        LogWithSeverity(RaspDiagSeverity::Warning, "BuildNextSnapshot: no rules parsed");
         return {};
     }
 
@@ -402,7 +389,7 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     luaEngine->SetLeveledLogFn(RaspLuaLogWithSeverity);
     PrecompileAll(configs, effectiveLib, *luaEngine);
     return std::make_shared<RuleSnapshot>(
-        RuleSnapshot{std::move(configs), std::move(trustProcessPaths), std::move(luaEngine), hasGlobalMode, globalMode});
+            RuleSnapshot{std::move(configs), std::move(trustProcessPaths), std::move(luaEngine), hasGlobalMode, globalMode});
 }
 
 bool AmsiRuleEngine::ShouldBlockRule(const RuleSnapshot& snapshot,
@@ -449,9 +436,6 @@ static void EmitScanBudgetTelemetry(const ScanExecutionContext& exec)
              exec.regexSubjectTruncated ? 1 : 0,
              exec.matchedBeforeTimeout ? 1 : 0);
     RaspLogWithSeverity(RaspDiagSeverity::Warning, "%s", msg);
-#ifdef _DEBUG
-    OutputDebugStringA(msg);
-#endif
 }
 
 void AmsiRuleEngine::PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
@@ -463,8 +447,8 @@ void AmsiRuleEngine::PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
     m_libSource = effectiveLib;
 
     auto snap = std::atomic_load(&m_snapshot);
-    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] ParseAndSwap: %zu AmsiProvider rule(s) loaded",
-        snap ? snap->rules.size() : 0u);
+    LogWithSeverity(RaspDiagSeverity::Debug, "ParseAndSwap: %zu AmsiProvider rules loaded",
+                    snap ? snap->rules.size() : 0u);
 }
 
 bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &libSource) {
@@ -480,7 +464,7 @@ bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &li
     std::string lib;
     // 调用基类解析json
     if (!ParseRulesJson(json, lib, rawRules) || rawRules.empty()) {
-        Log("[RaspAmsi] ParseAndSwap: no rules parsed");
+        Log("ParseAndSwap: no rules parsed");
         return false;
     }
 
@@ -502,7 +486,7 @@ bool AmsiRuleEngine::ParseAndSwap(const std::string &json, const std::string &li
     m_libSource = effectiveLib;
 
     auto snap = std::atomic_load(&m_snapshot);
-    Log("[RaspAmsi] ParseAndSwap: %zu AmsiProvider rule(s) loaded",
+    Log("ParseAndSwap: %zu AmsiProvider rule(s) loaded",
         snap ? snap->rules.size() : 0u);
     return true;
 #endif
@@ -568,7 +552,7 @@ void AmsiRuleEngine::OnReloadSignal() {
         MarkDetectionPausedByHostState(true);
         MarkWaitingResumeAfterHostLost(true);
         LogWithSeverity(RaspDiagSeverity::Warning,
-                        "[RaspAmsi] Reload failed, AMSI detection remains paused");
+                        "Reload failed, AMSI detection remains paused");
         return;
     }
 
@@ -591,7 +575,7 @@ void AmsiRuleEngine::OnReloadSignal() {
         runtime.ResumeDetection();
         guard.Complete(true, "published_recovered_after_host_lost");
         SendRuleLoadResult(true, 0, "", requestedMetadata);
-        LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] Reload succeeded after host lost - detection resumed");
+        LogWithSeverity(RaspDiagSeverity::Info, "Reload succeeded after host lost - detection resumed");
         return;
     }
 
@@ -599,7 +583,7 @@ void AmsiRuleEngine::OnReloadSignal() {
     MarkWaitingResumeAfterHostLost(false);
     runtime.ResumeDetection();
     guard.Complete(true, "published_running");
-    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] Reload succeeded - detection resumed");
+    LogWithSeverity(RaspDiagSeverity::Info, "Reload succeeded - detection resumed");
     SendRuleLoadResult(true, 0, "", requestedMetadata);
     return;
 
@@ -613,7 +597,7 @@ void AmsiRuleEngine::OnReloadSignal() {
     }
 
     if (!ok)
-        Log("[RaspAmsi] OnReloadSignal: sentry unavailable after 3 attempts — keeping snapshot");
+        Log("OnReloadSignal: sentry unavailable after 3 attempts — keeping snapshot");
 #endif
 }
 
@@ -632,15 +616,15 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
         if (Base64Decode(rule.scriptBodyBase64, decoded)) {
             const bool isBytecode = (rule.scriptEncoding == "bytecode");
             if (isBytecode) {
-                LogWithSeverity(RaspDiagSeverity::Debug, "[RaspAmsi] PrecompileAll: rule=%s scriptEncoding=bytecode accepted",
-                    rule.id.c_str());
+                LogWithSeverity(RaspDiagSeverity::Debug, "PrecompileAll: rule=%s scriptEncoding=bytecode accepted",
+                                rule.id.c_str());
                 luaEngine.Precompile(rule.id, decoded, true);
                 continue;
             }
 
             if (!rule.scriptEncoding.empty() && rule.scriptEncoding != "source") {
-                LogWithSeverity(RaspDiagSeverity::Warning, "[RaspAmsi] PrecompileAll: unknown scriptEncoding=%s rule=%s, treating as source",
-                    rule.scriptEncoding.c_str(), rule.id.c_str());
+                LogWithSeverity(RaspDiagSeverity::Warning, "PrecompileAll: unknown scriptEncoding=%s rule=%s, treating as source",
+                                rule.scriptEncoding.c_str(), rule.id.c_str());
             }
 
             std::string combined = libSource.empty()
@@ -648,7 +632,7 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
                                    : libSource + "\n" + decoded;
             luaEngine.Precompile(rule.id, combined, false);
         } else {
-            LogWithSeverity(RaspDiagSeverity::Warning, "[RaspAmsi] PrecompileAll: base64 decode failed rule=%s", rule.id.c_str());
+            LogWithSeverity(RaspDiagSeverity::Warning, "PrecompileAll: base64 decode failed rule=%s", rule.id.c_str());
         }
     }
 }
@@ -657,7 +641,7 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
 void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
     std::shared_ptr<const RuleSnapshot> next =
             std::make_shared<RuleSnapshot>(
-                RuleSnapshot{std::move(rules), {}, std::make_shared<RaspLuaEngine>(), false, RaspGlobalMode::Block});
+                    RuleSnapshot{std::move(rules), {}, std::make_shared<RaspLuaEngine>(), false, RaspGlobalMode::Block});
     std::atomic_store(&m_snapshot, next);
 }
 
@@ -686,44 +670,41 @@ void AmsiRuleEngine::FillDiagnosticLogContext(LegacyDiagJsonBuildInput& input) c
 // =========================================================================
 
 DWORD WINAPI AmsiRuleEngine::UnloadThreadProc(LPVOID)
-{
-    Sleep(200);
+        {
+                Sleep(200);
 
-    EngineRuntime& runtime = GetAmsiEngineRuntime();
-    runtime.LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] UnloadThreadProc: entering inert mode and stopping background threads");
-    runtime.BeginShutdown("unload_signal", 200);
-    runtime.LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] UnloadThreadProc: background threads stopped");
+        EngineRuntime& runtime = GetAmsiEngineRuntime();
+        runtime.LogWithSeverity(RaspDiagSeverity::Info, "UnloadThreadProc: entering inert mode and stopping background threads");
+        runtime.BeginShutdown("unload_signal", 200);
+        runtime.LogWithSeverity(RaspDiagSeverity::Info, "UnloadThreadProc: background threads stopped");
 
-    char pid[12];
-    char ackLine[192];
-    sprintf_s(pid, sizeof(pid), "%lu", GetCurrentProcessId());
-    snprintf(ackLine, sizeof(ackLine),
-             "{\"cat\":\"drain-ack\",\"mod\":\"rasp_mod_amsi\",\"pid\":%s}", pid);
+        char pid[12];
+        char ackLine[192];
+        sprintf_s(pid, sizeof(pid), "%lu", GetCurrentProcessId());
+        snprintf(ackLine, sizeof(ackLine),
+        "{\"cat\":\"drain-ack\",\"mod\":\"hss_amsi\",\"pid\":%s}", pid);
 
-    HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_events",
-                               GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (hPipe != INVALID_HANDLE_VALUE) {
-        DWORD written = 0;
-        WriteFile(hPipe, ackLine, static_cast<DWORD>(strlen(ackLine)), &written, nullptr);
-        CloseHandle(hPipe);
-    }
+        HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_events",
+        GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (hPipe != INVALID_HANDLE_VALUE) {
+            DWORD written = 0;
+            WriteFile(hPipe, ackLine, static_cast<DWORD>(strlen(ackLine)), &written, nullptr);
+            CloseHandle(hPipe);
+        }
 
-    return 0;
-}
+        return 0;
+        }
 
 void AmsiRuleEngine::OnUnloadSignal() {
-    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] OnUnloadSignal: unload requested - entering inert mode");
-
     HANDLE hThread = CreateThread(nullptr, 0, UnloadThreadProc, nullptr, 0, nullptr);
     if (hThread)
         CloseHandle(hThread);
     else
-        LogWithSeverity(RaspDiagSeverity::Error, "[RaspAmsi] OnUnloadSignal: failed to create unload thread - inert mode remains active");
+        LogWithSeverity(RaspDiagSeverity::Error, "OnUnloadSignal: failed to create unload thread - inert mode remains active");
 }
 
 void AmsiRuleEngine::OnPauseDetectionSignal()
 {
-    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] OnPauseDetectionSignal: detection paused");
     MarkDetectionPausedByHostState(true);
     GetAmsiEngineRuntime().PauseDetection();
 }
@@ -733,19 +714,18 @@ void AmsiRuleEngine::OnResumeDetectionSignal()
     if (!IsHostAlive()) {
         MarkWaitingResumeAfterHostLost(true);
         LogWithSeverity(RaspDiagSeverity::Warning,
-                        "[RaspAmsi] Resume ignored because host is not alive");
+                        "Resume ignored because host is not alive");
         return;
     }
     if (!IsRuleSnapshotReady()) {
         MarkWaitingResumeAfterHostLost(true);
         LogWithSeverity(RaspDiagSeverity::Warning,
-                        "[RaspAmsi] Resume ignored because rule snapshot is not ready");
+                        "Resume ignored because rule snapshot is not ready");
         return;
     }
 
     MarkDetectionPausedByHostState(false);
     MarkWaitingResumeAfterHostLost(false);
-    LogWithSeverity(RaspDiagSeverity::Info, "[RaspAmsi] AMSI detection resumed");
     GetAmsiEngineRuntime().ResumeDetection();
 }
 
@@ -767,9 +747,9 @@ std::vector<RaspEvalResult> AmsiRuleEngine::Evaluate(const std::string& sensor,
 }
 
 std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
-    const std::string &sensor,
-    const RaspLuaContext &ctx,
-    const ScanContext* scanContext)
+        const std::string &sensor,
+        const RaspLuaContext &ctx,
+        const ScanContext* scanContext)
 {
     std::vector <RaspEvalResult> results;
     ScanExecutionContext exec;
@@ -818,9 +798,9 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     std::string matchedTrustProcess;
     if (TrustProcessMatches(snap->trustProcessPaths, scanContext, &matchedTrustProcess)) {
         SendTrustProcessSkipStatus(*scanContext->process, matchedTrustProcess);
-        LogWithSeverity(RaspDiagSeverity::Debug, "[RaspAmsi] trust_process skip: parentProcessPath=%s matched=%s",
-            scanContext->process->parentProcessPath.c_str(),
-            matchedTrustProcess.c_str());
+        LogWithSeverity(RaspDiagSeverity::Debug, "trust_process skip: parentProcessPath=%s matched=%s",
+                        scanContext->process->parentProcessPath.c_str(),
+                        matchedTrustProcess.c_str());
         return results;
     }
     // 遍历每个规则
@@ -920,9 +900,9 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
         // ── lua脚本check, PrecompileAll在这里预编译, 可以不走此部分 ─
         if (!matched && rule.regexChecks.empty() && luaEngine.IsLoaded(rule.id)) {
             RaspLuaResult lr = luaEngine.Run(rule.id, sensor, ctx,
-                                               rule.scriptTimeoutInstructions,
-                                               {},
-                                               &exec);
+                                             rule.scriptTimeoutInstructions,
+                                             {},
+                                             &exec);
             if (lr.timedOut)
                 break;
             if (lr.matched) {
@@ -932,8 +912,8 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             }
         } else if (!matched && rule.regexChecks.empty() &&
                    !luaEngine.IsLoaded(rule.id) && rule.regexPatterns.empty()) {
-            LogWithSeverity(RaspDiagSeverity::Warning, "[RaspAmsi] Evaluate: rule=%s has no regexChecks, no Lua, and no regexPatterns — skipping",
-                rule.id.c_str());
+            LogWithSeverity(RaspDiagSeverity::Warning, "Evaluate: rule=%s has no regexChecks, no Lua, and no regexPatterns — skipping",
+                            rule.id.c_str());
             continue;
         }
         // 正则和lua均匹配不到、放行
@@ -1029,17 +1009,16 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
     if (!normalized.normalized.empty()) {
         ctx.fields.push_back({"body", normalized.normalized, true});
         ctx.fields.push_back({"script_content", TruncateForEventField(normalized.normalized, kMaxScriptContentEventBytes)});
+#ifdef _DEBUG
         char msg[256];
         snprintf(msg, sizeof(msg),
-                 "[RaspAmsi][normalizer] rawLen=%zu normalizedLen=%zu truncated=%d utf16=%d b64=%d nulls=%d\n",
+                 "rawLen=%zu normalizedLen=%zu truncated=%d utf16=%d b64=%d nulls=%d\n",
                  normalized.rawLen,
                  normalized.normalizedLen,
                  normalized.truncated ? 1 : 0,
                  normalized.decodedUtf16Le ? 1 : 0,
                  normalized.decodedBase64 ? 1 : 0,
                  normalized.hadNullBytes ? 1 : 0);
-        RaspLogWithSeverity(RaspDiagSeverity::Debug, "%s", msg);
-#ifdef _DEBUG
         OutputDebugStringA(msg);
 #endif
     }
