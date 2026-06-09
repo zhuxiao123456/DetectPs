@@ -273,6 +273,35 @@ int main()
     }
 
     {
+        auto missing = Parse(R"json({"rules":[{"id":"r"}]})json");
+        if (!Expect(missing.totalScanTimeoutMs == kDefaultTotalScanTimeoutMs,
+                    "missing totalScanTimeoutMs uses default"))
+            return 1;
+
+        auto configured = Parse(R"json({"totalScanTimeoutMs":750,"rules":[{"id":"r"}]})json");
+        if (!Expect(configured.hasTotalScanTimeoutMs, "configured totalScanTimeoutMs is marked present"))
+            return 1;
+        if (!Expect(configured.totalScanTimeoutMs == 750,
+                    "configured totalScanTimeoutMs parses"))
+            return 1;
+
+        auto tooSmall = Parse(R"json({"totalScanTimeoutMs":1,"rules":[{"id":"r"}]})json");
+        if (!Expect(tooSmall.totalScanTimeoutMs == kMinTotalScanTimeoutMs,
+                    "small totalScanTimeoutMs clamps to minimum"))
+            return 1;
+
+        auto tooLarge = Parse(R"json({"totalScanTimeoutMs":999999,"rules":[{"id":"r"}]})json");
+        if (!Expect(tooLarge.totalScanTimeoutMs == kMaxTotalScanTimeoutMs,
+                    "large totalScanTimeoutMs clamps to maximum"))
+            return 1;
+
+        auto invalid = Parse(R"json({"totalScanTimeoutMs":"1000","rules":[{"id":"r"}]})json");
+        if (!Expect(invalid.totalScanTimeoutMs == kDefaultTotalScanTimeoutMs,
+                    "invalid totalScanTimeoutMs uses default"))
+            return 1;
+    }
+
+    {
         auto result = Parse(R"json({"globalLibraries":"bGliLXNpbmdsZQ==","rules":[]})json");
         if (!Expect(!result.ok, "bundle without valid rules is reported as failure"))
             return 1;

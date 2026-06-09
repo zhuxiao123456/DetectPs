@@ -149,7 +149,8 @@ protected:
         bool*                                        hasGlobalModeOut = nullptr,
         uint32_t*                                    maxScanContentBytesOut = nullptr,
         uint32_t*                                    auditMaxEventsPerScanOut = nullptr,
-        bool*                                        stopAfterFirstBlockOut = nullptr);
+        bool*                                        stopAfterFirstBlockOut = nullptr,
+        uint32_t*                                    totalScanTimeoutMsOut = nullptr);
 
     // Virtual factory override to return module-specific derived type.
     // Default returns new RaspRuleBase().

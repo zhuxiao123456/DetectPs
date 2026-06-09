@@ -14,6 +14,15 @@ uint32_t ClampMaxScanContentBytes(int value)
     return static_cast<uint32_t>(value);
 }
 
+uint32_t ClampTotalScanTimeoutMs(int value)
+{
+    if (value < static_cast<int>(kMinTotalScanTimeoutMs))
+        return kMinTotalScanTimeoutMs;
+    if (value > static_cast<int>(kMaxTotalScanTimeoutMs))
+        return kMaxTotalScanTimeoutMs;
+    return static_cast<uint32_t>(value);
+}
+
 uint32_t ClampAuditMaxEventsPerScan(int value)
 {
     if (value <= 0)
@@ -242,6 +251,14 @@ bool ParseBundleObject(RuleJsonParser::Parser& p,
             if (p.read_int(value)) {
                 result.maxScanContentBytes = ClampMaxScanContentBytes(value);
                 result.hasMaxScanContentBytes = true;
+            } else {
+                p.skip_value();
+            }
+        } else if (key == "totalScanTimeoutMs") {
+            int value = 0;
+            if (p.read_int(value)) {
+                result.totalScanTimeoutMs = ClampTotalScanTimeoutMs(value);
+                result.hasTotalScanTimeoutMs = true;
             } else {
                 p.skip_value();
             }
@@ -485,6 +502,14 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
             if (p.read_int(value)) {
                 result.maxScanContentBytes = ClampMaxScanContentBytes(value);
                 result.hasMaxScanContentBytes = true;
+            } else {
+                p.skip_value();
+            }
+        } else if (key == "totalScanTimeoutMs") {
+            int value = 0;
+            if (p.read_int(value)) {
+                result.totalScanTimeoutMs = ClampTotalScanTimeoutMs(value);
+                result.hasTotalScanTimeoutMs = true;
             } else {
                 p.skip_value();
             }

@@ -11,6 +11,9 @@
 constexpr uint32_t kDefaultMaxScanContentBytes = 8192;
 constexpr uint32_t kMinMaxScanContentBytes = 1024;
 constexpr uint32_t kMaxMaxScanContentBytes = 65536;
+constexpr uint32_t kDefaultTotalScanTimeoutMs = 1000;
+constexpr uint32_t kMinTotalScanTimeoutMs = 50;
+constexpr uint32_t kMaxTotalScanTimeoutMs = 5000;
 constexpr uint32_t kDefaultAuditMaxEventsPerScan = 3;
 constexpr uint32_t kMaxAuditMaxEventsPerScan = 1024;
 
@@ -25,6 +28,8 @@ struct RuleParseResult {
     RaspGlobalMode globalMode = RaspGlobalMode::Block;
     bool hasMaxScanContentBytes = false;
     uint32_t maxScanContentBytes = kDefaultMaxScanContentBytes;
+    bool hasTotalScanTimeoutMs = false;
+    uint32_t totalScanTimeoutMs = kDefaultTotalScanTimeoutMs;
     bool hasScanOptimization = false;
     uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
     bool stopAfterFirstBlock = true;

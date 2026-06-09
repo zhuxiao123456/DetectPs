@@ -369,6 +369,7 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     RaspGlobalMode globalMode = RaspGlobalMode::Block;
     bool hasGlobalMode = false;
     uint32_t maxScanContentBytes = kDefaultMaxScanContentBytes;
+    uint32_t totalScanTimeoutMs = kDefaultTotalScanTimeoutMs;
     uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
     bool stopAfterFirstBlock = true;
     if (!ParseRulesJson(json,
@@ -380,7 +381,8 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
                         &hasGlobalMode,
                         &maxScanContentBytes,
                         &auditMaxEventsPerScan,
-                        &stopAfterFirstBlock) || rawRules.empty()) {
+                        &stopAfterFirstBlock,
+                        &totalScanTimeoutMs) || rawRules.empty()) {
         LogWithSeverity(RaspDiagSeverity::Warning, "BuildNextSnapshot: no rules parsed");
         return {};
     }
@@ -404,11 +406,12 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
             RuleSnapshot{std::move(configs),
                          std::move(trustProcessPaths),
                          std::move(luaEngine),
-                         hasGlobalMode,
-                         globalMode,
-                         maxScanContentBytes,
-                         auditMaxEventsPerScan,
-                         stopAfterFirstBlock});
+                          hasGlobalMode,
+                          globalMode,
+                          maxScanContentBytes,
+                          totalScanTimeoutMs,
+                          auditMaxEventsPerScan,
+                          stopAfterFirstBlock});
 }
 
 bool AmsiRuleEngine::ShouldBlockRule(const RuleSnapshot& snapshot,
@@ -797,6 +800,8 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     auto snap = std::atomic_load(&m_snapshot);
     if (!snap || !snap->luaEngine)
         return results;
+    exec.budget.totalBudgetMs = snap->totalScanTimeoutMs;
+    exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
     RaspLuaEngine& luaEngine = *snap->luaEngine;
 
     // Batch 3: 一次性提取 parent 字段

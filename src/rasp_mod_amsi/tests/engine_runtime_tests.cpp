@@ -136,6 +136,13 @@ public:
         return true;
 #endif
     }
+
+    uint32_t BuildSnapshotTotalScanTimeoutMs(const std::string& json)
+    {
+        std::string effectiveLib;
+        auto snapshot = BuildNextSnapshot(json, "", effectiveLib);
+        return snapshot ? snapshot->totalScanTimeoutMs : 0;
+    }
 };
 
 struct LuaBytecodeWriter
@@ -839,6 +846,17 @@ int main()
         if (!Expect(results[0].ruleId == "first_audit_continue" && !results[0].block &&
                     results[1].ruleId == "second_block_stop" && results[1].block,
                     "block mode continues past audit result and stops at block result"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const std::string timeoutJson =
+            "{\"globalMode\":\"block\",\"totalScanTimeoutMs\":750,\"rules\":[{\"id\":\"timeout_cfg\","
+            "\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+            "\"description\":\"timeout_cfg\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
+        if (!Expect(engine.BuildSnapshotTotalScanTimeoutMs(timeoutJson) == 750,
+                    "totalScanTimeoutMs is published into the rule snapshot"))
             return 1;
     }
 
