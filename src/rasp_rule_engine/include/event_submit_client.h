@@ -16,7 +16,7 @@ struct DetectionEventLite {
     std::string ruleId;
     std::string sensor;
     std::string decision;
-    std::string severity;
+    int severity = 2;
     std::string description;
     // Lightweight bounded evidence only. This must not carry a full sample,
     // persisted schema, or the legacy JSONL wire format.
@@ -30,7 +30,7 @@ struct EventJsonBuildInput {
     std::string ruleId;
     std::string sensor;
     bool block = false;
-    std::string severity;
+    int severity = 2;
     std::string description;
     std::string appName;
     std::string contentName;

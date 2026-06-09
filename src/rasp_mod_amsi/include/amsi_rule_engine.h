@@ -30,7 +30,7 @@ struct AmsiEvalResult
     std::string ruleId;
     std::string desc;
     std::string payload;
-    std::string severity;
+    int severity = 2;
 };
 
 class AmsiRuleEngine : public RaspSentryBase

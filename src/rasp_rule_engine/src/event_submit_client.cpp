@@ -93,6 +93,13 @@ std::string TruncateUtf8Field(const std::string& value, size_t maxBytes)
     return out;
 }
 
+int NormalizeSeverity(int severity)
+{
+    if (severity < 0 || severity > 4)
+        return 2;
+    return severity;
+}
+
 } // namespace
 
 EventJsonBuildResult EventJsonBuilder::BuildDetection(const EventJsonBuildInput& input) const
@@ -103,15 +110,14 @@ EventJsonBuildResult EventJsonBuilder::BuildDetection(const EventJsonBuildInput&
     const std::string scriptContent = TruncateUtf8Field(input.scriptContent, kMaxEventPayloadFieldBytes);
     result.eventTruncated = result.payload.size() != input.payload.size() || scriptContent.size() != input.scriptContent.size();
 
-    const std::string severity = input.severity.empty() ? "High" : input.severity;
     const std::string confidence = input.confidence ? std::to_string(input.confidence) : "70";
 
     std::ostringstream oss;
-    oss << "{\"sev\":\"" << JsonEscape(severity) << "\","
-        << "\"act\":\"" << JsonEscape(result.decision) << "\","
+    oss << "{\"act\":\"" << JsonEscape(result.decision) << "\","
         << "\"cat\":\"Detection\","
         << "\"rule\":\"" << JsonEscape(input.ruleId) << "\","
         << "\"desc\":\"" << JsonEscape(input.description) << "\","
+        << "\"severity\":" << NormalizeSeverity(input.severity) << ","
         << "\"confidence\":\"" << JsonEscape(confidence) << "\","
         << "\"processPid\":\"" << input.processPid << "\","
         << "\"processName\":\"" << JsonEscape(input.processName) << "\","

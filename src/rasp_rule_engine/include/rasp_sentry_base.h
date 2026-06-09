@@ -54,7 +54,7 @@ struct RaspEvalResult
     std::string sensor;
     std::string desc;
     std::string payload;
-    std::string severity;
+    int severity = 2;
     // Request context for JSONL serialization:
     std::string contentName;      // IIS7: normalized path;  AMSI: contentName (UTF-8)
     std::string appName;   // IIS7: HTTP verb;         AMSI: appName (UTF-8)

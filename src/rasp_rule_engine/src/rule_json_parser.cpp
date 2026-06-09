@@ -32,6 +32,13 @@ uint32_t ClampAuditMaxEventsPerScan(int value)
     return static_cast<uint32_t>(value);
 }
 
+int NormalizeRuleSeverity(int value)
+{
+    if (value < 0 || value > 4)
+        return 2;
+    return value;
+}
+
 void ParseScanOptimization(RuleJsonParser::Parser& p, RuleParseResult& result)
 {
     if (!p.consume('{')) {
@@ -168,8 +175,13 @@ bool ParseRulesArray(RuleJsonParser::Parser& p,
                 p.read_bool(rule.enabled);
             else if (rkey == "description")
                 p.read_string(rule.description);
-            else if (rkey == "severity")
-                p.read_string(rule.severity);
+            else if (rkey == "severity") {
+                int severity = 2;
+                if (p.read_int(severity))
+                    rule.severity = NormalizeRuleSeverity(severity);
+                else
+                    p.skip_value();
+            }
             else if (rkey == "scriptBodyBase64")
                 p.read_string(rule.scriptBodyBase64);
             else if (rkey == "scriptEncoding")

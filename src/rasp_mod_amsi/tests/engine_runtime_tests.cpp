@@ -1191,7 +1191,7 @@ int main()
         result.sensor = "AmsiProvider";
         result.desc = "parent path test";
         result.payload = "test payload";
-        result.severity = "High";
+        result.severity = 3;
         result.contentName = "test.ps1";
         result.appName = "powershell.exe";
         result.confidence = 70;
@@ -1255,7 +1255,17 @@ int main()
             ++i;
             return true;
         };
-
+        auto readValue = [&](std::string& s) {
+            skipWs();
+            if (i < json.size() && json[i] == '"')
+                return readString(s);
+            s.clear();
+            while (i < json.size() && json[i] != ',' && json[i] != '}')
+                s.push_back(json[i++]);
+            while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r' || s.back() == '\n'))
+                s.pop_back();
+            return !s.empty();
+        };
         skipWs();
         if (i >= json.size() || json[i++] != '{')
             return 1;
@@ -1267,7 +1277,7 @@ int main()
             skipWs();
             if (i >= json.size() || json[i++] != ':')
                 return 1;
-            if (!readString(value))
+            if (!readValue(value))
                 return 1;
             fields[key] = value;
             skipWs();
@@ -1338,6 +1348,17 @@ int main()
             ++i;
             return true;
         };
+        auto readValue = [&](std::string& s) {
+            skipWs();
+            if (i < json.size() && json[i] == '"')
+                return readString(s);
+            s.clear();
+            while (i < json.size() && json[i] != ',' && json[i] != '}')
+                s.push_back(json[i++]);
+            while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r' || s.back() == '\n'))
+                s.pop_back();
+            return !s.empty();
+        };
 
         skipWs();
         if (i >= json.size() || json[i++] != '{')
@@ -1350,7 +1371,7 @@ int main()
             skipWs();
             if (i >= json.size() || json[i++] != ':')
                 return 1;
-            if (!readString(value))
+            if (!readValue(value))
                 return 1;
             fields[key] = value;
             skipWs();

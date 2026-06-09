@@ -1008,7 +1008,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
         r.sensor = sensor;
         r.desc = desc;
         r.payload = payload;
-        r.severity = rule.severity.empty() ? "High" : rule.severity;
+        r.severity = rule.severity;
         // url/method carry contentName/appName so SendDetectionEvent JSONL is complete
         r.contentName = contentName;
         r.appName = appName;

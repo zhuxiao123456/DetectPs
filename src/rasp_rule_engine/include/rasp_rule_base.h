@@ -56,7 +56,7 @@ struct RaspRuleBase {
     bool enabled = true;
     RaspRuleMode mode = RaspRuleMode::Audit;
     std::string description;
-    std::string severity;                        // "Low" / "Medium" / "High" / "Critical"
+    int severity = 2;                            // Business severity level: 0..4
     std::string scriptBodyBase64;                // cleared after Precompile
     std::string scriptEncoding;                  // "" / "source" (default) / "bytecode"
     std::string scriptEval;                      // "exclusive" | "additional"

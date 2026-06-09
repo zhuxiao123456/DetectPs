@@ -85,7 +85,7 @@ int main()
                     "sensor": "AmsiProvider",
                     "enabled": false,
                     "description": "desc",
-                    "severity": "High",
+                    "severity": 3,
                     "scriptBodyBase64": "c2NyaXB0",
                     "scriptEncoding": "bytecode",
                     "scriptEval": "exclusive",
@@ -139,7 +139,7 @@ int main()
             return 1;
         if (!Expect(first.description == "desc", "description parsed"))
             return 1;
-        if (!Expect(first.severity == "High", "severity parsed"))
+        if (!Expect(first.severity == 3, "severity parsed"))
             return 1;
         if (!Expect(first.scriptBodyBase64 == "c2NyaXB0", "script body base64 parsed"))
             return 1;
