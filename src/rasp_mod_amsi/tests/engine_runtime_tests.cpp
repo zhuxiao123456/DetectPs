@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <map>
+#include <utility>
 #include <vector>
 
 extern "C" {
@@ -243,6 +244,29 @@ std::string GlobalModeRegexRuleJson(const char* globalMode,
            pattern + "\"]}}]}";
 }
 
+std::string ScanOptimizationRegexRulesJson(const char* globalMode,
+                                           uint32_t auditMaxEventsPerScan,
+                                           bool stopAfterFirstBlock,
+                                           const std::vector<std::pair<std::string, std::string>>& rules)
+{
+    std::string json = std::string("{\"globalMode\":\"") + globalMode +
+                       "\",\"scanOptimization\":{\"auditMaxEventsPerScan\":" +
+                       std::to_string(auditMaxEventsPerScan) +
+                       ",\"stopAfterFirstBlock\":" +
+                       (stopAfterFirstBlock ? "true" : "false") +
+                       "},\"rules\":[";
+    for (size_t i = 0; i < rules.size(); ++i) {
+        if (i > 0)
+            json += ",";
+        json += "{\"id\":\"" + rules[i].first +
+                "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"" +
+                rules[i].second +
+                "\",\"description\":\"scan_opt\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}";
+    }
+    json += "]}";
+    return json;
+}
+
 std::string TrustedProcessRegexRuleJson(const char* trustPath)
 {
     return std::string("{\"trust_process\":[\"") + trustPath +
@@ -279,6 +303,16 @@ std::string FirstRuleGatedSecondRuleFallbackJson()
            "\"parentPathBlockContains\":[\"/not-present/\"]},"
            "{\"id\":\"fallback_second\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
            "\"description\":\"fallback_second\",\"config\":{\"regexPatterns\":[\"amsiinitfailed\"]}}"
+           "]}";
+}
+
+std::string FirstRegexLimitedSecondRuleFallbackJson()
+{
+    return "{\"rules\":["
+           "{\"id\":\"regex_limited_first\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+           "\"description\":\"regex_limited_first\",\"config\":{\"regexPatterns\":[\"(?s)REGEX_TIMEOUT_PROBE:(?:a|aa)+$\"]}},"
+           "{\"id\":\"regex_fallback_second\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+           "\"description\":\"regex_fallback_second\",\"config\":{\"regexPatterns\":[\"SECOND_OK\"]}}"
            "]}";
 }
 
@@ -698,6 +732,54 @@ int main()
 
     {
         TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanOptimizationRegexRulesJson("audit",
+                                                       2,
+                                                       true,
+                                                       {{"audit_limit_1", "block"},
+                                                        {"audit_limit_2", "block"},
+                                                        {"audit_limit_3", "block"}}),
+                        ""),
+                    "scanOptimization audit limit snapshot publishes"))
+            return 1;
+
+        RaspLuaContext ctx;
+        ctx.fields.push_back({"body", "amsiutils", true});
+        auto results = engine.Evaluate("AmsiProvider", ctx);
+        if (!Expect(results.size() == 2,
+                    "globalMode audit stops after auditMaxEventsPerScan matches"))
+            return 1;
+        if (!Expect(results[0].ruleId == "audit_limit_1" && results[1].ruleId == "audit_limit_2",
+                    "globalMode audit returns the first limited audit matches"))
+            return 1;
+        if (!Expect(!results[0].block && !results[1].block,
+                    "globalMode audit limit keeps results in audit mode"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanOptimizationRegexRulesJson("audit",
+                                                       0,
+                                                       true,
+                                                       {{"audit_unlimited_1", "block"},
+                                                        {"audit_unlimited_2", "block"},
+                                                        {"audit_unlimited_3", "block"}}),
+                        ""),
+                    "scanOptimization audit unlimited snapshot publishes"))
+            return 1;
+
+        RaspLuaContext ctx;
+        ctx.fields.push_back({"body", "amsiutils", true});
+        auto results = engine.Evaluate("AmsiProvider", ctx);
+        if (!Expect(results.size() == 3,
+                    "auditMaxEventsPerScan zero leaves audit matches unlimited"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(GlobalModeRegexRuleJson("block",
                                                                 "block",
                                                                 "global_block_block_rule",
@@ -712,6 +794,51 @@ int main()
                                                  9);
         if (!Expect(matched.ruleMatched && matched.block,
                     "globalMode block preserves block rule decision"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanOptimizationRegexRulesJson("block",
+                                                       3,
+                                                       true,
+                                                       {{"first_block_stop", "block"},
+                                                        {"second_after_block", "block"}}),
+                        ""),
+                    "scanOptimization stop after first block snapshot publishes"))
+            return 1;
+
+        RaspLuaContext ctx;
+        ctx.fields.push_back({"body", "amsiutils", true});
+        auto results = engine.Evaluate("AmsiProvider", ctx);
+        if (!Expect(results.size() == 1 && results[0].ruleId == "first_block_stop" && results[0].block,
+                    "stopAfterFirstBlock stops evaluating after the first final block"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanOptimizationRegexRulesJson("block",
+                                                       1,
+                                                       true,
+                                                       {{"first_audit_continue", "audit"},
+                                                        {"second_block_stop", "block"},
+                                                        {"third_after_block", "block"}}),
+                        ""),
+                    "scanOptimization block mode audit-before-block snapshot publishes"))
+            return 1;
+
+        RaspLuaContext ctx;
+        ctx.fields.push_back({"body", "amsiutils", true});
+        auto results = engine.Evaluate("AmsiProvider", ctx);
+        if (!Expect(results.size() == 2,
+                    "block mode does not apply auditMaxEventsPerScan before a block rule"))
+            return 1;
+        if (!Expect(results[0].ruleId == "first_audit_continue" && !results[0].block &&
+                    results[1].ruleId == "second_block_stop" && results[1].block,
+                    "block mode continues past audit result and stops at block result"))
             return 1;
     }
 
@@ -983,6 +1110,24 @@ int main()
                     "parent path gate skips only current rule and later rules still evaluate"))
             return 1;
     }
+
+#ifdef RASP_PCRE2_AVAILABLE
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(FirstRegexLimitedSecondRuleFallbackJson(), ""),
+                    "regex limit current-rule skip snapshot publishes"))
+            return 1;
+
+        std::string script = "REGEX_TIMEOUT_PROBE:" + std::string(4096, 'a') + "b SECOND_OK";
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 script.c_str(),
+                                                 script.size());
+        if (!Expect(matched.ruleMatched && matched.ruleId == "regex_fallback_second",
+                    "regex resource limit skips only current rule and later rules still evaluate"))
+            return 1;
+    }
+#endif
 
     {
         TestAmsiRuleEngine engine;

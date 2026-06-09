@@ -61,10 +61,22 @@ struct ScanExecutionContext
     uint32_t luaInstructions = 0;
     bool timedOut = false;
     bool regexLimitHit = false;
+    bool regexRuleLimitHit = false;
+    bool currentRuleLimited = false;
     bool regexSubjectTruncated = false;
     bool matchedBeforeTimeout = false;
+    uint32_t rulesSkippedByRegexLimit = 0;
+    uint32_t regexMatchLimitHits = 0;
+    uint32_t regexDepthLimitHits = 0;
+    uint32_t regexHeapLimitHits = 0;
+    uint32_t regexJitStackLimitHits = 0;
     std::string timeoutReason;
     std::string regexLimitType;
+    std::string currentRuleLimitReason;
+    std::string currentRuleLimitType;
+    int currentRuleIndex = -1;
+    int currentRegexCheckIndex = -1;
+    int currentRegexPatternIndex = -1;
     std::string decisionAfterTimeout;
 
     bool MarkTimeout(const std::string& reason)
@@ -74,6 +86,55 @@ struct ScanExecutionContext
             timeoutReason = reason;
         }
         return false;
+    }
+
+    bool MarkRuleLimit(const std::string& reason, const std::string& limitType)
+    {
+        regexLimitHit = true;
+        regexRuleLimitHit = true;
+        regexLimitType = limitType;
+        currentRuleLimited = true;
+        currentRuleLimitReason = reason;
+        currentRuleLimitType = limitType;
+        if (limitType == "match_limit")
+            ++regexMatchLimitHits;
+        else if (limitType == "depth_limit")
+            ++regexDepthLimitHits;
+        else if (limitType == "heap_limit")
+            ++regexHeapLimitHits;
+        else if (limitType == "jit_stack_limit")
+            ++regexJitStackLimitHits;
+        return false;
+    }
+
+    void SetRuleContext(int ruleIndex)
+    {
+        currentRuleIndex = ruleIndex;
+        currentRegexCheckIndex = -1;
+        currentRegexPatternIndex = -1;
+    }
+
+    void SetRegexCheckContext(int checkIndex)
+    {
+        currentRegexCheckIndex = checkIndex;
+        currentRegexPatternIndex = -1;
+    }
+
+    void SetRegexPatternIndex(int index)
+    {
+        currentRegexPatternIndex = index;
+    }
+
+    void ClearCurrentRuleLimit()
+    {
+        currentRuleLimited = false;
+        currentRuleLimitReason.clear();
+        currentRuleLimitType.clear();
+    }
+
+    bool ShouldStopScan() const
+    {
+        return timedOut;
     }
 
     bool TryEnterRule()
@@ -92,8 +153,8 @@ struct ScanExecutionContext
             return MarkTimeout("scan_timeout");
         if (regexCalls >= budget.maxRegexCalls) {
             regexLimitHit = true;
-            regexLimitType = "call_limit";
-            return MarkTimeout("regex_limit_hit");
+            regexLimitType = "max_regex_calls";
+            return MarkTimeout("max_regex_calls_exhausted");
         }
         ++regexCalls;
         return true;

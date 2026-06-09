@@ -671,7 +671,9 @@ bool RaspSentryBase::ParseRulesJson(
     std::vector<std::string>*                   trustProcessOut,
     RaspGlobalMode*                             globalModeOut,
     bool*                                       hasGlobalModeOut,
-    uint32_t*                                   maxScanContentBytesOut)
+    uint32_t*                                   maxScanContentBytesOut,
+    uint32_t*                                   auditMaxEventsPerScanOut,
+    bool*                                       stopAfterFirstBlockOut)
 {
     class FactoryAdapter final : public IRuleObjectFactory {
     public:
@@ -710,7 +712,11 @@ bool RaspSentryBase::ParseRulesJson(
     if (hasGlobalModeOut)
         *hasGlobalModeOut = result.hasGlobalMode;
     if (maxScanContentBytesOut)
-    *maxScanContentBytesOut = result.maxScanContentBytes;
+        *maxScanContentBytesOut = result.maxScanContentBytes;
+    if (auditMaxEventsPerScanOut)
+        *auditMaxEventsPerScanOut = result.auditMaxEventsPerScan;
+    if (stopAfterFirstBlockOut)
+        *stopAfterFirstBlockOut = result.stopAfterFirstBlock;
     libSourceOut = std::move(result.libSource);
     rulesOut = std::move(result.rules);
     return result.ok;

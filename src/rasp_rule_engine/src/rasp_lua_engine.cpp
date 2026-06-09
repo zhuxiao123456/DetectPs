@@ -124,21 +124,13 @@ void RecordRegexLimit(int rc, ScanExecutionContext* exec)
         return;
 
     if (rc == PCRE2_ERROR_MATCHLIMIT) {
-        exec->regexLimitHit = true;
-        exec->regexLimitType = "match_limit";
-        exec->MarkTimeout("regex_limit_hit");
+        exec->MarkRuleLimit("regex_pattern_limit", "match_limit");
     } else if (rc == PCRE2_ERROR_JIT_STACKLIMIT) {
-        exec->regexLimitHit = true;
-        exec->regexLimitType = "jit_stack_limit";
-        exec->MarkTimeout("regex_limit_hit");
+        exec->MarkRuleLimit("regex_pattern_limit", "jit_stack_limit");
     } else if (rc == PCRE2_ERROR_DEPTHLIMIT) {
-        exec->regexLimitHit = true;
-        exec->regexLimitType = "depth_limit";
-        exec->MarkTimeout("regex_limit_hit");
+        exec->MarkRuleLimit("regex_pattern_limit", "depth_limit");
     } else if (rc == PCRE2_ERROR_HEAPLIMIT) {
-        exec->regexLimitHit = true;
-        exec->regexLimitType = "heap_limit";
-        exec->MarkTimeout("regex_limit_hit");
+        exec->MarkRuleLimit("regex_pattern_limit", "heap_limit");
     }
 }
 
@@ -189,24 +181,43 @@ void LogRegexFailure(const RaspLuaEngine* engine,
 {
     if (!engine || !ShouldLogRegexFailure(rc))
         return;
+    (void)pattern;
 
-    const size_t maxPatternLog = 160;
-    std::string patternSample = pattern.substr(0, maxPatternLog);
-    if (pattern.size() > maxPatternLog)
-        patternSample += "...";
+    const char* reason = "none";
+    const char* limitType = "none";
+    int ruleIndex = -1;
+    int checkIndex = -1;
+    int patternIndex = -1;
+    if (exec) {
+        if (!exec->currentRuleLimitReason.empty())
+            reason = exec->currentRuleLimitReason.c_str();
+        else if (!exec->timeoutReason.empty())
+            reason = exec->timeoutReason.c_str();
+
+        if (!exec->currentRuleLimitType.empty())
+            limitType = exec->currentRuleLimitType.c_str();
+        else if (!exec->regexLimitType.empty())
+            limitType = exec->regexLimitType.c_str();
+
+        ruleIndex = exec->currentRuleIndex;
+        checkIndex = exec->currentRegexCheckIndex;
+        patternIndex = exec->currentRegexPatternIndex;
+    }
 
     char msg[512];
     snprintf(msg, sizeof(msg),
-             "[AmsiLuaEngine] regex failure api=%s rc=%d error=%s subjectLen=%zu regexCalls=%u timedOut=%d reason=%s limitType=%s pattern=%s",
+             "[AmsiLuaEngine] regex failure api=%s rc=%d error=%s subjectLen=%zu regexCalls=%u timedOut=%d reason=%s limitType=%s ruleIndex=%d checkIndex=%d patternIndex=%d",
              api ? api : "unknown",
              rc,
              RegexErrorName(rc),
              subjectLen,
              exec ? exec->regexCalls : 0,
              exec && exec->timedOut ? 1 : 0,
-             exec && !exec->timeoutReason.empty() ? exec->timeoutReason.c_str() : "none",
-             exec && !exec->regexLimitType.empty() ? exec->regexLimitType.c_str() : "none",
-             patternSample.c_str());
+             reason,
+             limitType,
+             ruleIndex,
+             checkIndex,
+             patternIndex);
     engine->LogWithSeverity(RegexFailureSeverity(rc), msg);
 }
 
@@ -241,10 +252,9 @@ pcre2_real_code_8 *RaspLuaEngine::GetOrCompilePcre2(const std::string &pattern) 
         pcre2_get_error_message(errcode, errbuf, sizeof(errbuf));
         char msg[512];
         snprintf(msg, sizeof(msg),
-                 "[AmsiLuaEngine] regex compile error at offset %zu: %s  pattern=%s\n",
+                 "[AmsiLuaEngine] regex compile error at offset %zu: %s\n",
                  (size_t)erroffset,
-                 reinterpret_cast<const char *>(errbuf),
-                 pattern.c_str());
+                 reinterpret_cast<const char *>(errbuf));
         Log(msg);
         return nullptr;
     }
@@ -280,10 +290,14 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
                                      ScanExecutionContext *exec) const
 {
     size_t subjectLen = exec ? exec->BoundedRegexSubjectLength(text.size()) : text.size();
-    for (const auto &pat : patterns)
+    for (size_t patternIndex = 0; patternIndex < patterns.size(); ++patternIndex)
     {
+        const auto &pat = patterns[patternIndex];
         if (pat.empty())
             continue;
+
+        if (exec)
+            exec->SetRegexPatternIndex(static_cast<int>(patternIndex));
 
         if (exec && !exec->TryEnterRegexCall()) {
             LogRegexFailure(this, "MatchesAnyRegex", PCRE2_ERROR_MATCHLIMIT, pat, subjectLen, exec);
@@ -327,6 +341,8 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
         }
         RecordRegexLimit(rc, exec);
         LogRegexFailure(this, "MatchesAnyRegex", rc, pat, subjectLen, exec);
+        if (exec && exec->currentRuleLimited)
+            return false;
         // PCRE2_ERROR_NOMATCH (-1) is expected; other negative codes are errors.
     }
     return false;
@@ -358,6 +374,8 @@ static int lua_pcre2_match(lua_State *L)
     lua_getfield(L, LUA_REGISTRYINDEX, kLuaBudgetRegistryKey);
     auto *exec = static_cast<ScanExecutionContext *>(lua_touserdata(L, -1));
     lua_pop(L, 1);
+    if (exec)
+        exec->SetRegexPatternIndex(-1);
 
     if (exec && !exec->TryEnterRegexCall())
     {
@@ -416,6 +434,8 @@ static int lua_pcre2_capture(lua_State *L)
     lua_getfield(L, LUA_REGISTRYINDEX, kLuaBudgetRegistryKey);
     auto *exec = static_cast<ScanExecutionContext *>(lua_touserdata(L, -1));
     lua_pop(L, 1);
+    if (exec)
+        exec->SetRegexPatternIndex(-1);
 
     if (exec && !exec->TryEnterRegexCall())
     {

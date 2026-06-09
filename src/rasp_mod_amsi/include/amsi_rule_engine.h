@@ -78,6 +78,8 @@ protected:
         bool hasGlobalMode = false;
         RaspGlobalMode globalMode = RaspGlobalMode::Block;
         uint32_t maxScanContentBytes = kDefaultMaxScanContentBytes;
+        uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
+        bool stopAfterFirstBlock = true;
     };
 
     std::shared_ptr<const RuleSnapshot> BuildNextSnapshot(

@@ -134,7 +134,11 @@ int main()
             return 1;
         if (!Expect(exec.regexLimitHit, "regex call limit is recorded"))
             return 1;
-        if (!Expect(exec.regexLimitType == "call_limit", "regex call limit type is recorded"))
+        if (!Expect(exec.regexLimitType == "max_regex_calls", "regex call limit type is recorded"))
+            return 1;
+        if (!Expect(exec.timedOut, "regex call budget exhaustion stops scan"))
+            return 1;
+        if (!Expect(exec.timeoutReason == "max_regex_calls_exhausted", "regex call budget reason is recorded"))
             return 1;
     }
 
@@ -173,7 +177,19 @@ int main()
             return 1;
         if (!Expect(exec.regexLimitHit, "PCRE2 match/depth/heap limit hit is recorded"))
             return 1;
-        if (!Expect(g_capturedLog.find("regex_limit") != std::string::npos, "PCRE2 regex limit is logged"))
+        if (!Expect(exec.regexRuleLimitHit, "PCRE2 resource limit is recorded as a rule-local limit"))
+            return 1;
+        if (!Expect(exec.currentRuleLimited, "PCRE2 resource limit marks current rule limited"))
+            return 1;
+        if (!Expect(!exec.timedOut, "PCRE2 resource limit does not stop the whole scan"))
+            return 1;
+        if (!Expect(g_capturedLog.find("regex_pattern_limit") != std::string::npos, "PCRE2 regex limit is logged"))
+            return 1;
+        if (!Expect(g_capturedLog.find("patternIndex=0") != std::string::npos,
+                    "PCRE2 regex limit log records the pattern index"))
+            return 1;
+        if (!Expect(g_capturedLog.find("^(a+)+$") == std::string::npos,
+                    "PCRE2 regex limit log does not include the concrete pattern"))
             return 1;
         if (!Expect(g_capturedSeverity == RaspDiagSeverity::Warning, "PCRE2 regex limit is logged as warning"))
             return 1;
@@ -195,9 +211,13 @@ int main()
             return 1;
         if (!Expect(exec.regexLimitHit, "JIT stack limit is treated as a regex limit"))
             return 1;
-        if (!Expect(exec.timedOut, "JIT stack limit marks scan execution context timed out"))
+        if (!Expect(exec.regexRuleLimitHit, "JIT stack limit is treated as a rule-local regex limit"))
             return 1;
-        if (!Expect(exec.timeoutReason == "regex_limit_hit", "JIT stack limit records regex limit timeout reason"))
+        if (!Expect(exec.currentRuleLimited, "JIT stack limit marks current rule limited"))
+            return 1;
+        if (!Expect(!exec.timedOut, "JIT stack limit does not mark scan execution context timed out"))
+            return 1;
+        if (!Expect(exec.timeoutReason.empty(), "JIT stack limit does not record a global timeout reason"))
             return 1;
         if (!Expect(exec.regexLimitType == "jit_stack_limit" || exec.regexLimitType == "match_limit" ||
                     exec.regexLimitType == "depth_limit" || exec.regexLimitType == "heap_limit",
@@ -210,6 +230,27 @@ int main()
                     "PCRE2 resource limit is logged with a concrete type"))
             return 1;
         if (!Expect(g_capturedSeverity == RaspDiagSeverity::Warning, "PCRE2 resource limit is logged as warning"))
+            return 1;
+    }
+
+    {
+        RaspLuaEngine engine;
+        engine.SetLogFn(SilentLog);
+        ScanExecutionContext exec;
+        exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
+
+        std::string subject = "REGEX_TIMEOUT_PROBE:" + std::string(4096, 'a') + "b SECOND_OK";
+        std::string matched;
+        bool ok = engine.MatchesAnyRegex({"(?s)REGEX_TIMEOUT_PROBE:(?:a|aa)+$", "SECOND_OK"},
+                                         subject,
+                                         matched,
+                                         &exec);
+        if (!Expect(!ok, "regex pattern list stops after a resource-limited pattern"))
+            return 1;
+        if (!Expect(matched.empty(), "later regex patterns are not evaluated after current rule is limited"))
+            return 1;
+        if (!Expect(exec.currentRuleLimited && exec.currentRegexPatternIndex == 0,
+                    "resource-limited pattern records the failing pattern index"))
             return 1;
     }
     {
@@ -239,8 +280,13 @@ int main()
         ScanExecutionContext exec3;
         exec3.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec3.budget.totalBudgetMs));
         matched.clear();
+        g_capturedLog.clear();
+        engine.SetLogFn(CaptureLog);
         ok = engine.MatchesAnyRegex({"("}, "invalid", matched, &exec3);
         if (!Expect(!ok, "invalid C++ regex pattern is skipped"))
+            return 1;
+        if (!Expect(g_capturedLog.find("pattern=") == std::string::npos,
+                    "invalid C++ regex compile log does not include the concrete pattern"))
             return 1;
         if (!Expect(engine.RegexCacheSizeForTesting() == 1, "invalid C++ pattern is not cached"))
             return 1;

@@ -14,6 +14,51 @@ uint32_t ClampMaxScanContentBytes(int value)
     return static_cast<uint32_t>(value);
 }
 
+uint32_t ClampAuditMaxEventsPerScan(int value)
+{
+    if (value <= 0)
+        return 0;
+    if (value > static_cast<int>(kMaxAuditMaxEventsPerScan))
+        return kMaxAuditMaxEventsPerScan;
+    return static_cast<uint32_t>(value);
+}
+
+void ParseScanOptimization(RuleJsonParser::Parser& p, RuleParseResult& result)
+{
+    if (!p.consume('{')) {
+        p.skip_value();
+        return;
+    }
+
+    result.hasScanOptimization = true;
+    while (!p.peek('}') && p.ok()) {
+        std::string key;
+        if (!p.read_string(key) || !p.consume(':')) {
+            p.skip_value();
+            break;
+        }
+
+        if (key == "auditMaxEventsPerScan") {
+            int value = 0;
+            if (p.read_int(value))
+                result.auditMaxEventsPerScan = ClampAuditMaxEventsPerScan(value);
+            else
+                p.skip_value();
+        } else if (key == "stopAfterFirstBlock") {
+            bool value = true;
+            if (p.read_bool(value))
+                result.stopAfterFirstBlock = value;
+            else
+                p.skip_value();
+        } else {
+            p.skip_value();
+        }
+
+        p.consume(',');
+    }
+    p.consume('}');
+}
+
 bool Base64Decode(const std::string& input, std::string& output)
 {
     static const int kDecodeTable[128] = {
@@ -200,6 +245,8 @@ bool ParseBundleObject(RuleJsonParser::Parser& p,
             } else {
                 p.skip_value();
             }
+        } else if (key == "scanOptimization") {
+            ParseScanOptimization(p, result);
         } else {
             p.skip_value();
         }
@@ -441,6 +488,8 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
             } else {
                 p.skip_value();
             }
+        } else if (key == "scanOptimization") {
+            ParseScanOptimization(p, result);
         } else if (key == "rules") {
             if (!ParseRulesArray(p, result, factory, extensionParser))
                 return result;
