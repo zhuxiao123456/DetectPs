@@ -302,6 +302,56 @@ int main()
     }
 
     {
+        auto missing = Parse(R"json({"rules":[{"id":"r"}]})json");
+        if (!Expect(!missing.scanRateLimit.enabled,
+                    "missing scanRateLimit is disabled by default"))
+            return 1;
+        if (!Expect(missing.scanRateLimit.windowMs == kDefaultScanRateLimitWindowMs,
+                    "missing scanRateLimit window uses default"))
+            return 1;
+        if (!Expect(missing.scanRateLimit.maxScans == kDefaultScanRateLimitMaxScans,
+                    "missing scanRateLimit maxScans uses default"))
+            return 1;
+        if (!Expect(missing.scanRateLimit.bypassRatioAfterLimit == kDefaultScanRateLimitBypassRatio,
+                    "missing scanRateLimit ratio uses default"))
+            return 1;
+
+        auto configured = Parse(R"json({"scanRateLimit":{"enabled":true,"windowMs":500,"maxScans":7,"bypassRatioAfterLimit":0.8},"rules":[{"id":"r"}]})json");
+        if (!Expect(configured.hasScanRateLimit, "configured scanRateLimit is marked present"))
+            return 1;
+        if (!Expect(configured.scanRateLimit.enabled, "configured scanRateLimit enabled parses"))
+            return 1;
+        if (!Expect(configured.scanRateLimit.windowMs == 500, "configured scanRateLimit window parses"))
+            return 1;
+        if (!Expect(configured.scanRateLimit.maxScans == 7, "configured scanRateLimit maxScans parses"))
+            return 1;
+        if (!Expect(configured.scanRateLimit.bypassRatioAfterLimit == 0.8,
+                    "configured scanRateLimit ratio parses"))
+            return 1;
+
+        auto observeOnly = Parse(R"json({"scanRateLimit":{"enabled":true,"bypassRatioAfterLimit":0.0},"rules":[{"id":"r"}]})json");
+        if (!Expect(observeOnly.scanRateLimit.bypassRatioAfterLimit == 0.0,
+                    "scanRateLimit ratio 0.0 is preserved for observe only"))
+            return 1;
+
+        auto bypassAll = Parse(R"json({"scanRateLimit":{"enabled":true,"bypassRatioAfterLimit":1.0},"rules":[{"id":"r"}]})json");
+        if (!Expect(bypassAll.scanRateLimit.bypassRatioAfterLimit == 1.0,
+                    "scanRateLimit ratio 1.0 is preserved for bypass all"))
+            return 1;
+
+        auto clamped = Parse(R"json({"scanRateLimit":{"enabled":true,"windowMs":1,"maxScans":0,"bypassRatioAfterLimit":1.5},"rules":[{"id":"r"}]})json");
+        if (!Expect(clamped.scanRateLimit.windowMs == kMinScanRateLimitWindowMs,
+                    "small scanRateLimit window clamps to minimum"))
+            return 1;
+        if (!Expect(clamped.scanRateLimit.maxScans == kMinScanRateLimitMaxScans,
+                    "small scanRateLimit maxScans clamps to minimum"))
+            return 1;
+        if (!Expect(clamped.scanRateLimit.bypassRatioAfterLimit == kMaxScanRateLimitBypassRatio,
+                    "large scanRateLimit ratio clamps to maximum"))
+            return 1;
+    }
+
+    {
         auto result = Parse(R"json({"globalLibraries":"bGliLXNpbmdsZQ==","rules":[]})json");
         if (!Expect(!result.ok, "bundle without valid rules is reported as failure"))
             return 1;

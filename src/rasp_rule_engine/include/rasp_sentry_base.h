@@ -150,7 +150,9 @@ protected:
         uint32_t*                                    maxScanContentBytesOut = nullptr,
         uint32_t*                                    auditMaxEventsPerScanOut = nullptr,
         bool*                                        stopAfterFirstBlockOut = nullptr,
-        uint32_t*                                    totalScanTimeoutMsOut = nullptr);
+        uint32_t*                                    totalScanTimeoutMsOut = nullptr,
+        ScanRateLimitConfig*                         scanRateLimitOut = nullptr,
+        bool*                                        hasScanRateLimitOut = nullptr);
 
     // Virtual factory override to return module-specific derived type.
     // Default returns new RaspRuleBase().

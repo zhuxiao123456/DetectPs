@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -81,6 +82,17 @@ protected:
         uint32_t totalScanTimeoutMs = kDefaultTotalScanTimeoutMs;
         uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
         bool stopAfterFirstBlock = true;
+        ScanRateLimitConfig scanRateLimit;
+    };
+
+    struct ScanRateLimitDecision {
+        bool enabled = false;
+        bool overLimit = false;
+        bool bypass = false;
+        const char* reason = "";
+        uint64_t windowScanCount = 0;
+        uint64_t overLimitSeq = 0;
+        uint32_t bypassPermille = 0;
     };
 
     std::shared_ptr<const RuleSnapshot> BuildNextSnapshot(
@@ -88,10 +100,21 @@ protected:
         const std::string& libSource,
         std::string& effectiveLib);
 
+    ScanRateLimitDecision ShouldBypassByScanRateLimit(
+        const ScanRateLimitConfig& config,
+        uint64_t nowMs);
+
 private:
     ScriptInputNormalizer m_inputNormalizer;
     std::shared_ptr<const RuleSnapshot> m_snapshot;
     std::string m_libSource;
+    std::mutex m_rateLimitMutex;
+    uint64_t m_rateLimitWindowStartMs = 0;
+    uint64_t m_rateLimitWindowScanCount = 0;
+    uint64_t m_rateLimitOverLimitSeq = 0;
+    uint32_t m_rateLimitWindowBypassed = 0;
+    uint32_t m_rateLimitWindowEvaluatedAfterLimit = 0;
+    bool m_rateLimitWindowLimitEntered = false;
 
     void PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
                          const std::string& effectiveLib);

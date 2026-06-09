@@ -143,6 +143,18 @@ public:
         auto snapshot = BuildNextSnapshot(json, "", effectiveLib);
         return snapshot ? snapshot->totalScanTimeoutMs : 0;
     }
+
+    ScanRateLimitConfig BuildSnapshotScanRateLimit(const std::string& json)
+    {
+        std::string effectiveLib;
+        auto snapshot = BuildNextSnapshot(json, "", effectiveLib);
+        return snapshot ? snapshot->scanRateLimit : ScanRateLimitConfig{};
+    }
+
+    ScanRateLimitDecision CheckScanRateLimit(const ScanRateLimitConfig& config, uint64_t nowMs)
+    {
+        return ShouldBypassByScanRateLimit(config, nowMs);
+    }
 };
 
 struct LuaBytecodeWriter
@@ -237,6 +249,15 @@ std::string OneRegexRuleJson(const char* id, const char* pattern)
     return std::string("{\"rules\":[{\"id\":\"") + id +
            "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"split_regex\",\"config\":{\"regexPatterns\":[\"" +
            pattern + "\"]}}]}";
+}
+
+std::string RateLimitedRegexRuleJson(uint32_t maxScans, double bypassRatio)
+{
+    return std::string("{\"scanRateLimit\":{\"enabled\":true,\"windowMs\":1000,\"maxScans\":") +
+           std::to_string(maxScans) +
+           ",\"bypassRatioAfterLimit\":" +
+           std::to_string(bypassRatio) +
+           "},\"rules\":[{\"id\":\"rate_limited\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"rate_limit\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
 }
 
 std::string GlobalModeRegexRuleJson(const char* globalMode,
@@ -866,6 +887,78 @@ int main()
             "\"description\":\"timeout_cfg\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
         if (!Expect(engine.BuildSnapshotTotalScanTimeoutMs(timeoutJson) == 750,
                     "totalScanTimeoutMs is published into the rule snapshot"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        ScanRateLimitConfig cfg = engine.BuildSnapshotScanRateLimit(RateLimitedRegexRuleJson(3, 0.8));
+        if (!Expect(cfg.enabled && cfg.windowMs == 1000 && cfg.maxScans == 3,
+                    "scanRateLimit is published into the rule snapshot"))
+            return 1;
+        if (!Expect(cfg.bypassRatioAfterLimit == 0.8,
+                    "scanRateLimit ratio is published into the rule snapshot"))
+            return 1;
+
+        auto d1 = engine.CheckScanRateLimit(cfg, 1000);
+        auto d2 = engine.CheckScanRateLimit(cfg, 1001);
+        auto d3 = engine.CheckScanRateLimit(cfg, 1002);
+        if (!Expect(!d1.bypass && !d2.bypass && !d3.bypass,
+                    "scanRateLimit does not bypass within maxScans"))
+            return 1;
+        auto d4 = engine.CheckScanRateLimit(cfg, 1003);
+        if (!Expect(d4.overLimit && d4.reason == std::string("scan_rate_limited"),
+                    "scanRateLimit reports reason after maxScans"))
+            return 1;
+        if (!Expect(d4.windowScanCount == 4 && d4.overLimitSeq == 1 && d4.bypassPermille == 800,
+                    "scanRateLimit decision exposes counters and rounded permille"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        ScanRateLimitConfig cfg;
+        cfg.enabled = true;
+        cfg.windowMs = 1000;
+        cfg.maxScans = 1;
+        cfg.bypassRatioAfterLimit = 1.0;
+        if (!Expect(!engine.CheckScanRateLimit(cfg, 2000).bypass,
+                    "first scan in window is evaluated"))
+            return 1;
+        if (!Expect(engine.CheckScanRateLimit(cfg, 2001).bypass,
+                    "bypassRatioAfterLimit 1.0 bypasses all over-limit scans"))
+            return 1;
+        if (!Expect(!engine.CheckScanRateLimit(cfg, 3000).bypass,
+                    "new window resets scan rate limit"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        ScanRateLimitConfig cfg;
+        cfg.enabled = true;
+        cfg.windowMs = 1000;
+        cfg.maxScans = 1;
+        cfg.bypassRatioAfterLimit = 0.0;
+        (void)engine.CheckScanRateLimit(cfg, 4000);
+        auto overLimit = engine.CheckScanRateLimit(cfg, 4001);
+        if (!Expect(overLimit.overLimit && !overLimit.bypass && overLimit.bypassPermille == 0,
+                    "bypassRatioAfterLimit 0.0 observes over-limit without bypass"))
+            return 1;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(RateLimitedRegexRuleJson(1, 1.0), ""),
+                    "rate-limited regex snapshot publishes"))
+            return 1;
+        AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsiutils", 9);
+        if (!Expect(first.ruleMatched && first.block,
+                    "first scan before rate limit evaluates rules"))
+            return 1;
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsiutils", 9);
+        if (!Expect(!second.ruleMatched,
+                    "over-limit scan returns NoMatch without detection"))
             return 1;
     }
 

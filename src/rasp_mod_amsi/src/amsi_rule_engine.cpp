@@ -372,6 +372,7 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     uint32_t totalScanTimeoutMs = kDefaultTotalScanTimeoutMs;
     uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
     bool stopAfterFirstBlock = true;
+    ScanRateLimitConfig scanRateLimit;
     if (!ParseRulesJson(json,
                         lib,
                         rawRules,
@@ -382,7 +383,9 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
                         &maxScanContentBytes,
                         &auditMaxEventsPerScan,
                         &stopAfterFirstBlock,
-                        &totalScanTimeoutMs) || rawRules.empty()) {
+                        &totalScanTimeoutMs,
+                        &scanRateLimit,
+                        nullptr) || rawRules.empty()) {
         LogWithSeverity(RaspDiagSeverity::Warning, "BuildNextSnapshot: no rules parsed");
         return {};
     }
@@ -411,7 +414,8 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
                           maxScanContentBytes,
                           totalScanTimeoutMs,
                           auditMaxEventsPerScan,
-                          stopAfterFirstBlock});
+                          stopAfterFirstBlock,
+                          scanRateLimit});
 }
 
 bool AmsiRuleEngine::ShouldBlockRule(const RuleSnapshot& snapshot,
@@ -422,6 +426,67 @@ bool AmsiRuleEngine::ShouldBlockRule(const RuleSnapshot& snapshot,
     if (snapshot.hasGlobalMode && snapshot.globalMode == RaspGlobalMode::Audit)
         return false;
     return rule.IsBlock();
+}
+
+AmsiRuleEngine::ScanRateLimitDecision AmsiRuleEngine::ShouldBypassByScanRateLimit(
+        const ScanRateLimitConfig& config,
+        uint64_t nowMs)
+{
+    ScanRateLimitDecision decision;
+    decision.enabled = config.enabled;
+    if (!config.enabled)
+        return decision;
+
+    const uint32_t bypassPermille =
+        static_cast<uint32_t>(config.bypassRatioAfterLimit * 1000.0 + 0.5);
+    decision.bypassPermille = bypassPermille;
+
+    std::lock_guard<std::mutex> lock(m_rateLimitMutex);
+    if (m_rateLimitWindowStartMs == 0 ||
+        nowMs < m_rateLimitWindowStartMs ||
+        nowMs - m_rateLimitWindowStartMs >= config.windowMs) {
+        if (m_rateLimitWindowLimitEntered) {
+            LogWithSeverity(RaspDiagSeverity::Warning,
+                            "AMSI scan rate limit summary: scans=%llu bypassed=%u evaluatedAfterLimit=%u windowMs=%u maxScans=%u",
+                            static_cast<unsigned long long>(m_rateLimitWindowScanCount),
+                            m_rateLimitWindowBypassed,
+                            m_rateLimitWindowEvaluatedAfterLimit,
+                            config.windowMs,
+                            config.maxScans);
+        }
+        m_rateLimitWindowStartMs = nowMs;
+        m_rateLimitWindowScanCount = 0;
+        m_rateLimitOverLimitSeq = 0;
+        m_rateLimitWindowBypassed = 0;
+        m_rateLimitWindowEvaluatedAfterLimit = 0;
+        m_rateLimitWindowLimitEntered = false;
+    }
+
+    ++m_rateLimitWindowScanCount;
+    decision.windowScanCount = m_rateLimitWindowScanCount;
+    if (m_rateLimitWindowScanCount <= config.maxScans)
+        return decision;
+
+    decision.overLimit = true;
+    decision.reason = "scan_rate_limited";
+    decision.overLimitSeq = ++m_rateLimitOverLimitSeq;
+
+    if (!m_rateLimitWindowLimitEntered) {
+        LogWithSeverity(RaspDiagSeverity::Warning,
+                        "AMSI scan rate limit entered: windowMs=%u maxScans=%u bypassRatio=%.2f",
+                        config.windowMs,
+                        config.maxScans,
+                        config.bypassRatioAfterLimit);
+        m_rateLimitWindowLimitEntered = true;
+    }
+
+    decision.bypass = ((decision.overLimitSeq * 9973ULL) % 1000ULL) < bypassPermille;
+    if (decision.bypass) {
+        ++m_rateLimitWindowBypassed;
+    } else {
+        ++m_rateLimitWindowEvaluatedAfterLimit;
+    }
+    return decision;
 }
 
 static const char* ResolveTimeoutDecision(const std::vector<RaspEvalResult>& results,
@@ -799,6 +864,10 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
 
     auto snap = std::atomic_load(&m_snapshot);
     if (!snap || !snap->luaEngine)
+        return results;
+    const ScanRateLimitDecision rateDecision =
+        ShouldBypassByScanRateLimit(snap->scanRateLimit, GetTickCount64());
+    if (rateDecision.bypass)
         return results;
     exec.budget.totalBudgetMs = snap->totalScanTimeoutMs;
     exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));

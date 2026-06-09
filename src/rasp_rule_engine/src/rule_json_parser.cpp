@@ -1,6 +1,7 @@
 #include "rule_json_parser.h"
 
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 
 namespace {
@@ -32,11 +33,86 @@ uint32_t ClampAuditMaxEventsPerScan(int value)
     return static_cast<uint32_t>(value);
 }
 
+uint32_t ClampScanRateLimitWindowMs(int value)
+{
+    if (value < static_cast<int>(kMinScanRateLimitWindowMs))
+        return kMinScanRateLimitWindowMs;
+    if (value > static_cast<int>(kMaxScanRateLimitWindowMs))
+        return kMaxScanRateLimitWindowMs;
+    return static_cast<uint32_t>(value);
+}
+
+uint32_t ClampScanRateLimitMaxScans(int value)
+{
+    if (value < static_cast<int>(kMinScanRateLimitMaxScans))
+        return kMinScanRateLimitMaxScans;
+    if (value > static_cast<int>(kMaxScanRateLimitMaxScans))
+        return kMaxScanRateLimitMaxScans;
+    return static_cast<uint32_t>(value);
+}
+
+double ClampScanRateLimitBypassRatio(double value)
+{
+    if (value < kMinScanRateLimitBypassRatio)
+        return kMinScanRateLimitBypassRatio;
+    if (value > kMaxScanRateLimitBypassRatio)
+        return kMaxScanRateLimitBypassRatio;
+    return value;
+}
+
 int NormalizeRuleSeverity(int value)
 {
     if (value < 0 || value > 4)
         return 2;
     return value;
+}
+
+void ParseScanRateLimit(RuleJsonParser::Parser& p, RuleParseResult& result)
+{
+    if (!p.consume('{')) {
+        p.skip_value();
+        return;
+    }
+
+    result.hasScanRateLimit = true;
+    while (!p.peek('}') && p.ok()) {
+        std::string key;
+        if (!p.read_string(key) || !p.consume(':')) {
+            p.skip_value();
+            break;
+        }
+
+        if (key == "enabled") {
+            bool value = false;
+            if (p.read_bool(value))
+                result.scanRateLimit.enabled = value;
+            else
+                p.skip_value();
+        } else if (key == "windowMs") {
+            int value = 0;
+            if (p.read_int(value))
+                result.scanRateLimit.windowMs = ClampScanRateLimitWindowMs(value);
+            else
+                p.skip_value();
+        } else if (key == "maxScans") {
+            int value = 0;
+            if (p.read_int(value))
+                result.scanRateLimit.maxScans = ClampScanRateLimitMaxScans(value);
+            else
+                p.skip_value();
+        } else if (key == "bypassRatioAfterLimit") {
+            double value = kDefaultScanRateLimitBypassRatio;
+            if (p.read_double(value))
+                result.scanRateLimit.bypassRatioAfterLimit = ClampScanRateLimitBypassRatio(value);
+            else
+                p.skip_value();
+        } else {
+            p.skip_value();
+        }
+
+        p.consume(',');
+    }
+    p.consume('}');
 }
 
 void ParseScanOptimization(RuleJsonParser::Parser& p, RuleParseResult& result)
@@ -276,6 +352,8 @@ bool ParseBundleObject(RuleJsonParser::Parser& p,
             }
         } else if (key == "scanOptimization") {
             ParseScanOptimization(p, result);
+        } else if (key == "scanRateLimit") {
+            ParseScanRateLimit(p, result);
         } else {
             p.skip_value();
         }
@@ -362,6 +440,20 @@ bool RuleJsonParser::Parser::read_int(int& out)
         out = out * 10 + (*p++ - '0');
     if (neg)
         out = -out;
+    return true;
+}
+
+bool RuleJsonParser::Parser::read_double(double& out)
+{
+    skip_ws();
+    if (!ok())
+        return false;
+
+    char* parsedEnd = nullptr;
+    out = std::strtod(p, &parsedEnd);
+    if (parsedEnd == p)
+        return false;
+    p = parsedEnd;
     return true;
 }
 
@@ -527,6 +619,8 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
             }
         } else if (key == "scanOptimization") {
             ParseScanOptimization(p, result);
+        } else if (key == "scanRateLimit") {
+            ParseScanRateLimit(p, result);
         } else if (key == "rules") {
             if (!ParseRulesArray(p, result, factory, extensionParser))
                 return result;
