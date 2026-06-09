@@ -847,6 +847,15 @@ int main()
                     results[1].ruleId == "second_block_stop" && results[1].block,
                     "block mode continues past audit result and stops at block result"))
             return 1;
+
+        AmsiEvalResult publicResult = engine.Evaluate(L"demo.ps1",
+                                                      L"powershell.exe",
+                                                      "amsiutils",
+                                                      9);
+        if (!Expect(publicResult.ruleMatched && publicResult.block &&
+                    publicResult.ruleId == "second_block_stop",
+                    "public AMSI result blocks when any later result is block"))
+            return 1;
     }
 
     {

@@ -1117,14 +1117,28 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
     }
 
     auto results = Evaluate("AmsiProvider", ctx);  // 调用真正的 Evaluate 函数
-    if (!results.empty() && results[0].matched) {
-        const auto &r = results[0];
-        result.ruleMatched = true;
-        result.block = r.block;
-        result.ruleId = r.ruleId;
-        result.desc = r.desc;
-        result.payload = r.payload;
-        result.severity = r.severity;
+    for (const auto &r : results) {
+        if (!r.matched)
+            continue;
+
+        if (!result.ruleMatched) {
+            result.ruleMatched = true;
+            result.block = r.block;
+            result.ruleId = r.ruleId;
+            result.desc = r.desc;
+            result.payload = r.payload;
+            result.severity = r.severity;
+        }
+
+        if (r.block) {
+            result.ruleMatched = true;
+            result.block = true;
+            result.ruleId = r.ruleId;
+            result.desc = r.desc;
+            result.payload = r.payload;
+            result.severity = r.severity;
+            break;
+        }
     }
 
     return result;
