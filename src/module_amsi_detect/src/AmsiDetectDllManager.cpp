@@ -71,11 +71,6 @@ namespace Engine {
     }
 
     // ¸üÐÂdll£¨·µ»ØÏêÏ¸×´Ì¬Âë£©.
-    int AmsiDetectDllManager::UpdateAmsiDll(const std::string &stagingDllPath, std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime)
-    {
-        return UpdateAmsiDllEx(stagingDllPath, m_amsiIpcRuntime).code;
-    }
-
     AmsiDetectDllManager::AmsiDllUpdateResult AmsiDetectDllManager::UpdateAmsiDllEx(
             const std::string &stagingDllPath,
             std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime)
@@ -106,7 +101,6 @@ namespace Engine {
             }
 
             result.code = UPDATE_SUCCESS;
-            result.dllChanged = false;
             return result;
         }
 
@@ -132,7 +126,6 @@ namespace Engine {
         if (TryShadowReplace(wStagedPath, wInstalledPath)) {
             InfoLog(GetLoggerPtr(), "DLL updated successfully via shadow rename - next AMSI scan will load the new binary.");
             result.code = UPDATE_SUCCESS_REPLACE;
-            result.dllChanged = true;
             return result;
         }
 
@@ -142,7 +135,6 @@ namespace Engine {
         if (moveResult >= 0) {
             InfoLogf1(GetLoggerPtr(), "DLL updated successfully via MoveFileEx %d ms.", moveResult);
             result.code = UPDATE_SUCCESS_MOVE;
-            result.dllChanged = true;
             return result;
         }
 
@@ -150,7 +142,6 @@ namespace Engine {
         InfoLog(GetLoggerPtr(), "All update methods failed - scheduling reboot replacement.");
         if (ScheduleReboot(wStagedPath, wInstalledPath)) {
             result.code = UPDATE_SUCCESS_REBOOT;
-            result.dllChanged = true;
             return result;
         } else {
             ErrorLog (GetLoggerPtr(), "Reboot scheduling also failed.");
@@ -210,7 +201,7 @@ namespace Engine {
                 MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED)) {
                 return elapsed + 1;  // ·µ»ØºÄÊ±+1£¨±ÜÃâÓë0³åÍ»£©.
             }
-            DebugLogf3(GetLoggerPtr(), "MoveFileEx failed (GLE=%lu), retry %dms later, elapsed %dms", GetLastError(), kRetryIntervalMs, elapsed);
+            DebugLogf2(GetLoggerPtr(), "MoveFileEx failed (GLE=%lu), retry elapsed %lu ms", GetLastError(), elapsed);
             
             Sleep(kRetryIntervalMs);
             elapsed += kRetryIntervalMs;

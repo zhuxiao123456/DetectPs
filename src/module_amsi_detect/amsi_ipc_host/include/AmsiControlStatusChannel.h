@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * å¤„ç†å®¢æˆ·ç«¯ï¼ˆAMSI æ¢é’ˆï¼‰çŠ¶æ€ä¸ŠæŠ¥çš„ç®¡é“æ•°æ®æ¥æ”¶å¤„ç†å™¨
+ * ´¦Àí¿Í»§¶Ë£¨AMSI Ì½Õë£©×´Ì¬ÉÏ±¨µÄ¹ÜµÀÊı¾İ½ÓÊÕ´¦ÀíÆ÷
  */
 #ifndef AMSI_CONTROL_STATUS_CHANNEL_H
 #define AMSI_CONTROL_STATUS_CHANNEL_H
@@ -13,9 +13,9 @@
 namespace amsi_ipc {
 
 /*
- * ç»§æ‰¿äº† INamedPipeClientHandler æ¥å£ã€‚
- * è¿™æ˜¯ä¸€ä¸ªå…¸å‹çš„ç­–ç•¥æ¨¡å¼ (Strategy Pattern) æˆ– å›è°ƒæ¥å£è®¾è®¡ã€‚
- * åº•å±‚çš„ NamedPipeServerPool ä¸å…³å¿ƒä¸šåŠ¡é€»è¾‘ï¼Œå®ƒåªè´Ÿè´£ç»´æŠ¤å¤šçº¿ç¨‹å’Œç½‘ç»œ I/Oï¼Œä¸€æ—¦æœ‰å®¢æˆ·ç«¯è¿æ¥ï¼Œå®ƒå°±è°ƒç”¨è¿™ä¸ªæ¥å£çš„ HandleClient æ–¹æ³•
+ * ¼Ì³ĞÁË INamedPipeClientHandler ½Ó¿Ú¡£
+ * ÕâÊÇÒ»¸öµäĞÍµÄ²ßÂÔÄ£Ê½ (Strategy Pattern) »ò »Øµ÷½Ó¿ÚÉè¼Æ¡£
+ * µ×²ãµÄ NamedPipeServerPool ²»¹ØĞÄÒµÎñÂß¼­£¬ËüÖ»¸ºÔğÎ¬»¤¶àÏß³ÌºÍÍøÂç I/O£¬Ò»µ©ÓĞ¿Í»§¶ËÁ¬½Ó£¬Ëü¾Íµ÷ÓÃÕâ¸ö½Ó¿ÚµÄ HandleClient ·½·¨
  */
 class AmsiControlStatusChannel : public INamedPipeClientHandler {
 public:
@@ -24,8 +24,8 @@ public:
     void HandleClient(HANDLE pipe) override;
 
 private:
-    // ä¾èµ–æ³¨å…¥ (Dependency Injection)ã€‚Channel ç±»æœ¬èº«åªè´Ÿè´£â€œä»ç®¡é“é‡ŒæŠŠå­—èŠ‚æµè¯»å‡ºæ¥â€
-    // è¯»å‡ºæ•°æ®åï¼Œå®ƒä¼šæŠŠæ•°æ®ä¸¢ç»™ sink_, è¿™ä¸ª sink_ å°±æ˜¯ hostguard ä¸»ç¨‹åºæä¾›çš„åˆ†æå¼•æ“æ¥å£
+    // ÒÀÀµ×¢Èë (Dependency Injection)¡£Channel Àà±¾ÉíÖ»¸ºÔğ¡°´Ó¹ÜµÀÀï°Ñ×Ö½ÚÁ÷¶Á³öÀ´¡±
+    // ¶Á³öÊı¾İºó£¬Ëü»á°ÑÊı¾İ¶ª¸ø sink_, Õâ¸ö sink_ ¾ÍÊÇ hostguard Ö÷³ÌĞòÌá¹©µÄ·ÖÎöÒıÇæ½Ó¿Ú
     IAmsiControlStatusSink& sink_;
 };
 

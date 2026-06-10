@@ -26,26 +26,28 @@ namespace Engine {
 
         struct AmsiDllUpdateResult {
             int code = -1;
-            bool dllChanged = false;
             std::string installedDllHash;
             std::string targetDllHash;
         };
 
         AmsiDetectDllManager(const std::string &amsiDllFilePath);
+
         ~AmsiDetectDllManager() = default;
 
         // ×¢²á/×¢ÏúAMSI.
         bool RegisterAmsiProvider();
+
         bool UnregisterAmsiProvider();
-        
+
         // ¸üÐÂdll£¨·µ»ØÏêÏ¸×´Ì¬Âë£©.
-        int UpdateAmsiDll(const std::string &stagingDllPath, std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime);
         AmsiDllUpdateResult UpdateAmsiDllEx(const std::string &stagingDllPath,
-                                                   std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime);
+                                            std::unique_ptr<AmsiIpcRuntime> &m_amsiIpcRuntime);
 
     private:
         bool TryShadowReplace(const std::wstring &staged, const std::wstring &installed);
+
         int TryMoveFile(const std::wstring &src, const std::wstring &dst);
+
         bool ScheduleReboot(const std::wstring &src, const std::wstring &dst);
 
     private:

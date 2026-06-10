@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * å¤šçº¿ç¨‹å‘½åç®¡é“æ± : å®ç°äº†ä¸€ä¸ªç»å…¸çš„â€œå•è¯·æ±‚-å•çº¿ç¨‹â€å“åº”æ± æ¨¡å‹ï¼Œä¸“é—¨è§£å†³å¤šä¸ªç›®æ ‡è¿›ç¨‹åŒæ—¶è¿ä¸Šæ¥è¯·æ±‚æ•°æ®æ—¶çš„å¹¶å‘æ’é˜Ÿé—®é¢˜
+ * ¶àÏß³ÌÃüÃû¹ÜµÀ³Ø: ÊµÏÖÁËÒ»¸ö¾­µäµÄ¡°µ¥ÇëÇó-µ¥Ïß³Ì¡±ÏìÓ¦³ØÄ£ĞÍ£¬×¨ÃÅ½â¾ö¶à¸öÄ¿±ê½ø³ÌÍ¬Ê±Á¬ÉÏÀ´ÇëÇóÊı¾İÊ±µÄ²¢·¢ÅÅ¶ÓÎÊÌâ
  */
 #ifndef NAMED_PIPE_SERVER_POOL_H
 #define NAMED_PIPE_SERVER_POOL_H
@@ -18,16 +18,16 @@
 #include <vector>
 
 namespace amsi_ipc {
-// å®šä¹‰HandleClient(HANDLE pipe)ã€‚è¿™æ˜¯ä¸€ä¸ªå›è°ƒå¥‘çº¦ï¼Œç®¡é“æ± ä¸å…³å¿ƒå…·ä½“çš„ä¸šåŠ¡ï¼Œå®ƒåªè´Ÿè´£å»ºç«‹è¿æ¥ï¼Œè¿ä¸Šåå°±æŠŠ pipe å¥æŸ„æ‰”ç»™å®ç°äº†è¿™ä¸ªæ¥å£çš„ç±¿
+// ¶¨ÒåHandleClient(HANDLE pipe)¡£ÕâÊÇÒ»¸ö»Øµ÷ÆõÔ¼£¬¹ÜµÀ³Ø²»¹ØĞÄ¾ßÌåµÄÒµÎñ£¬ËüÖ»¸ºÔğ½¨Á¢Á¬½Ó£¬Á¬ÉÏºó¾Í°Ñ pipe ¾ä±úÈÓ¸øÊµÏÖÁËÕâ¸ö½Ó¿ÚµÄ»v
     class INamedPipeClientHandler {
     public:
         virtual ~INamedPipeClientHandler() = default;
         virtual void HandleClient(HANDLE pipe) = 0;
     };
-// ç»´æŠ¤äº†ä¸€ä¸ªHANDLE çº¿ç¨‹æ•°ç»„å’Œä¸€ä¸ªåŸå­å¸ƒå°” running_ æ¥æ§åˆ¶ç”Ÿå‘½å‘¨æœŸ
+// Î¬»¤ÁËÒ»¸öHANDLE Ïß³ÌÊı×éºÍÒ»¸öÔ­×Ó²¼¶û running_ À´¿ØÖÆÉúÃüÖÜÆÚ
     class NamedPipeServerPool {
     public:
-        // è¾“å…¥ç®¡é“åç§°ã€çº¿ç¨‹æ•°é‡ã€ç®¡é“è¯»å†™ç¼“å†²åŒºå¤§å°ã€ç®¡é“æ‰“å¼€æ¨¡å¼(é»˜è®¤åŒå‘)ã€ç”¨äºåœæ­¢çº¿ç¨‹æ—¶çš„ä¼ªé€ å®¢æˆ·ç«¯æƒé™
+        // ÊäÈë¹ÜµÀÃû³Æ¡¢Ïß³ÌÊıÁ¿¡¢¹ÜµÀ¶ÁĞ´»º³åÇø´óĞ¡¡¢¹ÜµÀ´ò¿ªÄ£Ê½(Ä¬ÈÏË«Ïò)¡¢ÓÃÓÚÍ£Ö¹Ïß³ÌÊ±µÄÎ±Ôì¿Í»§¶ËÈ¨ÏŞ
         NamedPipeServerPool(std::wstring pipeName,
                             int threadCount,
                             INamedPipeClientHandler& handler,
@@ -40,7 +40,7 @@ namespace amsi_ipc {
         NamedPipeServerPool(const NamedPipeServerPool&) = delete;
         NamedPipeServerPool& operator=(const NamedPipeServerPool&) = delete;
 
-        bool Start();  // å¯åŠ¨ threadCount_ ä¸ªçº¿ç¨‹ï¼Œæ¯ä¸ªçº¿ç¨‹æ‰§è¡Œ ThreadProc
+        bool Start();  // Æô¶¯ threadCount_ ¸öÏß³Ì£¬Ã¿¸öÏß³ÌÖ´ĞĞ ThreadProc
         void Stop();
 
     private:

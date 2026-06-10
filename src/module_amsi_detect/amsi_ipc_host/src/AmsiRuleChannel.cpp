@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * åŠŸèƒ½: å¬å–æ¢é’ˆçš„è¯·æ±‚ -> æ‰¾ä»“åº“ï¼ˆProviderï¼‰æ‹¿è§„åˆ™ -> æŠŠè§„åˆ™æ‰“åŒ…å‘ç»™æ¢é’ˆ
+ * ¹¦ÄÜ: ÌıÈ¡Ì½ÕëµÄÇëÇó -> ÕÒ²Ö¿â£¨Provider£©ÄÃ¹æÔò -> °Ñ¹æÔò´ò°ü·¢¸øÌ½Õë
  */
 #include "../include/AmsiRuleChannel.h"
 

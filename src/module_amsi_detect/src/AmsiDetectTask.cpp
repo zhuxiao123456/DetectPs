@@ -9,6 +9,7 @@
 #include "DirUtils.h"
 #include "HttpUtils.h"
 #include "CompressUtils.h"
+#include "LoggerUtils.h"
 
 #include "CsaEngine.h"
 #include "DataScrambling.h"
@@ -18,6 +19,7 @@
 
 #include "AmsiDetectGlobalParam.h"
 #include "AmsiDetectDllManager.h"
+#include "AmsiEventProcessor.h"
 
 namespace Engine {
     using namespace SDK;
@@ -35,6 +37,7 @@ namespace Engine {
             snapshot.requiredDllHash = dllHash;
             return true;
         }
+
         std::string BuildRunningStateEnvelope(const SDK::JsonUtils::JsonValue &rulesJson, const std::string &version) {
             SDK::JsonUtils::JsonValue envelope;
             envelope["desiredRuntimeState"] = "running";
@@ -46,7 +49,6 @@ namespace Engine {
         }
     }
 
-
     AmsiDetectTask::AmsiDetectTask() : CsaTask(TASK_NAME_AMSI_DETECT, FEATURE_NAME_AMSI_DETECT,
                                                TaskCondition::TASK_TYPE_ENDLESS_LOOP) {
     }
@@ -55,12 +57,6 @@ namespace Engine {
 
     int AmsiDetectTask::Init() {
         InfoLogf1(GetLoggerPtr(), "Task(%s) init.", name());
-
-        // 获取系统已经运行的毫秒数.
-        uint64_t ms = GetTickCount64();
-       if(ms <= 60000) { // 系统启动时间小于60s, 等待一分钟系统稳定.
-           GracefulSleep(60);
-       }
 
         int osName = SystemUtilsRef.GetOsName();
         if (osName < SystemUtils::WINDOWS_10 || osName >= SystemUtils::WINDOWS_MAX) {
@@ -75,8 +71,12 @@ namespace Engine {
             return -1;
         }
         m_autoBlock = taskPolicy->IsAutoBlock();
-        m_maxScanContentBytes = taskPolicy->GetMaxScanContentBytes();
         m_trustProcess = taskPolicy->GetTrustProcess();
+        m_maxScanContentBytes = taskPolicy->GetMaxScanContentBytes();
+        m_auditMaxEventsPerScan = taskPolicy->GetAuditMaxEventsPerScan();
+        m_totalScanTimeoutMs = taskPolicy->GetTotalScanTimeoutMs();
+        m_scanRateLimit = taskPolicy->GetScanRateLimit();
+        AmsiEventProcessorRef.SetMaxAlarmCntPerHour(taskPolicy->GetMaxAlarmCntPerHour());
 
         m_isDetecting = false;
         m_isIpcRunning = false;
@@ -142,6 +142,7 @@ namespace Engine {
         m_amsiRulePath = m_amsiDir + "amsi_rules.json";
         m_amsiConfPath = m_amsiDir + "version.conf";
         m_amsiDllFilePath = m_amsiDir + "hss_amsi.dll";
+        m_amsiLogConfPath = m_amsiDir + "amsi_log.conf";
 
         return true;
     }
@@ -191,6 +192,8 @@ namespace Engine {
             m_isIpcRunning = true;
             InfoLogf1(GetLoggerPtr(), "Amsi ipc ready, rule version=%s.", snapshot.version);
 
+            WriteAmsiLogConf();
+
             // 注册AMSI.
             AmsiDetectDllManager amsiDetectDllManager{m_amsiDllFilePath};
             if (!amsiDetectDllManager.RegisterAmsiProvider()) {
@@ -210,6 +213,10 @@ namespace Engine {
             // 清理AMSI特征库.
             if (DirUtils::DeleteDir(m_amsiDir) != 0) {
                 ErrorLogf1(GetLoggerPtr(), "Delete amsi dir (%s) failed.", m_amsiDir);
+                int ret = FileUtils::CsaDeleteFile(m_amsiRulePath);
+                InfoLogf2(GetLoggerPtr(), "Delete (%s), ret(%d).", m_amsiRulePath, ret);
+                ret = FileUtils::CsaDeleteFile(m_amsiDllFilePath);
+                InfoLogf2(GetLoggerPtr(), "Delete (%s), ret(%d).", m_amsiDllFilePath, ret);
             }
             // 发送AMSI特征库初始版本.
             SendAmsiDownloadRequest();
@@ -266,7 +273,24 @@ namespace Engine {
         } else {
             ruleJson["globalMode"] = "audit";
         }
+
         ruleJson["maxScanContentBytes"] = m_maxScanContentBytes;
+
+        SDK::JsonUtils::JsonValue scanOptimizationJson;
+        scanOptimizationJson["auditMaxEventsPerScan"] = m_auditMaxEventsPerScan;
+
+        ruleJson["scanOptimization"] = scanOptimizationJson;
+
+        ruleJson["totalScanTimeoutMs"] = m_totalScanTimeoutMs;
+
+        if (m_scanRateLimit.enabled) {
+            SDK::JsonUtils::JsonValue rateLimitJson;
+            rateLimitJson["enabled"] = m_scanRateLimit.enabled;
+            rateLimitJson["windowMs"] = m_scanRateLimit.windowMs;
+            rateLimitJson["maxScans"] = m_scanRateLimit.maxScans;
+            rateLimitJson["bypassRatioAfterLimit"] = m_scanRateLimit.bypassRatioAfterLimit;
+            ruleJson["scanRateLimit"] = rateLimitJson;
+        }
 
         if (!m_trustProcess.empty()) {
             JsonUtils::JsonValue trustProcessJson;
@@ -481,6 +505,8 @@ namespace Engine {
                 break;
             }
 
+            WriteAmsiLogConf();
+
             // 注册AMSI.
             AmsiDetectDllManager amsiDetectDllManager{m_amsiDllFilePath};
             if (!amsiDetectDllManager.RegisterAmsiProvider()) {
@@ -552,7 +578,12 @@ namespace Engine {
             ClearTmpDirAndSendFailedReason("update dll failed");
             return;
         }
-        snapshot.requiredDllHash = updateResult.targetDllHash;
+        if (updateResult.code == AmsiDetectDllManager::UPDATE_SUCCESS_REBOOT) {
+            snapshot.requiredDllHash = updateResult.installedDllHash;
+        } else {
+            snapshot.requiredDllHash = updateResult.targetDllHash;
+        }
+
         // 保存规则到amsi目录.
         int ret = FileUtils::CsaCopyFile(tmpRulesPath, m_amsiRulePath);
         if (ret != 0) {
@@ -566,7 +597,6 @@ namespace Engine {
         // 更新provider中的规则快照内容.
         if (!m_amsiIpcRuntime->UpdateRules(snapshot, error)) {
             ErrorLogf1(GetLoggerPtr(), "Update amsi ipc rules failed: %s.", error);
-
             // 规则发布失败时不能让 provider 继续停留在 upgrade/unloading 状态，否则 DLL 会持续 bypass。
             // 这里按 DLL 文件是否已经实际替换来选择恢复方式：
             // 1. UPDATE_SUCCESS_REPLACE / UPDATE_SUCCESS_MOVE：磁盘上的 DLL 已经是新文件，新启动进程会加载新 DLL。
@@ -585,7 +615,6 @@ namespace Engine {
                                  restoreError);
                 }
             }
-
             ClearTmpDirAndSendFailedReason("update ipc rules failed");
             return;
         }
@@ -679,6 +708,18 @@ namespace Engine {
                       m_amsiConfPath);
             return true;
         }
+    }
+
+    bool AmsiDetectTask::WriteAmsiLogConf() {
+        int currentLogLevel = static_cast<int>(LoggerRef.GetLevel());
+        std::string content = std::to_string(currentLogLevel);
+        int ret = FileUtils::WriteFile(m_amsiLogConfPath, content, false);
+        if (ret != 0) {
+            ErrorLogf2(GetLoggerPtr(), "Write amsi log conf to (%s) failed, ret(%d).", m_amsiLogConfPath, ret);
+            return false;
+        }
+        InfoLogf2(GetLoggerPtr(), "Write amsi log conf to (%s) success, level=%d.", m_amsiLogConfPath, currentLogLevel);
+        return true;
     }
 
 }

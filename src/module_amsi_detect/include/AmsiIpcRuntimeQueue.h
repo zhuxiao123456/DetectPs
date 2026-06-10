@@ -17,44 +17,6 @@
 #include "AmsiIpcPayloadClassifier.h"
 
 namespace Engine {
-    // 运行时统计状态结构体: 用于安全探针的健康度检测与性能监控;
-    // 内部记录了引擎生命周期状态（initialized、running 等）、三大队列各自的接收数/丢弃数计数器以及当前队列的实时大小与内存占用
-    struct AmsiIpcRuntimeStats {
-        bool initialized = false;
-        bool running = false;
-        bool stopping = false;
-        bool workersStarted = false;
-        bool pipeStarted = false;
-
-        uint64_t detectionReceived = 0;
-        uint64_t detectionDropped = 0;
-        uint64_t dllDiagReceived = 0;
-        uint64_t dllDiagDropped = 0;
-        uint64_t statusReceived = 0;
-        uint64_t statusDropped = 0;
-        uint64_t drainAckReceived = 0;
-        uint64_t unknownEventReceived = 0;
-        uint64_t oversizedPayloadDropped = 0;
-
-        uint64_t lastReloadReached = 0;
-        uint64_t lastReloadLastError = 0;
-        uint64_t lastPauseReached = 0;
-        uint64_t lastPauseLastError = 0;
-        uint64_t lastResumeReached = 0;
-        uint64_t lastResumeLastError = 0;
-        uint64_t lastUnloadReached = 0;
-        uint64_t lastUnloadLastError = 0;
-
-        size_t detectionQueueSize = 0;
-        size_t detectionQueueBytes = 0;
-        size_t dllDiagQueueSize = 0;
-        size_t dllDiagQueueBytes = 0;
-        size_t statusQueueSize = 0;
-        size_t statusQueueBytes = 0;
-
-        std::string lastError;
-        bool degraded = false;
-    };
     // 数据载荷信封: 进入队列的统一数据单元
     struct RuntimePayloadEnvelope {
         AmsiIpcPayloadKind kind = AmsiIpcPayloadKind::UnknownEvent;  // 通过关键字段匹配类型
@@ -65,7 +27,6 @@ namespace Engine {
     class BoundedPayloadQueue {
     public:
         BoundedPayloadQueue();  // 创建一个未指定容量边界的空队列（默认容量和字节限制均为 0，不可直接使用，需后续调用 Reset）
-        BoundedPayloadQueue(size_t capacity, size_t maxBytes);  // 队列元素个数和总容量大小
 
         void Reset(size_t capacity, size_t maxBytes);  // 重置队列状态、引擎配置热更新、重启服务时使用
         // 生产者接口: 数据入队

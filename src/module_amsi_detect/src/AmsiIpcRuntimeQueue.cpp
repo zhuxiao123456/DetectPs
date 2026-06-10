@@ -11,10 +11,6 @@ namespace Engine {
 
     BoundedPayloadQueue::BoundedPayloadQueue() = default;
 
-    BoundedPayloadQueue::BoundedPayloadQueue(size_t capacity, size_t maxBytes)
-            : capacity_(capacity), maxBytes_(maxBytes) {
-    }
-
     /**
      * 重置队列状态。当引擎配置热更新、或者重启服务时使用。它会清空现有数据，重新设定边界，并将停止标志置为 false。
      * 该函数具有互斥锁保护，是线程安全的
@@ -173,3 +169,4 @@ namespace Engine {
     }
 
 } // namespace Engine
+

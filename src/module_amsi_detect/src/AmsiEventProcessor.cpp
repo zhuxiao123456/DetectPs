@@ -12,9 +12,11 @@
 #include "../include/AmsiDetectGlobalParam.h"
 #include "JsonUtils.h"
 #include "CryptoCodeUtils.h"
+#include "FileUtils.h"
 #include "MsgIdDefine.h"
 #include "ModuleUtils.h"
 
+#include "GlobalProcessInfoCache.h"
 #include "AutoIsolateAndKillMsgUtils.h"
 
 namespace Engine {
@@ -22,7 +24,6 @@ namespace Engine {
     using namespace AmsiDetect;
     using namespace AutoKillAndIsolate;
     namespace {
-
         bool ParseRawDetectionEvent(const std::string &rawJson,
                                     SDK::JsonUtils::JsonValue &raw,
                                     std::string &error) {
@@ -66,10 +67,6 @@ namespace Engine {
             return defaultValue;
         }
 
-        std::string FirstNonEmpty(const std::string &first, const std::string &second) {
-            return first.empty() ? second : first;
-        }
-
         void MakeAmsiAlarmMsg(const SDK::JsonUtils::JsonValue &raw,
                               SDK::JsonUtils::JsonValue &jValue) {
             // 添加自动阻断字段.
@@ -77,7 +74,7 @@ namespace Engine {
             if (act == "block") {
                 jValue[ALARM_AUTO_BLOCK] = true;
                 jValue[ALARM_HANDLE_STATUS] = 1; // master定义的告警状态，1表示已处理.
-                jValue[ALARM_HANDLE_METHOD] = 4; // master定义的告警处理方式，4表示已隔离查杀.
+                jValue[ALARM_HANDLE_METHOD] = 28; // master定义的告警处理方式，28表示已阻断执行.
                 jValue[ALARM_HANDLER] = "System";
             }
 
@@ -94,14 +91,26 @@ namespace Engine {
             jValue["confidence"] = GetIntField(raw, "confidence", 100);
             jValue["detect_module"] = AmsiDetect::MODULE_NAME_AMSI_DETECT;
 
+            // 进程信息.
             SDK::JsonUtils::JsonValue processInfo;
             processInfo["process_pid"] = GetIntField(raw, "processPid", 0);
-            processInfo["process_path"] = GetStringField(raw, "processPath");
-            processInfo["parent_process_pid"] = GetIntField(raw, "parentPid", 0);
-            processInfo["parent_process_path"] = GetStringField(raw, "parentProcessPath");
-
+            processInfo["process_name"] = GetStringField(raw, "processName");
+            std::string processPath = GetStringField(raw, "processPath");
+            processInfo["process_path"] = processPath;
+            std::string hash;
+            if (FileUtils::GetFileSha256(processPath, hash, 500L * 1024 * 1024) == 0) { // 最大计算500M文件的hash
+                processInfo["process_file_hash"] = hash;
+            }
             SDK::JsonUtils::JsonValue processInfoArray;
             processInfoArray.append(processInfo);
+            // 进程链信息.
+            std::string parentProcessPath = GetStringField(raw, "parentProcessPath");
+            std::string parentHash;
+            FileUtils::GetFileSha256(parentProcessPath, parentHash, 500L * 1024 * 1024) ; // 最大计算500M文件的hash
+            pid_t ppid = GetIntField(raw, "parentPid", 0);
+            std::shared_ptr<ParentProcInfo>  parentProcInfo = std::make_shared<ParentProcInfo>(ppid, GetStringField(raw, "parentProcessName"), "",
+                                                                                               parentProcessPath, parentHash);
+            GlobalProcessInfoCacheRef.FillParentProcessInfo(ppid, processInfoArray, parentProcInfo);
             jValue["process_info"] = processInfoArray;
 
             SDK::JsonUtils::JsonValue extendInfo;
@@ -113,12 +122,21 @@ namespace Engine {
 
         bool SendAmsiAlarmMsg(const SDK::JsonUtils::JsonValue &alarm) {
             std::string alarmJson = JsonUtils::JsonToString(alarm);
-            bool ret = SendDataMessage(MSG_ALARM, alarmJson);
-            InfoLogf2(GetLoggerPtr(), "Send amsi alarm (%s), ret(%s).", alarmJson, BOOL_TO_STR(ret));
+            if (AmsiEventProcessorRef.IsAlarmCacheFull()) {
+                InfoLogf1(GetLoggerPtr(), "Alarm exceeds the agent threshold, not send amsi alarm (%s).", alarmJson);
+            } else {
+                bool ret = SendDataMessage(MSG_ALARM, alarmJson);
+                InfoLogf2(GetLoggerPtr(), "Send amsi alarm (%s), ret(%s).", alarmJson, BOOL_TO_STR(ret));
+                AmsiEventProcessorRef.AddAlarmTimeToCache(TimeUtils::GetCurrentTimestampS());
+            }
+
             return true;
         }
-
     }
+
+    SINGLETON_INSTANCE_CROSS_LIB(AmsiEventProcessor)
+    AmsiEventProcessor::AmsiEventProcessor() = default;
+    AmsiEventProcessor::~AmsiEventProcessor() = default;
 
     bool AmsiEventProcessor::ProcessDetectionEvent(const std::string &rawJson,
                                                    std::string &error) {
@@ -130,6 +148,41 @@ namespace Engine {
         SDK::JsonUtils::JsonValue alarm;
         MakeAmsiAlarmMsg(raw, alarm);
         return SendAmsiAlarmMsg(alarm);
+    }
+
+    bool AmsiEventProcessor::ClearAlarmTimeCacheList(std::list<time_t> &pathAlarmTimeList)
+    {
+        static const time_t SECOND_PER_HOUR = 3600;
+
+        bool ret(false);
+        time_t now = TimeUtils::GetCurrentTimestampS();
+        auto it = pathAlarmTimeList.begin();
+        while (it != pathAlarmTimeList.end()) {
+            if (DIFF(*it, now) >= SECOND_PER_HOUR) {
+                ret = true;
+                it = pathAlarmTimeList.erase(it);
+            } else {
+                break;
+            }
+        }
+
+        return ret;
+    }
+
+    bool AmsiEventProcessor::IsAlarmCacheFull()
+    {
+        if (m_agentAlarmTimeCache.size() >= m_maxAlarmCntPerHour) {
+            if (!ClearAlarmTimeCacheList(m_agentAlarmTimeCache)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void AmsiEventProcessor::AddAlarmTimeToCache(time_t alarmTime)
+    {
+        m_agentAlarmTimeCache.push_back(alarmTime);
     }
 
 }

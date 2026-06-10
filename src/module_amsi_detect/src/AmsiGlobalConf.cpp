@@ -45,12 +45,9 @@ namespace Engine {
             return;
         }
 
-        m_broadcastCount = conf.GetIntValue("broadcast_count", 256);
-
         m_rulePipeNums = ClampPipeThreadCount(conf.GetIntValue("rule_pipe_nums", 16));
-        m_configPipeAcceptThreads =
-                ClampPipeThreadCount(conf.GetIntValue("config_pipe_accept_threads", 8));
         m_eventPipeThreads = conf.GetIntValue("event_pipe_threads", 4);
+        m_logPipeThreads = conf.GetIntValue("log_pipe_threads", 16);
         m_statusPipeThreads = conf.GetIntValue("status_pipe_threads", 2);
         m_diagDroppedSummaryIntervalMs =
                 conf.GetInt64Value("diag_dropped_summary_interval_ms", 60 * 1000);
@@ -69,8 +66,6 @@ namespace Engine {
         m_statusQueueMaxBytes = conf.GetInt64Value("status_queue_max_bytes", 16 * 1024 * 1024);
         m_statusEnqueueTimeoutMs = conf.GetIntValue("status_enqueue_timeout_ms", 50);
 
-        m_upgradeUnloadBroadcastCycles = conf.GetIntValue("upgrade_unload_broadcast_cycles", 5);
-        m_upgradeUnloadBroadcastTimeoutMs = conf.GetIntValue("upgrade_unload_broadcast_timeout_ms", 2000);
         m_upgradeUnloadSettleMs = conf.GetIntValue("upgrade_unload_settle_ms", 15000);
 
         return;

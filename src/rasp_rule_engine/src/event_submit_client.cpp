@@ -110,20 +110,18 @@ EventJsonBuildResult EventJsonBuilder::BuildDetection(const EventJsonBuildInput&
     const std::string scriptContent = TruncateUtf8Field(input.scriptContent, kMaxEventPayloadFieldBytes);
     result.eventTruncated = result.payload.size() != input.payload.size() || scriptContent.size() != input.scriptContent.size();
 
-    const std::string confidence = input.confidence ? std::to_string(input.confidence) : "70";
-
     std::ostringstream oss;
     oss << "{\"act\":\"" << JsonEscape(result.decision) << "\","
         << "\"cat\":\"Detection\","
         << "\"rule\":\"" << JsonEscape(input.ruleId) << "\","
         << "\"desc\":\"" << JsonEscape(input.description) << "\","
         << "\"severity\":" << NormalizeSeverity(input.severity) << ","
-        << "\"confidence\":\"" << JsonEscape(confidence) << "\","
-        << "\"processPid\":\"" << input.processPid << "\","
+        << "\"confidence\":" << input.confidence << ","
+        << "\"processPid\":" << input.processPid << ","
         << "\"processName\":\"" << JsonEscape(input.processName) << "\","
         << "\"processPath\":\"" << JsonEscape(input.processPath) << "\","
         << "\"script_content\":\"" << JsonEscape(scriptContent) << "\","
-        << "\"parentPid\":\"" << input.parentPid << "\","
+        << "\"parentPid\":" << input.parentPid << ","
         << "\"parentProcessName\":\"" << JsonEscape(input.parentProcessName) << "\","
         << "\"parentProcessPath\":\"" << JsonEscape(input.parentProcessPath) << "\"}";
     result.compactJson = oss.str();

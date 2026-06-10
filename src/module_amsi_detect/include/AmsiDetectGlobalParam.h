@@ -30,13 +30,13 @@ namespace Engine
         // task name
         static const std::string TASK_NAME_AMSI_DETECT = "amsi_detect_task";
 
-        // agentï¿½Ï±ï¿½AMSIï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ±¾ï¿½ï¿½Ï¢ID
+        // agentÉÏ±¨AMSIÌØÕ÷¿â°æ±¾ÐÅÏ¢ID
         static const std::string AGENT_AMSI_LIB_VERSION = "feature_collect_1";
 
-        // agentï¿½Ï±ï¿½ï¿½ï¿½AMSI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ±¾ï¿½ï¿½Ï¢ï¿½ï¿½.
+        // agentÉÏ±¨µÄAMSI ÌØÕ÷¿â°æ±¾ÏûÏ¢ºÅ.
         static const std::string MASTER_CMD_DOWNLOAD_AMSI_LIB = "feature_upgrade_HSS_AMSI_10001";
 
-        // master ï¿½ï¿½ï¿½ï¿½AMSI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½.
+        // master ·¢µÄAMSI ÌØÕ÷¿âÏÂÔØÏûÏ¢ºÅ.
         static const std::string AGENT_AMSI_LIB_RESPONSE = "feature_upgrade_response_1";
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

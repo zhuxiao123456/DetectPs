@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * å®šä¹‰äº†æ•°æ®æµå‡ºçš„æ ‡å‡†â€œåè®®â€æ¥å£
+ * ¶¨ÒåÁËÊı¾İÁ÷³öµÄ±ê×¼¡°Ğ­Òé¡±½Ó¿Ú
  */
 #ifndef AMSI_EVENT_SINK_H
 #define AMSI_EVENT_SINK_H
@@ -12,13 +12,13 @@
 namespace amsi_ipc {
 
 struct AmsiEventLine {
-    std::string payload;  // ä»ç®¡é“ä¸­è¯»å–åˆ°çš„å•æ¬¡äº‹ä»¶çš„åŸå§‹æ•°æ®
+    std::string payload;  // ´Ó¹ÜµÀÖĞ¶ÁÈ¡µ½µÄµ¥´ÎÊÂ¼şµÄÔ­Ê¼Êı¾İ
 };
 
 class IAmsiEventSink {
 public:
     virtual ~IAmsiEventSink() = default;
-    // äº‹ä»¶å›è°ƒåˆ†å‘å‡½æ•°,å½“åº•å±‚é€šé“ä»ç®¡é“è¯»å‡ºæ•°æ®åï¼Œå°±ä¼šè°ƒç”¨è¿™ä¸ªå‡½æ•°,hostguardç»§æ‰¿è¯¥æ¥å£å¹¶åœ¨å‡½æ•°å†…éƒ¨å®ç° JSON è§£æã€å‘Šè­¦è½ç›˜ã€é˜»æ–­ç­–ç•¥ç­‰
+    // ÊÂ¼ş»Øµ÷·Ö·¢º¯Êı,µ±µ×²ãÍ¨µÀ´Ó¹ÜµÀ¶Á³öÊı¾İºó£¬¾Í»áµ÷ÓÃÕâ¸öº¯Êı,hostguard¼Ì³Ğ¸Ã½Ó¿Ú²¢ÔÚº¯ÊıÄÚ²¿ÊµÏÖ JSON ½âÎö¡¢¸æ¾¯ÂäÅÌ¡¢×è¶Ï²ßÂÔµÈ
     virtual void OnEventLine(const AmsiEventLine& event) = 0;
 };
 

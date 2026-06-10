@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * è´Ÿè´£å¤„ç†å‘½åç®¡é“å®¢æˆ·ç«¯è¿æ¥çš„å…·ä½“å·¥ä½œç±»
+ * ¸ºÔğ´¦ÀíÃüÃû¹ÜµÀ¿Í»§¶ËÁ¬½ÓµÄ¾ßÌå¹¤×÷Àà
  */
 #ifndef AMSI_EVENT_CHANNEL_H
 #define AMSI_EVENT_CHANNEL_H
@@ -11,7 +11,7 @@
 #include "NamedPipeServerPool.h"
 
 namespace amsi_ipc {
-// ç»§æ‰¿è‡ªç®¡é“å¤„ç†å™¨æ¥å£ï¼Œè¿™æ„å‘³ç€å®ƒçš„å®ä¾‹ä¼šè¢«å¡è¿› NamedPipeServerPoolï¼ˆç®¡é“çº¿ç¨‹æ± ï¼‰ä¸­ã€‚å½“æœ‰ AMSI æ¢é’ˆè¿ä¸Šç®¡é“æ—¶ï¼Œçº¿ç¨‹æ± å°±ä¼šå›è°ƒå®ƒçš„å‡½æ•°
+// ¼Ì³Ğ×Ô¹ÜµÀ´¦ÀíÆ÷½Ó¿Ú£¬ÕâÒâÎ¶×ÅËüµÄÊµÀı»á±»Èû½ø NamedPipeServerPool£¨¹ÜµÀÏß³Ì³Ø£©ÖĞ¡£µ±ÓĞ AMSI Ì½ÕëÁ¬ÉÏ¹ÜµÀÊ±£¬Ïß³Ì³Ø¾Í»á»Øµ÷ËüµÄº¯Êı
 class AmsiEventChannel : public INamedPipeClientHandler {
 public:
     explicit AmsiEventChannel(IAmsiEventSink& sink);

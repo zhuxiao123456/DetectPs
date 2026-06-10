@@ -26,13 +26,6 @@ namespace Engine {
         std::string version;
     };
 
-    struct AmsiIpcBroadcastSummary {
-        std::string command;
-        uint32_t reached = 0;
-        uint32_t lastError = 0;
-        uint32_t timeoutMs = 0;
-    };
-
     class AmsiIpcRuntime {
     public:
         AmsiIpcRuntime();
@@ -46,7 +39,6 @@ namespace Engine {
         bool Stop(uint32_t timeoutMs, std::string &error);
 
         bool UpdateRules(const AmsiDetect::AmsiRuleSnapshot &snapshot, std::string &error);
-        bool EnterUpgradeUnloadingState(const std::string &stateVersion, std::string &error);
         bool EnterUpgradeUnloadingState(const std::string &stateVersion, const std::string &requiredDllHash, std::string &error);
         bool RestorePreUpgradeSnapshot(std::string &error);
         bool RestorePreUpgradeSnapshotWithDllHash(const std::string &requiredDllHash, std::string &error);

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * ç›®çš„: è§£è€¦, AmsiRuleChannel ä¸è´Ÿè´£ä»ç¡¬ç›˜è¯»æ–‡ä»¶æˆ–è¿æ•°æ®åº“ï¼Œå®ƒåªå‘ IAmsiRuleProvider è¦æ•°æ®
+ * Ä¿µÄ: ½âñî, AmsiRuleChannel ²»¸ºÔğ´ÓÓ²ÅÌ¶ÁÎÄ¼ş»òÁ¬Êı¾İ¿â£¬ËüÖ»Ïò IAmsiRuleProvider ÒªÊı¾İ
  */
 #ifndef AMSI_RULE_PROVIDER_H
 #define AMSI_RULE_PROVIDER_H
@@ -18,13 +18,13 @@ struct AmsiRuleResponse {
 class IAmsiRuleProvider {
 public:
     virtual ~IAmsiRuleProvider() = default;
-    // è¾“å…¥ï¼šcommandï¼ˆå¦‚è·å–å“ªç§ç±»å‹çš„è§„åˆ™ï¼‰ã€‚
-    // è¾“å‡ºï¼šAmsiRuleResponse outï¼ˆé‡Œé¢åŒ…ç€åºåˆ—åŒ–å¥½çš„ JSON å­—ç¬¦ä¸²ï¼‰ï¼Œstd::string errorï¼ˆé”™è¯¯ä¿¡æ¯ï¼‰
+    // ÊäÈë£ºcommand£¨Èç»ñÈ¡ÄÄÖÖÀàĞÍµÄ¹æÔò£©¡£
+    // Êä³ö£ºAmsiRuleResponse out£¨ÀïÃæ°ü×ÅĞòÁĞ»¯ºÃµÄ JSON ×Ö·û´®£©£¬std::string error£¨´íÎóĞÅÏ¢£©
     virtual bool BuildRulesResponse(const std::string& command,
                                     AmsiRuleResponse& out,
                                     std::string& error) = 0;
 
-    virtual void InvalidateRuleCache() = 0;  // ç”¨äºæ¸…ç©ºå†…å­˜ä¸­ç¼“å­˜çš„è§„åˆ™ï¼Œä»¥ä¾¿ä¸‹ä¸€æ¬¡è¯·æ±‚æ—¶é‡æ–°ä»ç£ç›˜æˆ–äº‘ç«¯åŠ è½½
+    virtual void InvalidateRuleCache() = 0;  // ÓÃÓÚÇå¿ÕÄÚ´æÖĞ»º´æµÄ¹æÔò£¬ÒÔ±ãÏÂÒ»´ÎÇëÇóÊ±ÖØĞÂ´Ó´ÅÅÌ»òÔÆ¶Ë¼ÓÔØ
 };
 
 } // namespace amsi_ipc

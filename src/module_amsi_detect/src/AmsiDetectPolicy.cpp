@@ -16,33 +16,6 @@ namespace Engine {
     using namespace SDK;
     using namespace AmsiDetect;
 
-    namespace {
-        int ClampMaxScanContentBytes(int value)
-        {
-            if (value < MIN_AMSI_MAX_SCAN_CONTENT_BYTES) {
-                return MIN_AMSI_MAX_SCAN_CONTENT_BYTES;
-            }
-            if (value > MAX_AMSI_MAX_SCAN_CONTENT_BYTES) {
-                return MAX_AMSI_MAX_SCAN_CONTENT_BYTES;
-            }
-            return value;
-        }
-
-        int ReadMaxScanContentBytes(const JsonUtils::JsonValue &contentValue)
-        {
-            if (!contentValue.isMember("maxScanContentBytes")) {
-                return DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES;
-            }
-
-            const JsonUtils::JsonValue &value = contentValue["maxScanContentBytes"];
-            if (!value.isInt()) {
-                return DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES;
-            }
-
-            return ClampMaxScanContentBytes(value.asInt());
-        }
-    }
-
     AmsiDetectPolicy::AmsiDetectPolicy(const std::string &featureName) : FeaturePolicy(featureName)
     {
     }
@@ -94,7 +67,18 @@ namespace Engine {
         }
 
         m_autoBlock = JsonUtils::GetBoolValue(contentValue, "auto_block", false);
-        m_maxScanContentBytes = ReadMaxScanContentBytes(contentValue);
+		m_maxAlarmCntPerHour =  JsonUtils::GetIntValue(contentValue, "max_alarm_cnt_per_hour", 100);  // 每小时最多上报告警数.
+        m_maxScanContentBytes = JsonUtils::GetIntValue(contentValue, "max_scan_content_bytes", 8192);  // 每次扫描的最大长度
+        m_auditMaxEventsPerScan = JsonUtils::GetIntValue(contentValue, "audit_max_event_per_scan", 3);  // 开启告警模式后每次扫描的最大告警事件数
+        m_totalScanTimeoutMs = JsonUtils::GetIntValue(contentValue, "total_scan_timeout_ms", 1000);  // 单次scan的最大扫描时间
+
+        JsonUtils::JsonValue rateLimitObj;
+        if (JsonUtils::GetSubobjectValue(contentValue, "scan_rate_limit", rateLimitObj)) {
+            m_scanRateLimit.enabled = JsonUtils::GetBoolValue(rateLimitObj, "enabled", false);
+            m_scanRateLimit.windowMs = JsonUtils::GetIntValue(rateLimitObj, "window_ms", 1000);
+            m_scanRateLimit.maxScans = JsonUtils::GetIntValue(rateLimitObj, "max_scans", 300);
+            m_scanRateLimit.bypassRatioAfterLimit = JsonUtils::GetDoubleValue(rateLimitObj, "bypass_ratio_after_limit", 0.8);
+        }
 
         JsonUtils::JsonValue trustProcessArray;
         parseRight = JsonUtils::GetArrayValue(contentValue, "trust_process", trustProcessArray);

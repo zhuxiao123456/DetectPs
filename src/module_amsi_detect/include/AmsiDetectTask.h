@@ -44,10 +44,14 @@ namespace Engine {
         void ClearTmpDirAndSendFailedReason(const std::string &reason);
         bool SaveAmsiLibVersion();
         bool GetAmsiLibVersion();
+        bool WriteAmsiLogConf();
 
     private:
         bool m_autoBlock{false};
         int m_maxScanContentBytes{DEFAULT_AMSI_MAX_SCAN_CONTENT_BYTES};
+        int m_auditMaxEventsPerScan{3};
+        int m_totalScanTimeoutMs{1000};
+        ScanRateLimit m_scanRateLimit;
         std::set<std::string> m_trustProcess;
 
         bool m_isDetecting{false};
@@ -66,6 +70,7 @@ namespace Engine {
         std::string m_amsiRulePath;
         std::string m_amsiConfPath;
         std::string m_amsiDllFilePath;
+        std::string m_amsiLogConfPath;
 
         std::unique_ptr<AmsiIpcRuntime> m_amsiIpcRuntime;
 

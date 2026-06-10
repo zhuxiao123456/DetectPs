@@ -7,7 +7,7 @@
 #include <string>
 
 namespace amsi_ipc {
-// å°†å¤–éƒ¨ä¼ å…¥çš„ sink ç»‘å®šåˆ°ç±»çš„å†…éƒ¨æˆå‘˜ä¸Š
+// ½«Íâ²¿´«ÈëµÄ sink °ó¶¨µ½ÀàµÄÄÚ²¿³ÉÔ±ÉÏ
     AmsiControlStatusChannel::AmsiControlStatusChannel(IAmsiControlStatusSink &sink)
             : sink_(sink) {
     }
@@ -15,17 +15,17 @@ namespace amsi_ipc {
     void AmsiControlStatusChannel::HandleClient(HANDLE pipe) {
         char buffer[65536] = {};
         DWORD bytesRead = 0;
-        // è°ƒç”¨ Windows API åŒæ­¥è¯»å–ç®¡é“æ•°æ®
+        // µ÷ÓÃ Windows API Í¬²½¶ÁÈ¡¹ÜµÀÊı¾İ
         const BOOL ok = ReadFile(pipe,
                                  buffer,
                                  static_cast<DWORD>(sizeof(buffer) - 1),
                                  &bytesRead,
                                  nullptr);
         if (!ok || bytesRead == 0) {
-            return;  // è¯»å–å¤±è´¥ã€ç›´æ¥ä¸¢å¼ƒ
+            return;  // ¶ÁÈ¡Ê§°Ü¡¢Ö±½Ó¶ªÆú
         }
-        // è¯»å–åˆ°çš„ç¼“å†²åŒºå’Œå®é™…è¯»å–é•¿åº¦ bytesRead æ„é€ ä¸€ä¸ª std::stringã€‚
-        // ç„¶åå°†å…¶åŒ…è£…è¿› AmsiControlStatusLine ç»“æ„ä½“ï¼Œè°ƒç”¨ sink_ æ¥å£å°†æ•°æ®æ¨é€åˆ° hostguard åˆ†æåç«¯
+        // ¶ÁÈ¡µ½µÄ»º³åÇøºÍÊµ¼Ê¶ÁÈ¡³¤¶È bytesRead ¹¹ÔìÒ»¸ö std::string¡£
+        // È»ºó½«Æä°ü×°½ø AmsiControlStatusLine ½á¹¹Ìå£¬µ÷ÓÃ sink_ ½Ó¿Ú½«Êı¾İÍÆËÍµ½ hostguard ·ÖÎöºó¶Ë
         sink_.OnControlStatusLine(AmsiControlStatusLine{std::string(buffer, bytesRead)});
     }
 

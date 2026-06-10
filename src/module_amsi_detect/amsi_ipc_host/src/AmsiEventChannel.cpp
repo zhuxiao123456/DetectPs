@@ -6,7 +6,7 @@
 #include <string>
 
 namespace amsi_ipc {
-// ä¼ å…¥hostguardä¸»ç¨‹åºçš„äº‹ä»¶å¤„ç†å™¨å®ä¾‹
+// ´«ÈëhostguardÖ÷³ÌĞòµÄÊÂ¼ş´¦ÀíÆ÷ÊµÀı
     AmsiEventChannel::AmsiEventChannel(IAmsiEventSink &sink)
             : sink_(sink) {
     }

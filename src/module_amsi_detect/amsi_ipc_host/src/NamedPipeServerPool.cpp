@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
- * åŠŸèƒ½: åŸºäº Windows åŸç”Ÿ API çš„å¤šçº¿ç¨‹å‘½åç®¡é“æœåŠ¡ç«¯çº¿ç¨‹æ± 
+ * ¹¦ÄÜ: »ùÓÚ Windows Ô­Éú API µÄ¶àÏß³ÌÃüÃû¹ÜµÀ·şÎñ¶ËÏß³Ì³Ø
  */
 #include "../include/NamedPipeServerPool.h"
 
@@ -9,7 +9,7 @@
 #include <utility>
 
 namespace amsi_ipc {
-// æ„é€ å‡½æ•¿ åˆå§‹åŒ–çº¿ç¨‹æ± çš„å„é¡¹å‚æ•°ï¼Œé—®é¢˜: å‚æ•°è¶…è¿‡äº†é™åˆ¿
+// ¹¹Ôìº¯”¼ ³õÊ¼»¯Ïß³Ì³ØµÄ¸÷Ïî²ÎÊı£¬ÎÊÌâ: ²ÎÊı³¬¹ıÁËÏŞØÛ
     NamedPipeServerPool::NamedPipeServerPool(std::wstring pipeName,
                                              int threadCount,
                                              INamedPipeClientHandler &handler,
@@ -19,8 +19,8 @@ namespace amsi_ipc {
                                              DWORD dummyClientAccess)
             : pipeName_(std::move(pipeName)),
               threadCount_(threadCount),
-              handler_(handler),  // ä¾èµ–æ³¨å…¥ã€‚è¿™æ˜¯ä¸€ä¸ªæ¥å£å¼•ç”¨ï¼Œçº¿ç¨‹æ± åªç®¡å»ºç«‹è¿æ¥ï¼Œè¿ä¸ŠåæŠŠå¥æŸ„äº¤ç»™ handler å»å¤„ç†å…·ä½“çš„ä¸šåŠ¡æ•°æ®
-              outBufferBytes_(outBufferBytes),  // è¯»å†™ç¼“å†²åŒºå¤§å°¿
+              handler_(handler),  // ÒÀÀµ×¢Èë¡£ÕâÊÇÒ»¸ö½Ó¿ÚÒıÓÃ£¬Ïß³Ì³ØÖ»¹Ü½¨Á¢Á¬½Ó£¬Á¬ÉÏºó°Ñ¾ä±ú½»¸ø handler È¥´¦Àí¾ßÌåµÄÒµÎñÊı¾İ
+              outBufferBytes_(outBufferBytes),  // ¶ÁĞ´»º³åÇø´óÄò
               inBufferBytes_(inBufferBytes),
               openMode_(openMode),
               dummyClientAccess_(dummyClientAccess),
@@ -38,14 +38,14 @@ namespace amsi_ipc {
         }
 
         if (running_.exchange(true)) {
-            return true;  // åŸå­é”é˜²é‡å…¥, ä¿è¯å³ä½¿å¤šä¸ªçº¿ç¨‹åŒæ—¶è°ƒç”¨ Start()ï¼Œä¹Ÿåªä¼šæ‰§è¡Œä¸€æ¬¡çœŸæ­£çš„å¯åŠ¨é€»è¾‘
+            return true;  // Ô­×ÓËø·ÀÖØÈë, ±£Ö¤¼´Ê¹¶à¸öÏß³ÌÍ¬Ê±µ÷ÓÃ Start()£¬Ò²Ö»»áÖ´ĞĞÒ»´ÎÕæÕıµÄÆô¶¯Âß¼­
         }
-        // åˆ†é…ç©ºé—´
+        // ·ÖÅä¿Õ¼ä
         threads_.assign(static_cast<size_t>(threadCount_), INVALID_HANDLE_VALUE);
         bool ok = true;
         for (int i = 0; i < threadCount_; ++i) {
             DWORD tid = 0;
-            // åˆ›å»ºçº¿ç¨‹ï¼Œä»»æ„ä¸€ä¸ªå¤±è´¥éƒ½ä¼šè¿”å›false
+            // ´´½¨Ïß³Ì£¬ÈÎÒâÒ»¸öÊ§°Ü¶¼»á·µ»Øfalse
             threads_[static_cast<size_t>(i)] = CreateThread(nullptr, 0, ThreadProc, this, 0, &tid);
             if (threads_[static_cast<size_t>(i)] == nullptr ||
                 threads_[static_cast<size_t>(i)] == INVALID_HANDLE_VALUE) {
@@ -57,15 +57,15 @@ namespace amsi_ipc {
     }
 
 /*
- * å®‰å…¨ã€ä¼˜é›…åœ°ç»“æŸæ‰€æœ‰å·¥ä½œçº¿ç¨‹ï¼Œå¹¶å›æ”¶å†…æ ¸å¯¹è±¡
+ * °²È«¡¢ÓÅÑÅµØ½áÊøËùÓĞ¹¤×÷Ïß³Ì£¬²¢»ØÊÕÄÚºË¶ÔÏó
  */
     void NamedPipeServerPool::Stop() {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!running_.exchange(false)) {
             return;
         }
-        // é€šè¿‡ä¸€ä¸ª for å¾ªç¯ï¼Œæ•…æ„è°ƒç”¨ CreateFileW æ¨¡æ‹Ÿå®¢æˆ·ç«¯ï¼Œä¸»åŠ¨å»è¿æ¥è‡ªå·±çš„ç®¡é“ threadCount_ æ¬¡ã€‚
-        // è¿™ä¼šç¬é—´è§¦å‘åº•å±‚çš„è¿æ¥äº‹ä»¶ï¼Œå”¤é†’æ‰€æœ‰é˜»å¡çš„çº¿ç¨‹ã€‚çº¿ç¨‹é†’æ¥åçœ‹åˆ° running_ å·²ç»å˜æˆ falseï¼Œå°±ä¼šä¹–ä¹–é€€å‡ºå¾ªç¯
+        // Í¨¹ıÒ»¸ö for Ñ­»·£¬¹ÊÒâµ÷ÓÃ CreateFileW Ä£Äâ¿Í»§¶Ë£¬Ö÷¶¯È¥Á¬½Ó×Ô¼ºµÄ¹ÜµÀ threadCount_ ´Î¡£
+        // Õâ»áË²¼ä´¥·¢µ×²ãµÄÁ¬½ÓÊÂ¼ş£¬»½ĞÑËùÓĞ×èÈûµÄÏß³Ì¡£Ïß³ÌĞÑÀ´ºó¿´µ½ running_ ÒÑ¾­±ä³É false£¬¾Í»á¹Ô¹ÔÍË³öÑ­»·
         for (int i = 0; i < threadCount_; ++i) {
             HANDLE dummy = CreateFileW(pipeName_.c_str(),
                                        dummyClientAccess_,
@@ -99,7 +99,7 @@ namespace amsi_ipc {
         }
     }
 
-// Windows CreateThread è¦æ±‚çš„æ ‡å‡†é™æ€å›è°ƒå‡½æ•°
+// Windows CreateThread ÒªÇóµÄ±ê×¼¾²Ì¬»Øµ÷º¯Êı
     DWORD WINAPI NamedPipeServerPool::ThreadProc(LPVOID param) {
         auto *self = static_cast<NamedPipeServerPool *>(param);
         if (self == nullptr) {
@@ -115,11 +115,11 @@ namespace amsi_ipc {
         return 0;
     }
 
-// åŠŸèƒ½ï¼šå¾ªç¯åˆ›å»ºç®¡é“å®ä¾‹ã€ç­‰å¾…è¿æ¥ã€ç§»äº¤å¤„ç†ã€æ–­å¼€è¿æ¥
+// ¹¦ÄÜ£ºÑ­»·´´½¨¹ÜµÀÊµÀı¡¢µÈ´ıÁ¬½Ó¡¢ÒÆ½»´¦Àí¡¢¶Ï¿ªÁ¬½Ó
     void NamedPipeServerPool::ServerLoop() {
         SECURITY_ATTRIBUTES sa = {};
         PACL acl = nullptr;
-        const bool haveSa = MakeAuthenticatedUsersSecurity(&sa, &acl);  // å®‰å…¨åŠ å›º
+        const bool haveSa = MakeAuthenticatedUsersSecurity(&sa, &acl);  // °²È«¼Ó¹Ì
 
         while (running_.load()) {
             HANDLE pipe = CreateNamedPipeW(pipeName_.c_str(),

@@ -18,10 +18,6 @@ namespace Engine {
         void ParseAmsiConf();
 
         // Get Functions
-        uint32_t GetBroadcastCount() const {
-            return m_broadcastCount;
-        }
-
         size_t GetMaxPayloadBytes() const {
             return m_maxPayloadBytes;
         }
@@ -78,12 +74,12 @@ namespace Engine {
             return m_rulePipeNums;
         }
 
-        uint32_t GetConfigPipeAcceptThreads() const {
-            return m_configPipeAcceptThreads;
-        }
-
         uint32_t GetEventPipeThreads() const {
             return m_eventPipeThreads;
+        }
+
+        uint32_t GetLogPipeThreads() const {
+            return m_logPipeThreads;
         }
 
         uint32_t GetStatusPipeThreads() const {
@@ -94,21 +90,12 @@ namespace Engine {
             return m_diagDroppedSummaryIntervalMs;
         }
 
-        uint32_t GetUnloadBroadcastCycles() const {
-            return m_upgradeUnloadBroadcastCycles;
-        }
-
-        uint32_t GetUnloadBroadcastTimeoutMs() const {
-            return m_upgradeUnloadBroadcastTimeoutMs;
-        }
-
         uint32_t GetUnloadSettleMs() const {
             return m_upgradeUnloadSettleMs;
         }
 
     private:
         // amsi.conf配置项.
-        uint32_t m_broadcastCount = 256; // 广播时重试的次数.
         size_t m_maxPayloadBytes = 64 * 1024 - 1;  // 单条消息最大载荷字节数.
         // 检测队列配置: 优先级队列容量 4096 个元素，最大内存占用 64MB，入队超时时间 50ms
         size_t m_detectionQueueCapacity = 4096;
@@ -128,17 +115,15 @@ namespace Engine {
 
         // IPC管道线程配置.
         uint32_t m_rulePipeNums = 16;
-        uint32_t m_configPipeAcceptThreads = 8;
         uint32_t m_eventPipeThreads = 4;
+        uint32_t m_logPipeThreads = 16;
         uint32_t m_statusPipeThreads = 2;
 
         // DLL诊断日志丢弃统计打印间隔，默认 60 秒.
         size_t m_diagDroppedSummaryIntervalMs = 60 * 1000;
 
         // dll更新升级参数
-        uint32_t m_upgradeUnloadBroadcastCycles = 3;  // unload广播三轮
-        uint32_t m_upgradeUnloadBroadcastTimeoutMs = 1000;  // 每轮广播超时1000ms
-        uint32_t m_upgradeUnloadSettleMs = 15000;  // 广播完成后等待15s,在替换DLL
+        uint32_t m_upgradeUnloadSettleMs = 15000;  // 广播完成后等待15s,再替换DLL
     };
 }
 
