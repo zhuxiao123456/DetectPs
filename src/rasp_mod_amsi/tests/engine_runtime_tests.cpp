@@ -260,6 +260,31 @@ std::string RateLimitedRegexRuleJson(uint32_t maxScans, double bypassRatio)
            "},\"rules\":[{\"id\":\"rate_limited\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"rate_limit\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
 }
 
+std::string ScanContextRegexRuleJson(bool enabled,
+                                     uint32_t maxBufferedBytes,
+                                     uint32_t ttlMs,
+                                     uint32_t maxEvalBytes,
+                                     bool clearOnMatch,
+                                     const char* pattern)
+{
+    return std::string("{\"scanContext\":{\"enabled\":") +
+           (enabled ? "true" : "false") +
+           ",\"maxBufferedBytes\":" + std::to_string(maxBufferedBytes) +
+           ",\"ttlMs\":" + std::to_string(ttlMs) +
+           ",\"maxEvalBytes\":" + std::to_string(maxEvalBytes) +
+           ",\"clearOnMatch\":" + (clearOnMatch ? "true" : "false") +
+           "},\"rules\":[{\"id\":\"scan_context_rule\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"scan_context\",\"config\":{\"regexPatterns\":[\"" +
+           pattern + "\"]}}]}";
+}
+
+std::string RateLimitedScanContextRegexRuleJson()
+{
+    return "{\"scanRateLimit\":{\"enabled\":true,\"windowMs\":1000,\"maxScans\":1,\"bypassRatioAfterLimit\":1.0},"
+           "\"scanContext\":{\"enabled\":true,\"maxBufferedBytes\":8192,\"ttlMs\":3000,\"maxEvalBytes\":16384,\"clearOnMatch\":true},"
+           "\"rules\":[{\"id\":\"rate_limited_scan_context\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+           "\"description\":\"rate_limited_scan_context\",\"config\":{\"regexPatterns\":[\"(?s)amsi.*utils\"]}}]}";
+}
+
 std::string GlobalModeRegexRuleJson(const char* globalMode,
                                     const char* ruleMode,
                                     const char* id,
@@ -362,18 +387,18 @@ std::string OneEncodedLuaRuleJson(const char* id,
 
 } // namespace
 
-int main()
+static bool RunEngineRuntimeTestGroup1()
 {
     {
         auto runtime = MakeRuntime();
         if (!Expect(runtime->GetState() == EngineState::Uninitialized,
                     "new runtime starts uninitialized"))
-            return 1;
+            return false;
         if (!Expect(runtime->EnsureInitialized(), "runtime initializes"))
-            return 1;
+            return false;
         if (!Expect(runtime->GetState() == EngineState::Ready,
                     "runtime becomes ready after initialization"))
-            return 1;
+            return false;
     }
 
     {
@@ -382,14 +407,14 @@ int main()
         {
             auto guard = runtime->TryEnterScan();
             if (!Expect(guard.IsActive(), "scan can enter ready runtime"))
-                return 1;
+                return false;
             if (!Expect(runtime->ActiveScanCount() == 1,
                         "scan guard increments active count"))
-                return 1;
+                return false;
         }
         if (!Expect(runtime->ActiveScanCount() == 0,
                     "scan guard destructor decrements active count"))
-            return 1;
+            return false;
     }
 
     {
@@ -398,19 +423,19 @@ int main()
         runtime->PauseDetection();
         if (!Expect(runtime->IsDetectionPaused(),
                     "runtime records detection pause state"))
-            return 1;
+            return false;
         auto rejected = runtime->TryEnterScan();
         if (!Expect(!rejected.IsActive(),
                     "paused runtime rejects new scans"))
-            return 1;
+            return false;
         runtime->ResumeDetection();
         if (!Expect(!runtime->IsDetectionPaused(),
                     "runtime clears detection pause state"))
-            return 1;
+            return false;
         auto resumed = runtime->TryEnterScan();
         if (!Expect(resumed.IsActive(),
                     "resumed runtime accepts scans"))
-            return 1;
+            return false;
     }
 
     {
@@ -419,24 +444,24 @@ int main()
         auto inFlight = runtime->TryEnterScan();
         if (!Expect(inFlight.IsActive(),
                     "scan enters before pause"))
-            return 1;
+            return false;
         runtime->PauseDetection();
         if (!Expect(runtime->ActiveScanCount() == 1,
                     "pause does not interrupt in-flight scan"))
-            return 1;
+            return false;
         auto rejected = runtime->TryEnterScan();
         if (!Expect(!rejected.IsActive(),
                     "pause applies to the next scan entry"))
-            return 1;
+            return false;
         inFlight = {};
         if (!Expect(runtime->ActiveScanCount() == 0,
                     "in-flight scan can finish after pause"))
-            return 1;
+            return false;
         runtime->ResumeDetection();
         auto resumed = runtime->TryEnterScan();
         if (!Expect(resumed.IsActive(),
                     "resume accepts new scan after paused in-flight scan exits"))
-            return 1;
+            return false;
     }
 
     {
@@ -447,13 +472,13 @@ int main()
         auto rejected = runtime->TryEnterScan();
         if (!Expect(!rejected.IsActive(),
                     "repeated pause remains paused"))
-            return 1;
+            return false;
         runtime->ResumeDetection();
         runtime->ResumeDetection();
         auto resumed = runtime->TryEnterScan();
         if (!Expect(resumed.IsActive(),
                     "repeated resume remains enabled"))
-            return 1;
+            return false;
     }
 
     {
@@ -464,16 +489,16 @@ int main()
         bool drained = runtime->BeginShutdown("test_shutdown", 25);
         auto elapsed = std::chrono::steady_clock::now() - start;
         if (!Expect(!drained, "shutdown times out while scan is active"))
-            return 1;
+            return false;
         if (!Expect(elapsed < std::chrono::milliseconds(500),
                     "shutdown drain is bounded"))
-            return 1;
+            return false;
         if (!Expect(runtime->GetState() == EngineState::Inert,
                     "shutdown timeout enters inert"))
-            return 1;
+            return false;
         auto rejected = runtime->TryEnterScan();
         if (!Expect(!rejected.IsActive(), "inert runtime rejects new scans"))
-            return 1;
+            return false;
     }
 
     {
@@ -486,10 +511,10 @@ int main()
         });
         worker.join();
         if (!Expect(entered.load(), "concurrent scan entry succeeds in ready state"))
-            return 1;
+            return false;
         if (!Expect(runtime->ActiveScanCount() == 0,
                     "concurrent scan guard releases active count"))
-            return 1;
+            return false;
     }
 
     {
@@ -497,23 +522,23 @@ int main()
         runtime->EnsureInitialized();
         if (!Expect(runtime->CanAttemptReload(),
                     "ready runtime can attempt reload"))
-            return 1;
+            return false;
         auto reload = runtime->TryEnterReload("test_reload");
         if (!Expect(reload.IsActive(), "ready runtime enters reload"))
-            return 1;
+            return false;
         if (!Expect(runtime->GetState() == EngineState::Reloading,
                     "reload guard sets reloading state"))
-            return 1;
+            return false;
         auto repeated = runtime->TryEnterReload("repeat_reload");
         if (!Expect(!repeated.IsActive(), "reloading rejects repeated reload"))
-            return 1;
+            return false;
         auto scan = runtime->TryEnterScan();
         if (!Expect(scan.IsActive(), "reloading allows scan on current snapshot"))
-            return 1;
+            return false;
         reload.Complete(true, "published");
         if (!Expect(runtime->GetState() == EngineState::Ready,
                     "successful reload returns ready"))
-            return 1;
+            return false;
     }
 
     {
@@ -523,15 +548,15 @@ int main()
         auto reload = runtime->TryEnterReload("reload_while_paused");
         if (!Expect(reload.IsActive(),
                     "paused runtime can still reload rules"))
-            return 1;
+            return false;
         reload.Complete(true, "published");
         if (!Expect(runtime->IsDetectionPaused(),
                     "reload does not clear pause state"))
-            return 1;
+            return false;
         auto rejected = runtime->TryEnterScan();
         if (!Expect(!rejected.IsActive(),
                     "scan remains paused after reload"))
-            return 1;
+            return false;
     }
 
     {
@@ -540,11 +565,11 @@ int main()
         {
             auto reload = runtime->TryEnterReload("implicit_failure");
             if (!Expect(reload.IsActive(), "reload guard enters before destructor test"))
-                return 1;
+                return false;
         }
         if (!Expect(runtime->GetState() == EngineState::Ready,
                     "reload guard destructor restores ready on implicit failure"))
-            return 1;
+            return false;
     }
 
     {
@@ -552,23 +577,23 @@ int main()
         runtime->EnsureInitialized();
         auto reload = runtime->TryEnterReload("shutdown_priority");
         if (!Expect(reload.IsActive(), "reload enters before shutdown priority test"))
-            return 1;
+            return false;
         bool drained = runtime->BeginShutdown("shutdown_during_reload", 25);
         if (!Expect(drained, "shutdown drains when no scans are active"))
-            return 1;
+            return false;
         if (!Expect(runtime->GetState() == EngineState::Inert,
                     "shutdown during reload enters inert"))
-            return 1;
+            return false;
         reload.Complete(true, "late_success");
         if (!Expect(runtime->GetState() == EngineState::Inert,
                     "late reload completion does not restore ready"))
-            return 1;
+            return false;
         auto rejectedScan = runtime->TryEnterScan();
         if (!Expect(!rejectedScan.IsActive(), "inert rejects scan after reload shutdown race"))
-            return 1;
+            return false;
         auto rejectedReload = runtime->TryEnterReload("after_shutdown");
         if (!Expect(!rejectedReload.IsActive(), "inert rejects reload after shutdown"))
-            return 1;
+            return false;
     }
 
     {
@@ -577,10 +602,10 @@ int main()
         runtime->EnterFaulted("test_fault");
         auto scan = runtime->TryEnterScan();
         if (!Expect(!scan.IsActive(), "faulted rejects scan"))
-            return 1;
+            return false;
         auto reload = runtime->TryEnterReload("faulted_reload");
         if (!Expect(!reload.IsActive(), "faulted rejects reload"))
-            return 1;
+            return false;
     }
 
     {
@@ -588,14 +613,14 @@ int main()
         runtime->EnsureInitialized();
         bool drained = runtime->BeginShutdown("publish_before_reload", 25);
         if (!Expect(drained, "shutdown before publish drains"))
-            return 1;
+            return false;
         auto reload = runtime->TryEnterReload("publish_after_shutdown");
         if (!Expect(!reload.IsActive(),
                     "reload build success but publish after shutdown is rejected"))
-            return 1;
+            return false;
         if (!Expect(runtime->GetState() == EngineState::Inert,
                     "publish after shutdown rejection does not restore ready"))
-            return 1;
+            return false;
     }
 
     {
@@ -604,25 +629,25 @@ int main()
         const char* newScript = "function rule(sensor, context) return { match = true, desc = 'new' } end";
         if (!Expect(engine.ParseAndSwap(OneLuaRuleJson("old_rule", "old_desc", oldScript), ""),
                     "old snapshot publishes"))
-            return 1;
+            return false;
 
         RaspLuaContext ctx;
         auto before = engine.Evaluate("AmsiProvider", ctx);
         if (!Expect(!before.empty() && before[0].ruleId == "old_rule",
                     "old Lua rule matches before reload build"))
-            return 1;
+            return false;
 
         std::string effectiveLib;
         auto next = engine.BuildNextSnapshot(OneLuaRuleJson("new_rule", "new_desc", newScript),
                                              "",
                                              effectiveLib);
         if (!Expect(next != nullptr, "next snapshot builds without publishing"))
-            return 1;
+            return false;
 
         auto duringBuild = engine.Evaluate("AmsiProvider", ctx);
         if (!Expect(!duringBuild.empty() && duringBuild[0].ruleId == "old_rule",
                     "building next snapshot does not clear old snapshot Lua engine"))
-            return 1;
+            return false;
     }
 
     {
@@ -631,7 +656,7 @@ int main()
             "function rule(sensor, context) return { match = true, desc = 'bytecode-snapshot' } end";
         std::string bytecode = CompileLuaBytecode(bytecodeSource, "=bytecode_snapshot");
         if (!Expect(!bytecode.empty(), "snapshot test compiles Lua bytecode"))
-            return 1;
+            return false;
 
         std::string json = OneEncodedLuaRuleJson("bytecode_snapshot",
                                                  Base64Encode(bytecode).c_str(),
@@ -639,9 +664,14 @@ int main()
         const std::string libSource = "function lib_marker() return 'lib' end";
         if (!Expect(engine.BuildSnapshotLuaMatches(json, libSource, "bytecode_snapshot", "bytecode-snapshot"),
                     "PrecompileAll loads bytecode without prepending libSource"))
-            return 1;
+            return false;
     }
 
+    return true;
+}
+
+static bool RunEngineRuntimeTestGroup2()
+{
 #ifdef RASP_PCRE2_AVAILABLE
     {
         TestAmsiRuleEngine engine;
@@ -649,7 +679,7 @@ int main()
                         OneRegexRuleJson("regex_old_snapshot", "IEX"),
                         OneRegexRuleJson("regex_new_snapshot", "DownloadString")),
                     "regex compiled cache is isolated per snapshot-local Lua engine"))
-            return 1;
+            return false;
     }
 #endif
 
@@ -657,25 +687,110 @@ int main()
         TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("split_iex", "IEX"), ""),
                     "split regex snapshot publishes"))
-            return 1;
+            return false;
 
         AmsiEvalResult first = engine.Evaluate(L"same-content", L"powershell.exe", "I", 1);
         if (!Expect(!first.ruleMatched, "first split chunk alone does not match"))
-            return 1;
+            return false;
 
         AmsiEvalResult second = engine.Evaluate(L"same-content", L"powershell.exe", "EX", 2);
         if (!Expect(!second.ruleMatched,
                     "production scan path does not aggregate split token chunks"))
-            return 1;
+            return false;
     }
 
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(false, 8192, 3000, 16384, true, "(?s)amsi.*utils"),
+                        ""),
+                    "disabled scanContext snapshot publishes"))
+            return false;
+
+        AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!first.ruleMatched,
+                    "disabled scanContext first chunk does not match"))
+            return false;
+
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "utils", 5);
+        if (!Expect(!second.ruleMatched,
+                    "disabled scanContext does not aggregate split chunks"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(true, 8192, 3000, 16384, true, "(?s)amsi.*utils"),
+                        ""),
+                    "enabled scanContext snapshot publishes"))
+            return false;
+
+        AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!first.ruleMatched,
+                    "enabled scanContext first chunk alone does not match"))
+            return false;
+
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "utils", 5);
+        if (!Expect(second.ruleMatched && second.ruleId == "scan_context_rule",
+                    "enabled scanContext matches split chunks within ttl"))
+            return false;
+
+        AmsiEvalResult third = engine.Evaluate(L"demo.ps1", L"powershell.exe", "utils", 5);
+        if (!Expect(!third.ruleMatched,
+                    "clearOnMatch clears scanContext after split chunk match"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(true, 8192, 100, 16384, true, "(?s)amsi.*utils"),
+                        ""),
+                    "ttl scanContext snapshot publishes"))
+            return false;
+
+        AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!first.ruleMatched,
+                    "ttl scanContext first chunk alone does not match"))
+            return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "utils", 5);
+        if (!Expect(!second.ruleMatched,
+                    "expired scanContext does not match stale split chunk"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(RateLimitedScanContextRegexRuleJson(), ""),
+                    "rate-limited scanContext snapshot publishes"))
+            return false;
+
+        AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!first.ruleMatched,
+                    "rate-limited scanContext first scan appends without match"))
+            return false;
+
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "utils", 5);
+        if (!Expect(!second.ruleMatched,
+                    "scanRateLimit bypass returns NoMatch before scanContext evaluation"))
+            return false;
+    }
+
+
+    return true;
+}
+
+static bool RunEngineRuntimeTestGroup3()
+{
     {
         TestAmsiRuleEngine engine;
         const char* parentRule =
             "ZnVuY3Rpb24gcnVsZShzZW5zb3IsIGNvbnRleHQpIGlmIGNvbnRleHQucGFyZW50UHJvY2Vzc05hbWUgPT0gJ2NtZC5leGUnIGFuZCBjb250ZXh0LnBhcmVudFBpZCA9PSAnMTIzNCcgYW5kIGNvbnRleHQucHJvY2Vzc0NhcHR1cmVTdGF0dXMgPT0gJ3N1Y2Nlc3MnIGFuZCBjb250ZXh0LnByb2Nlc3NSZXRyeVN0YXRlID09ICdub25lJyB0aGVuIHJldHVybiB7IG1hdGNoID0gdHJ1ZSwgZGVzYyA9ICdwYXJlbnQtY3R4JywgcGF5bG9hZCA9IGNvbnRleHQucGFyZW50UHJvY2Vzc05hbWUgfSBlbmQgcmV0dXJuIHsgbWF0Y2ggPSBmYWxzZSB9IGVuZA==";
         if (!Expect(engine.ParseAndSwap(OneRawLuaRuleJson("parent_ctx", parentRule), ""),
                     "parent context Lua snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -694,14 +809,14 @@ int main()
                                                  scanContext);
         if (!Expect(matched.ruleMatched && matched.payload == "cmd.exe",
                     "Lua can read parent process fields from scan context"))
-            return 1;
+            return false;
     }
 
     {
         TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("body_regex", "DownloadString"), ""),
                     "body regex snapshot publishes"))
-            return 1;
+            return false;
 
         ScanContext scanContext;
         scanContext.process = nullptr;
@@ -712,7 +827,7 @@ int main()
                                                  scanContext);
         if (!Expect(matched.ruleMatched && matched.payload == "DownloadString",
                     "nullptr process context does not block body detection"))
-            return 1;
+            return false;
     }
 
     {
@@ -728,14 +843,14 @@ int main()
         const std::string auditHash = engine.ComputeEffectiveSnapshotHash(auditJson);
         const std::string blockHash = engine.ComputeEffectiveSnapshotHash(blockJson);
         if (!Expect(!auditHash.empty(), "effective snapshot hash is populated"))
-            return 1;
+            return false;
         if (!Expect(auditHash != blockHash,
                     "effective snapshot hash changes when globalMode changes"))
-            return 1;
+            return false;
         engine.SetActiveEffectiveSnapshotHash(auditHash);
         if (!Expect(engine.ActiveEffectiveSnapshotHash() == auditHash,
                     "active effective snapshot hash is stored"))
-            return 1;
+            return false;
     }
 
     {
@@ -746,16 +861,16 @@ int main()
                                                                 "amsiutils"),
                                        ""),
                     "globalMode audit snapshot publishes"))
-            return 1;
+            return false;
 
         AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
                                                  L"powershell.exe",
                                                  "amsiutils",
                                                  9);
         if (!Expect(matched.ruleMatched, "globalMode audit still reports matched rules"))
-            return 1;
+            return false;
         if (!Expect(!matched.block, "globalMode audit downgrades block rule to audit"))
-            return 1;
+            return false;
     }
 
     {
@@ -769,20 +884,20 @@ int main()
                                                         {"audit_limit_3", "block"}}),
                         ""),
                     "scanOptimization audit limit snapshot publishes"))
-            return 1;
+            return false;
 
         RaspLuaContext ctx;
         ctx.fields.push_back({"body", "amsiutils", true});
         auto results = engine.Evaluate("AmsiProvider", ctx);
         if (!Expect(results.size() == 2,
                     "globalMode audit stops after auditMaxEventsPerScan matches"))
-            return 1;
+            return false;
         if (!Expect(results[0].ruleId == "audit_limit_1" && results[1].ruleId == "audit_limit_2",
                     "globalMode audit returns the first limited audit matches"))
-            return 1;
+            return false;
         if (!Expect(!results[0].block && !results[1].block,
                     "globalMode audit limit keeps results in audit mode"))
-            return 1;
+            return false;
     }
 
     {
@@ -796,14 +911,14 @@ int main()
                                                         {"audit_unlimited_3", "block"}}),
                         ""),
                     "scanOptimization audit unlimited snapshot publishes"))
-            return 1;
+            return false;
 
         RaspLuaContext ctx;
         ctx.fields.push_back({"body", "amsiutils", true});
         auto results = engine.Evaluate("AmsiProvider", ctx);
         if (!Expect(results.size() == 3,
                     "auditMaxEventsPerScan zero leaves audit matches unlimited"))
-            return 1;
+            return false;
     }
 
     {
@@ -814,7 +929,7 @@ int main()
                                                                 "amsiutils"),
                                        ""),
                     "globalMode block snapshot publishes"))
-            return 1;
+            return false;
 
         AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
                                                  L"powershell.exe",
@@ -822,7 +937,7 @@ int main()
                                                  9);
         if (!Expect(matched.ruleMatched && matched.block,
                     "globalMode block preserves block rule decision"))
-            return 1;
+            return false;
     }
 
     {
@@ -835,14 +950,14 @@ int main()
                                                         {"second_after_block", "block"}}),
                         ""),
                     "scanOptimization stop after first block snapshot publishes"))
-            return 1;
+            return false;
 
         RaspLuaContext ctx;
         ctx.fields.push_back({"body", "amsiutils", true});
         auto results = engine.Evaluate("AmsiProvider", ctx);
         if (!Expect(results.size() == 1 && results[0].ruleId == "first_block_stop" && results[0].block,
                     "stopAfterFirstBlock stops evaluating after the first final block"))
-            return 1;
+            return false;
     }
 
     {
@@ -856,18 +971,18 @@ int main()
                                                         {"third_after_block", "block"}}),
                         ""),
                     "scanOptimization block mode audit-before-block snapshot publishes"))
-            return 1;
+            return false;
 
         RaspLuaContext ctx;
         ctx.fields.push_back({"body", "amsiutils", true});
         auto results = engine.Evaluate("AmsiProvider", ctx);
         if (!Expect(results.size() == 2,
                     "block mode does not apply auditMaxEventsPerScan before a block rule"))
-            return 1;
+            return false;
         if (!Expect(results[0].ruleId == "first_audit_continue" && !results[0].block &&
                     results[1].ruleId == "second_block_stop" && results[1].block,
                     "block mode continues past audit result and stops at block result"))
-            return 1;
+            return false;
 
         AmsiEvalResult publicResult = engine.Evaluate(L"demo.ps1",
                                                       L"powershell.exe",
@@ -876,9 +991,14 @@ int main()
         if (!Expect(publicResult.ruleMatched && publicResult.block &&
                     publicResult.ruleId == "second_block_stop",
                     "public AMSI result blocks when any later result is block"))
-            return 1;
+            return false;
     }
 
+    return true;
+}
+
+static bool RunEngineRuntimeTestGroup4()
+{
     {
         TestAmsiRuleEngine engine;
         const std::string timeoutJson =
@@ -887,7 +1007,7 @@ int main()
             "\"description\":\"timeout_cfg\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
         if (!Expect(engine.BuildSnapshotTotalScanTimeoutMs(timeoutJson) == 750,
                     "totalScanTimeoutMs is published into the rule snapshot"))
-            return 1;
+            return false;
     }
 
     {
@@ -895,24 +1015,24 @@ int main()
         ScanRateLimitConfig cfg = engine.BuildSnapshotScanRateLimit(RateLimitedRegexRuleJson(3, 0.8));
         if (!Expect(cfg.enabled && cfg.windowMs == 1000 && cfg.maxScans == 3,
                     "scanRateLimit is published into the rule snapshot"))
-            return 1;
+            return false;
         if (!Expect(cfg.bypassRatioAfterLimit == 0.8,
                     "scanRateLimit ratio is published into the rule snapshot"))
-            return 1;
+            return false;
 
         auto d1 = engine.CheckScanRateLimit(cfg, 1000);
         auto d2 = engine.CheckScanRateLimit(cfg, 1001);
         auto d3 = engine.CheckScanRateLimit(cfg, 1002);
         if (!Expect(!d1.bypass && !d2.bypass && !d3.bypass,
                     "scanRateLimit does not bypass within maxScans"))
-            return 1;
+            return false;
         auto d4 = engine.CheckScanRateLimit(cfg, 1003);
         if (!Expect(d4.overLimit && d4.reason == std::string("scan_rate_limited"),
                     "scanRateLimit reports reason after maxScans"))
-            return 1;
+            return false;
         if (!Expect(d4.windowScanCount == 4 && d4.overLimitSeq == 1 && d4.bypassPermille == 800,
                     "scanRateLimit decision exposes counters and rounded permille"))
-            return 1;
+            return false;
     }
 
     {
@@ -924,13 +1044,13 @@ int main()
         cfg.bypassRatioAfterLimit = 1.0;
         if (!Expect(!engine.CheckScanRateLimit(cfg, 2000).bypass,
                     "first scan in window is evaluated"))
-            return 1;
+            return false;
         if (!Expect(engine.CheckScanRateLimit(cfg, 2001).bypass,
                     "bypassRatioAfterLimit 1.0 bypasses all over-limit scans"))
-            return 1;
+            return false;
         if (!Expect(!engine.CheckScanRateLimit(cfg, 3000).bypass,
                     "new window resets scan rate limit"))
-            return 1;
+            return false;
     }
 
     {
@@ -944,22 +1064,22 @@ int main()
         auto overLimit = engine.CheckScanRateLimit(cfg, 4001);
         if (!Expect(overLimit.overLimit && !overLimit.bypass && overLimit.bypassPermille == 0,
                     "bypassRatioAfterLimit 0.0 observes over-limit without bypass"))
-            return 1;
+            return false;
     }
 
     {
         TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(RateLimitedRegexRuleJson(1, 1.0), ""),
                     "rate-limited regex snapshot publishes"))
-            return 1;
+            return false;
         AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsiutils", 9);
         if (!Expect(first.ruleMatched && first.block,
                     "first scan before rate limit evaluates rules"))
-            return 1;
+            return false;
         AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsiutils", 9);
         if (!Expect(!second.ruleMatched,
                     "over-limit scan returns NoMatch without detection"))
-            return 1;
+            return false;
     }
 
     {
@@ -970,7 +1090,7 @@ int main()
                                                                 "amsiutils"),
                                        ""),
                     "globalMode block audit-rule snapshot publishes"))
-            return 1;
+            return false;
 
         AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
                                                  L"powershell.exe",
@@ -978,7 +1098,7 @@ int main()
                                                  9);
         if (!Expect(matched.ruleMatched && !matched.block,
                     "globalMode block preserves audit rule decision"))
-            return 1;
+            return false;
     }
 
     {
@@ -990,7 +1110,7 @@ int main()
                                                      "\\\\asp businesee one\\\\"),
                         ""),
                     "parent gate block miss rule snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -1010,7 +1130,7 @@ int main()
                                                  scanContext);
         if (!Expect(!matched.ruleMatched,
                     "parentPathBlockContains miss skips current rule even when regex matches"))
-            return 1;
+            return false;
     }
 
     {
@@ -1022,7 +1142,7 @@ int main()
                                                      "/asp businesee one/"),
                         ""),
                     "parent gate block hit rule snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -1042,7 +1162,7 @@ int main()
                                                  scanContext);
         if (!Expect(matched.ruleMatched && matched.ruleId == "parent_gate_block_hit",
                     "parentPathBlockContains is case-insensitive and slash-normalized gate"))
-            return 1;
+            return false;
     }
 
     {
@@ -1054,7 +1174,7 @@ int main()
                                                      "\\\\asp businesee one\\\\"),
                         ""),
                     "parent gate allow hit rule snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -1074,14 +1194,14 @@ int main()
                                                  scanContext);
         if (!Expect(!matched.ruleMatched,
                     "parentPathAllowContains skips current rule even when regex matches"))
-            return 1;
+            return false;
     }
 
     {
         auto engine = std::make_unique<TestAmsiRuleEngine>();
         if (!Expect(engine->ParseAndSwap(TrustedProcessRegexRuleJson("C:\\\\csaca.exe"), ""),
                     "trust_process rule snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -1103,14 +1223,14 @@ int main()
                                                   scanContext);
         if (!Expect(!matched.ruleMatched,
                     "trust_process exact normalized parent path skips all rules"))
-            return 1;
+            return false;
     }
 
     {
         auto engine = std::make_unique<TestAmsiRuleEngine>();
         if (!Expect(engine->ParseAndSwap(TrustedProcessRegexRuleJson("C:\\\\csaca.exe"), ""),
                     "trust_process rule snapshot publishes for bypass tests"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -1132,7 +1252,7 @@ int main()
                                                   scanContext);
         if (!Expect(matched.ruleMatched,
                     "trust_process rejects same filename in different directory"))
-            return 1;
+            return false;
 
         process.parentProcessPath = "C:\\csaca.exe.old";
         matched = engine->Evaluate(L"demo.ps1",
@@ -1142,14 +1262,14 @@ int main()
                                    scanContext);
         if (!Expect(matched.ruleMatched,
                     "trust_process rejects suffix bypass"))
-            return 1;
+            return false;
     }
 
     {
         auto engine = std::make_unique<TestAmsiRuleEngine>();
         if (!Expect(engine->ParseAndSwap(TrustedProcessRegexRuleJson("C:\\\\csaca.exe"), ""),
                     "trust_process rule snapshot publishes without host gate"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -1169,7 +1289,7 @@ int main()
                                                   scanContext);
         if (!Expect(!matched.ruleMatched,
                     "trust_process relies on parent path because scan entry is PowerShell-only"))
-            return 1;
+            return false;
     }
 
     {
@@ -1181,7 +1301,7 @@ int main()
                                                      "\\\\asp businesee one\\\\"),
                         ""),
                     "parent gate missing path rule snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = false;
@@ -1201,14 +1321,14 @@ int main()
                                                  scanContext);
         if (!Expect(!matched.ruleMatched,
                     "configured parent path gate skips current rule when parent path is unavailable"))
-            return 1;
+            return false;
     }
 
     {
         TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(FirstRuleGatedSecondRuleFallbackJson(), ""),
                     "parent gate current-rule skip snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -1228,7 +1348,7 @@ int main()
                                                  scanContext);
         if (!Expect(matched.ruleMatched && matched.ruleId == "fallback_second",
                     "parent path gate skips only current rule and later rules still evaluate"))
-            return 1;
+            return false;
     }
 
 #ifdef RASP_PCRE2_AVAILABLE
@@ -1236,7 +1356,7 @@ int main()
         TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(FirstRegexLimitedSecondRuleFallbackJson(), ""),
                     "regex limit current-rule skip snapshot publishes"))
-            return 1;
+            return false;
 
         std::string script = "REGEX_TIMEOUT_PROBE:" + std::string(4096, 'a') + "b SECOND_OK";
         AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
@@ -1245,17 +1365,22 @@ int main()
                                                  script.size());
         if (!Expect(matched.ruleMatched && matched.ruleId == "regex_fallback_second",
                     "regex resource limit skips only current rule and later rules still evaluate"))
-            return 1;
+            return false;
     }
 #endif
 
+    return true;
+}
+
+static bool RunEngineRuntimeTestGroup5()
+{
     {
         TestAmsiRuleEngine engine;
         const char* invalidRule =
             "ZnVuY3Rpb24gcnVsZShzZW5zb3IsIGNvbnRleHQpIGlmIGNvbnRleHQucHJvY2Vzc0NhcHR1cmVTdGF0dXMgPT0gJ250ZGxsLXVuYXZhaWxhYmxlJyBhbmQgY29udGV4dC5wcm9jZXNzUmV0cnlTdGF0ZSA9PSAncGVuZGluZycgYW5kIGNvbnRleHQucGFyZW50UHJvY2Vzc05hbWUgPT0gJycgYW5kIGNvbnRleHQuYm9keSA9PSAnV3JpdGVIb3N0JyB0aGVuIHJldHVybiB7IG1hdGNoID0gdHJ1ZSwgZGVzYyA9ICdpbnZhbGlkLXByb2Nlc3MnLCBwYXlsb2FkID0gY29udGV4dC5wcm9jZXNzQ2FwdHVyZVN0YXR1cyB9IGVuZCByZXR1cm4geyBtYXRjaCA9IGZhbHNlIH0gZW5k";
         if (!Expect(engine.ParseAndSwap(OneRawLuaRuleJson("invalid_process_ctx", invalidRule), ""),
                     "invalid process context rule snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = false;
@@ -1272,7 +1397,7 @@ int main()
                                                  scanContext);
         if (!Expect(matched.ruleMatched && matched.payload == "ntdll-unavailable",
                     "invalid process snapshot exposes degradation fields and preserves body detection"))
-            return 1;
+            return false;
     }
 
     // Batch 3: 事件提交通路测试 - 验证 RaspEvalResult -> EventJsonBuildInput -> JSON
@@ -1361,17 +1486,17 @@ int main()
         };
         skipWs();
         if (i >= json.size() || json[i++] != '{')
-            return 1;
+            return false;
         skipWs();
         while (i < json.size() && json[i] != '}') {
             std::string key, value;
             if (!readString(key))
-                return 1;
+                return false;
             skipWs();
             if (i >= json.size() || json[i++] != ':')
-                return 1;
+                return false;
             if (!readValue(value))
-                return 1;
+                return false;
             fields[key] = value;
             skipWs();
             if (i < json.size() && json[i] == ',')
@@ -1381,13 +1506,13 @@ int main()
 
         if (!Expect(fields["parentPid"] == "5678",
                     "event submit path: parentPid 5678 reaches JSON"))
-            return 1;
+            return false;
         if (!Expect(fields["parentProcessName"] == "wscript.exe",
                     "event submit path: parentProcessName wscript.exe reaches JSON"))
-            return 1;
+            return false;
         if (!Expect(fields["parentProcessPath"] == "C:\\Windows\\System32\\wscript.exe",
                     "event submit path: parentProcessPath reaches JSON"))
-            return 1;
+            return false;
     }
 
     // Batch 3: 事件提交通路测试 - 空 parent 字段
@@ -1455,17 +1580,17 @@ int main()
 
         skipWs();
         if (i >= json.size() || json[i++] != '{')
-            return 1;
+            return false;
         skipWs();
         while (i < json.size() && json[i] != '}') {
             std::string key, value;
             if (!readString(key))
-                return 1;
+                return false;
             skipWs();
             if (i >= json.size() || json[i++] != ':')
-                return 1;
+                return false;
             if (!readValue(value))
-                return 1;
+                return false;
             fields[key] = value;
             skipWs();
             if (i < json.size() && json[i] == ',')
@@ -1475,10 +1600,10 @@ int main()
 
         if (!Expect(fields["parentPid"] == "0",
                     "event submit path: empty parentPid is 0 in JSON"))
-            return 1;
+            return false;
         if (!Expect(fields["parentProcessName"].empty(),
                     "event submit path: empty parentProcessName is empty in JSON"))
-            return 1;
+            return false;
     }
 
     // Batch 4b: 采集失败时事件输出完整性 - NtdllUnavailable
@@ -1486,7 +1611,7 @@ int main()
         TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("fail_test_rule", "DownloadString"), ""),
                     "fail_test_rule snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = false;
@@ -1506,9 +1631,9 @@ int main()
                                                  scanContext);
 
         if (!Expect(matched.ruleMatched, "采集失败不阻塞规则匹配"))
-            return 1;
+            return false;
         if (!Expect(matched.block, "采集失败不改变 block 决策"))
-            return 1;
+            return false;
     }
 
     // Batch 4b: ParentSystem 哨兵值事件输出
@@ -1516,7 +1641,7 @@ int main()
         TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("system_parent_rule", "Write-Host"), ""),
                     "system_parent_rule snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -1536,7 +1661,7 @@ int main()
                                                  scanContext);
 
         if (!Expect(matched.ruleMatched, "ParentSystem 不阻塞规则匹配"))
-            return 1;
+            return false;
     }
 
     // Batch 4c: 并发检测时 parent 字段传递一致性
@@ -1544,7 +1669,7 @@ int main()
         TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("concurrent_rule", "Get-Process"), ""),
                     "concurrent_rule snapshot publishes"))
-            return 1;
+            return false;
 
         ProcessContextSnapshot process;
         process.valid = true;
@@ -1574,8 +1699,24 @@ int main()
             t.join();
 
         if (!Expect(matchCount.load() == 8, "并发检测全部成功匹配"))
-            return 1;
+            return false;
     }
+
+    return true;
+}
+
+int main()
+{
+    if (!RunEngineRuntimeTestGroup1())
+        return 1;
+    if (!RunEngineRuntimeTestGroup2())
+        return 1;
+    if (!RunEngineRuntimeTestGroup3())
+        return 1;
+    if (!RunEngineRuntimeTestGroup4())
+        return 1;
+    if (!RunEngineRuntimeTestGroup5())
+        return 1;
 
     return 0;
 }

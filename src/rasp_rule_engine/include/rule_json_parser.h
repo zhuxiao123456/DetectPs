@@ -25,12 +25,29 @@ constexpr uint32_t kMaxScanRateLimitMaxScans = 100000;
 constexpr double kDefaultScanRateLimitBypassRatio = 0.8;
 constexpr double kMinScanRateLimitBypassRatio = 0.0;
 constexpr double kMaxScanRateLimitBypassRatio = 1.0;
+constexpr uint32_t kDefaultScanContextMaxBufferedBytes = 8192;
+constexpr uint32_t kMinScanContextMaxBufferedBytes = 0;
+constexpr uint32_t kMaxScanContextMaxBufferedBytes = 65536;
+constexpr uint32_t kDefaultScanContextTtlMs = 3000;
+constexpr uint32_t kMinScanContextTtlMs = 100;
+constexpr uint32_t kMaxScanContextTtlMs = 60000;
+constexpr uint32_t kDefaultScanContextMaxEvalBytes = 16384;
+constexpr uint32_t kMinScanContextMaxEvalBytes = 1024;
+constexpr uint32_t kMaxScanContextMaxEvalBytes = 131072;
 
 struct ScanRateLimitConfig {
     bool enabled = false;
     uint32_t windowMs = kDefaultScanRateLimitWindowMs;
     uint32_t maxScans = kDefaultScanRateLimitMaxScans;
     double bypassRatioAfterLimit = kDefaultScanRateLimitBypassRatio;
+};
+
+struct ScanContextConfig {
+    bool enabled = false;
+    uint32_t maxBufferedBytes = kDefaultScanContextMaxBufferedBytes;
+    uint32_t ttlMs = kDefaultScanContextTtlMs;
+    uint32_t maxEvalBytes = kDefaultScanContextMaxEvalBytes;
+    bool clearOnMatch = true;
 };
 
 struct RuleParseResult {
@@ -51,6 +68,8 @@ struct RuleParseResult {
     bool stopAfterFirstBlock = true;
     bool hasScanRateLimit = false;
     ScanRateLimitConfig scanRateLimit;
+    bool hasScanContext = false;
+    ScanContextConfig scanContext;
     std::string error;
 };
 

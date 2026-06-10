@@ -95,6 +95,22 @@ namespace {
         return false;
     }
 
+    void TrimStringTailInPlace(std::string& value, size_t maxBytes)
+    {
+        if (maxBytes == 0) {
+            value.clear();
+            return;
+        }
+        if (value.size() > maxBytes)
+            value.erase(0, value.size() - maxBytes);
+    }
+
+    std::string TrimStringTail(std::string value, size_t maxBytes)
+    {
+        TrimStringTailInPlace(value, maxBytes);
+        return value;
+    }
+
     std::string TrimAscii(std::string_view value)
     {
         size_t begin = 0;
@@ -373,6 +389,8 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
     bool stopAfterFirstBlock = true;
     ScanRateLimitConfig scanRateLimit;
+    ScanContextConfig scanContext;
+    const std::string effectiveHash = ComputeEffectiveSnapshotHash(json);
     if (!ParseRulesJson(json,
                         lib,
                         rawRules,
@@ -385,6 +403,8 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
                         &stopAfterFirstBlock,
                         &totalScanTimeoutMs,
                         &scanRateLimit,
+                        nullptr,
+                        &scanContext,
                         nullptr) || rawRules.empty()) {
         LogWithSeverity(RaspDiagSeverity::Warning, "BuildNextSnapshot: no rules parsed");
         return {};
@@ -415,7 +435,9 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
                           totalScanTimeoutMs,
                           auditMaxEventsPerScan,
                           stopAfterFirstBlock,
-                          scanRateLimit});
+                          scanRateLimit,
+                          scanContext,
+                          effectiveHash});
 }
 
 bool AmsiRuleEngine::ShouldBlockRule(const RuleSnapshot& snapshot,
@@ -489,6 +511,139 @@ AmsiRuleEngine::ScanRateLimitDecision AmsiRuleEngine::ShouldBypassByScanRateLimi
     return decision;
 }
 
+std::string AmsiRuleEngine::BuildScanEvaluationContent(
+        const RuleSnapshot& snapshot,
+        const std::string& currentContent,
+        uint64_t nowMs,
+        ScanContextBuildInfo& info)
+{
+    const ScanContextConfig& config = snapshot.scanContext;
+    info.snapshotHash = snapshot.effectiveHash;
+    info.currentLen = currentContent.size();
+
+    if (!config.enabled || config.maxBufferedBytes == 0) {
+        info.enabled = false;
+        std::string eval = TrimStringTail(currentContent, config.maxEvalBytes);
+        info.evalLen = eval.size();
+        return eval;
+    }
+
+    std::string contextCopy;
+    bool expired = false;
+    bool snapshotChanged = false;
+    {
+        std::lock_guard<std::mutex> lock(m_scanContextMutex);
+        if (m_activeScanContextSnapshotHash.empty()) {
+            m_activeScanContextSnapshotHash = snapshot.effectiveHash;
+        } else if (m_activeScanContextSnapshotHash != snapshot.effectiveHash) {
+            m_scanContextBuffer.clear();
+            m_lastScanContextAppendMs = 0;
+            m_activeScanContextSnapshotHash = snapshot.effectiveHash;
+            snapshotChanged = true;
+        }
+
+        expired = m_lastScanContextAppendMs != 0 &&
+                  nowMs - m_lastScanContextAppendMs > config.ttlMs;
+        if (expired) {
+            m_scanContextBuffer.clear();
+            m_lastScanContextAppendMs = 0;
+        }
+
+        contextCopy = m_scanContextBuffer;
+        info.enabled = true;
+        info.bufferedLen = contextCopy.size();
+        info.expired = expired;
+    }
+
+    if (snapshotChanged) {
+        LogWithSeverity(RaspDiagSeverity::Debug,
+                        "scan_context cleared reason=snapshot_changed");
+    }
+    if (expired) {
+        LogWithSeverity(RaspDiagSeverity::Debug,
+                        "scan_context cleared reason=ttl_expired");
+    }
+
+    std::string eval;
+    if (!contextCopy.empty()) {
+        eval.reserve(contextCopy.size() + 1 + currentContent.size());
+        eval.append(contextCopy);
+        eval.push_back('\n');
+    } else {
+        eval.reserve(currentContent.size());
+    }
+    eval.append(currentContent);
+    TrimStringTailInPlace(eval, config.maxEvalBytes);
+    info.evalLen = eval.size();
+
+    LogWithSeverity(RaspDiagSeverity::Debug,
+                    "scan_context enabled=1 current_len=%zu buffered_len=%zu eval_len=%zu expired=%d appended=0 cleared_on_match=0",
+                    info.currentLen,
+                    info.bufferedLen,
+                    info.evalLen,
+                    info.expired ? 1 : 0);
+
+    return eval;
+}
+
+void AmsiRuleEngine::FinalizeScanContext(
+        const RuleSnapshot& snapshot,
+        const std::string& currentContent,
+        uint64_t nowMs,
+        const ScanContextFinalizeResult& result)
+{
+    const ScanContextConfig& config = snapshot.scanContext;
+    if (!config.enabled || config.maxBufferedBytes == 0)
+        return;
+
+    std::lock_guard<std::mutex> lock(m_scanContextMutex);
+    auto current = std::atomic_load(&m_snapshot);
+    if (!current || current->effectiveHash != snapshot.effectiveHash)
+        return;
+    if (!m_activeScanContextSnapshotHash.empty() &&
+        m_activeScanContextSnapshotHash != snapshot.effectiveHash)
+        return;
+
+    if (result.matched && config.clearOnMatch) {
+        m_scanContextBuffer.clear();
+        m_lastScanContextAppendMs = 0;
+        m_activeScanContextSnapshotHash = snapshot.effectiveHash;
+        LogWithSeverity(RaspDiagSeverity::Debug,
+                        "scan_context cleared reason=rule_match");
+        return;
+    }
+
+    if (result.rateLimitedBypass || result.globalTimeout || result.exception)
+        return;
+    if (currentContent.empty())
+        return;
+
+    if (!m_scanContextBuffer.empty())
+        m_scanContextBuffer.push_back('\n');
+    m_scanContextBuffer.append(currentContent);
+    TrimStringTailInPlace(m_scanContextBuffer, config.maxBufferedBytes);
+    m_lastScanContextAppendMs = nowMs;
+    m_activeScanContextSnapshotHash = snapshot.effectiveHash;
+}
+
+void AmsiRuleEngine::ClearScanContext(const char* reason)
+{
+    bool hadContext = false;
+    {
+        std::lock_guard<std::mutex> lock(m_scanContextMutex);
+        hadContext = !m_scanContextBuffer.empty() || m_lastScanContextAppendMs != 0;
+        m_scanContextBuffer.clear();
+        m_lastScanContextAppendMs = 0;
+        m_activeScanContextSnapshotHash.clear();
+    }
+
+    if (hadContext) {
+        LogWithSeverity(RaspDiagSeverity::Debug,
+                        "scan_context cleared reason=%s",
+                        reason ? reason : "unknown");
+    }
+}
+
 static const char* ResolveTimeoutDecision(const std::vector<RaspEvalResult>& results,
                                           ScanExecutionContext& exec)
 {
@@ -546,6 +701,7 @@ void AmsiRuleEngine::PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
     if (!next)
         return;
 
+    ClearScanContext("snapshot_changed");
     std::atomic_store(&m_snapshot, next);
     m_libSource = effectiveLib;
 
@@ -609,6 +765,7 @@ size_t AmsiRuleEngine::ActiveRuleCountForStatus() const {
 void AmsiRuleEngine::OnReloadSignal() {
     EngineRuntime& runtime = GetAmsiEngineRuntime();
     const bool waitResumeAfterHostLost = IsWaitingResumeAfterHostLost();
+    ClearScanContext("reload");
     runtime.PauseDetection();
     MarkDetectionPausedByHostState(true);
     MarkRuleSnapshotReady(false);
@@ -748,8 +905,14 @@ void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
                                  {},
                                  std::make_shared<RaspLuaEngine>(),
                                  false,
-                                 RaspGlobalMode::Block,
-                                 kDefaultMaxScanContentBytes});
+                          RaspGlobalMode::Block,
+                                 kDefaultMaxScanContentBytes,
+                                 kDefaultTotalScanTimeoutMs,
+                                 kDefaultAuditMaxEventsPerScan,
+                                 true,
+                                 ScanRateLimitConfig{},
+                                 ScanContextConfig{},
+                                 {}});
     std::atomic_store(&m_snapshot, next);
 }
 
@@ -804,6 +967,7 @@ DWORD WINAPI AmsiRuleEngine::UnloadThreadProc(LPVOID)
         }
 
 void AmsiRuleEngine::OnUnloadSignal() {
+    ClearScanContext("unload");
     HANDLE hThread = CreateThread(nullptr, 0, UnloadThreadProc, nullptr, 0, nullptr);
     if (hThread)
         CloseHandle(hThread);
@@ -813,6 +977,7 @@ void AmsiRuleEngine::OnUnloadSignal() {
 
 void AmsiRuleEngine::OnPauseDetectionSignal()
 {
+    ClearScanContext("pause");
     MarkDetectionPausedByHostState(true);
     GetAmsiEngineRuntime().PauseDetection();
 }
@@ -832,6 +997,7 @@ void AmsiRuleEngine::OnResumeDetectionSignal()
         return;
     }
 
+    ClearScanContext("resume");
     MarkDetectionPausedByHostState(false);
     MarkWaitingResumeAfterHostLost(false);
     GetAmsiEngineRuntime().ResumeDetection();
@@ -864,10 +1030,6 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
 
     auto snap = std::atomic_load(&m_snapshot);
     if (!snap || !snap->luaEngine)
-        return results;
-    const ScanRateLimitDecision rateDecision =
-        ShouldBypassByScanRateLimit(snap->scanRateLimit, GetTickCount64());
-    if (rateDecision.bypass)
         return results;
     exec.budget.totalBudgetMs = snap->totalScanTimeoutMs;
     exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
@@ -917,6 +1079,35 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
                         matchedTrustProcess.c_str());
         return results;
     }
+
+    const uint64_t scanNowMs = GetTickCount64();
+    const ScanRateLimitDecision rateDecision =
+        ShouldBypassByScanRateLimit(snap->scanRateLimit, scanNowMs);
+    if (rateDecision.bypass)
+        return results;
+
+    std::string currentBody;
+    for (const auto& f : ctx.fields) {
+        if (f.name == "body") {
+            currentBody = f.value;
+            break;
+        }
+    }
+
+    RaspLuaContext evalCtx = ctx;
+    if (!currentBody.empty()) {
+        ScanContextBuildInfo contextInfo;
+        const std::string evalBody =
+            BuildScanEvaluationContent(*snap, currentBody, scanNowMs, contextInfo);
+        for (auto& f : evalCtx.fields) {
+            if (f.name == "body") {
+                f.value = evalBody;
+                f.isBinary = true;
+                break;
+            }
+        }
+    }
+
     // 遍历每个规则
     uint32_t emittedEvents = 0;
     const bool globalAuditMode = snap->hasGlobalMode && snap->globalMode == RaspGlobalMode::Audit;
@@ -962,7 +1153,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
                 exec.SetRegexCheckContext(static_cast<int>(checkIndex));
                 const std::string *fp = nullptr;
                 const std::string &want = chk.field.empty() ? std::string("body") : chk.field;
-                for (const auto &f : ctx.fields)
+                for (const auto &f : evalCtx.fields)
                     if (f.name == want) {
                         fp = &f.value;
                         break;
@@ -993,7 +1184,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             if (luaEngine.IsLoaded(rule.id))
             {
                 // Gate passed → run Lua with matched IDs injected into context
-                RaspLuaResult lr = luaEngine.Run(rule.id, sensor, ctx, rule.scriptTimeoutInstructions, matchedIds, &exec);
+                RaspLuaResult lr = luaEngine.Run(rule.id, sensor, evalCtx, rule.scriptTimeoutInstructions, matchedIds, &exec);
                 if (lr.timedOut || exec.ShouldStopScan())
                     break;
                 if (lr.matched) {
@@ -1021,7 +1212,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             const std::string &wantField = rule.regexField.empty()
                                                ? std::string("body")
                                                : rule.regexField;
-            for (const auto &f : ctx.fields)
+            for (const auto &f : evalCtx.fields)
                 if (f.name == wantField) { fieldPtr = &f.value; break; }
             if (fieldPtr && !fieldPtr->empty())
             {
@@ -1049,7 +1240,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
 
         // ── lua脚本check, PrecompileAll在这里预编译, 可以不走此部分 ─
         if (!matched && rule.regexChecks.empty() && luaEngine.IsLoaded(rule.id)) {
-            RaspLuaResult lr = luaEngine.Run(rule.id, sensor, ctx,
+            RaspLuaResult lr = luaEngine.Run(rule.id, sensor, evalCtx,
                                              rule.scriptTimeoutInstructions,
                                              {},
                                              &exec);
@@ -1113,6 +1304,10 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     if (exec.timedOut)
         ResolveTimeoutDecision(results, exec);
     EmitScanBudgetTelemetry(exec);
+    ScanContextFinalizeResult contextResult;
+    contextResult.matched = !results.empty();
+    contextResult.globalTimeout = exec.timedOut;
+    FinalizeScanContext(*snap, currentBody, scanNowMs, contextResult);
     return results;
 }
 

@@ -83,6 +83,8 @@ protected:
         uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
         bool stopAfterFirstBlock = true;
         ScanRateLimitConfig scanRateLimit;
+        ScanContextConfig scanContext;
+        std::string effectiveHash;
     };
 
     struct ScanRateLimitDecision {
@@ -95,6 +97,22 @@ protected:
         uint32_t bypassPermille = 0;
     };
 
+    struct ScanContextBuildInfo {
+        bool enabled = false;
+        size_t currentLen = 0;
+        size_t bufferedLen = 0;
+        size_t evalLen = 0;
+        bool expired = false;
+        std::string snapshotHash;
+    };
+
+    struct ScanContextFinalizeResult {
+        bool matched = false;
+        bool rateLimitedBypass = false;
+        bool globalTimeout = false;
+        bool exception = false;
+    };
+
     std::shared_ptr<const RuleSnapshot> BuildNextSnapshot(
         const std::string& json,
         const std::string& libSource,
@@ -103,6 +121,17 @@ protected:
     ScanRateLimitDecision ShouldBypassByScanRateLimit(
         const ScanRateLimitConfig& config,
         uint64_t nowMs);
+    std::string BuildScanEvaluationContent(
+        const RuleSnapshot& snapshot,
+        const std::string& currentContent,
+        uint64_t nowMs,
+        ScanContextBuildInfo& info);
+    void FinalizeScanContext(
+        const RuleSnapshot& snapshot,
+        const std::string& currentContent,
+        uint64_t nowMs,
+        const ScanContextFinalizeResult& result);
+    void ClearScanContext(const char* reason);
 
 private:
     ScriptInputNormalizer m_inputNormalizer;
@@ -115,6 +144,10 @@ private:
     uint32_t m_rateLimitWindowBypassed = 0;
     uint32_t m_rateLimitWindowEvaluatedAfterLimit = 0;
     bool m_rateLimitWindowLimitEntered = false;
+    std::mutex m_scanContextMutex;
+    std::string m_scanContextBuffer;
+    uint64_t m_lastScanContextAppendMs = 0;
+    std::string m_activeScanContextSnapshotHash;
 
     void PublishSnapshot(std::shared_ptr<const RuleSnapshot> next,
                          const std::string& effectiveLib);

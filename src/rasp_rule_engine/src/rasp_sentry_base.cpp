@@ -676,7 +676,9 @@ bool RaspSentryBase::ParseRulesJson(
     bool*                                       stopAfterFirstBlockOut,
     uint32_t*                                   totalScanTimeoutMsOut,
     ScanRateLimitConfig*                        scanRateLimitOut,
-    bool*                                       hasScanRateLimitOut)
+    bool*                                       hasScanRateLimitOut,
+    ScanContextConfig*                          scanContextOut,
+    bool*                                       hasScanContextOut)
 {
     class FactoryAdapter final : public IRuleObjectFactory {
     public:
@@ -726,6 +728,10 @@ bool RaspSentryBase::ParseRulesJson(
         *scanRateLimitOut = result.scanRateLimit;
     if (hasScanRateLimitOut)
         *hasScanRateLimitOut = result.hasScanRateLimit;
+    if (scanContextOut)
+        *scanContextOut = result.scanContext;
+    if (hasScanContextOut)
+        *hasScanContextOut = result.hasScanContext;
     libSourceOut = std::move(result.libSource);
     rulesOut = std::move(result.rules);
     return result.ok;

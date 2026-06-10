@@ -60,6 +60,33 @@ double ClampScanRateLimitBypassRatio(double value)
     return value;
 }
 
+uint32_t ClampScanContextMaxBufferedBytes(int value)
+{
+    if (value < static_cast<int>(kMinScanContextMaxBufferedBytes))
+        return kMinScanContextMaxBufferedBytes;
+    if (value > static_cast<int>(kMaxScanContextMaxBufferedBytes))
+        return kMaxScanContextMaxBufferedBytes;
+    return static_cast<uint32_t>(value);
+}
+
+uint32_t ClampScanContextTtlMs(int value)
+{
+    if (value < static_cast<int>(kMinScanContextTtlMs))
+        return kMinScanContextTtlMs;
+    if (value > static_cast<int>(kMaxScanContextTtlMs))
+        return kMaxScanContextTtlMs;
+    return static_cast<uint32_t>(value);
+}
+
+uint32_t ClampScanContextMaxEvalBytes(int value)
+{
+    if (value < static_cast<int>(kMinScanContextMaxEvalBytes))
+        return kMinScanContextMaxEvalBytes;
+    if (value > static_cast<int>(kMaxScanContextMaxEvalBytes))
+        return kMaxScanContextMaxEvalBytes;
+    return static_cast<uint32_t>(value);
+}
+
 int NormalizeRuleSeverity(int value)
 {
     if (value < 0 || value > 4)
@@ -113,6 +140,66 @@ void ParseScanRateLimit(RuleJsonParser::Parser& p, RuleParseResult& result)
         p.consume(',');
     }
     p.consume('}');
+}
+
+void ParseScanContext(RuleJsonParser::Parser& p, RuleParseResult& result)
+{
+    if (!p.consume('{')) {
+        p.skip_value();
+        return;
+    }
+
+    result.hasScanContext = true;
+    while (!p.peek('}') && p.ok()) {
+        std::string key;
+        if (!p.read_string(key) || !p.consume(':')) {
+            p.skip_value();
+            break;
+        }
+
+        if (key == "enabled") {
+            bool value = false;
+            if (p.read_bool(value))
+                result.scanContext.enabled = value;
+            else
+                p.skip_value();
+        } else if (key == "maxBufferedBytes") {
+            int value = 0;
+            if (p.read_int(value))
+                result.scanContext.maxBufferedBytes = ClampScanContextMaxBufferedBytes(value);
+            else
+                p.skip_value();
+        } else if (key == "ttlMs") {
+            int value = 0;
+            if (p.read_int(value))
+                result.scanContext.ttlMs = ClampScanContextTtlMs(value);
+            else
+                p.skip_value();
+        } else if (key == "maxEvalBytes") {
+            int value = 0;
+            if (p.read_int(value))
+                result.scanContext.maxEvalBytes = ClampScanContextMaxEvalBytes(value);
+            else
+                p.skip_value();
+        } else if (key == "clearOnMatch") {
+            bool value = true;
+            if (p.read_bool(value))
+                result.scanContext.clearOnMatch = value;
+            else
+                p.skip_value();
+        } else {
+            p.skip_value();
+        }
+
+        p.consume(',');
+    }
+    p.consume('}');
+}
+
+void FinalizeScanContextConfig(RuleParseResult& result)
+{
+    if (result.scanContext.maxEvalBytes < result.maxScanContentBytes)
+        result.scanContext.maxEvalBytes = result.maxScanContentBytes;
 }
 
 void ParseScanOptimization(RuleJsonParser::Parser& p, RuleParseResult& result)
@@ -354,6 +441,8 @@ bool ParseBundleObject(RuleJsonParser::Parser& p,
             ParseScanOptimization(p, result);
         } else if (key == "scanRateLimit") {
             ParseScanRateLimit(p, result);
+        } else if (key == "scanContext") {
+            ParseScanContext(p, result);
         } else {
             p.skip_value();
         }
@@ -621,6 +710,8 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
             ParseScanOptimization(p, result);
         } else if (key == "scanRateLimit") {
             ParseScanRateLimit(p, result);
+        } else if (key == "scanContext") {
+            ParseScanContext(p, result);
         } else if (key == "rules") {
             if (!ParseRulesArray(p, result, factory, extensionParser))
                 return result;
@@ -637,5 +728,6 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
     result.ok = !result.rules.empty();
     if (!result.ok && result.error.empty())
         result.error = "no_valid_rules";
+    FinalizeScanContextConfig(result);
     return result;
 }

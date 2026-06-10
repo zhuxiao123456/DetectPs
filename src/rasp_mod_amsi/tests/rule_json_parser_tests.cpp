@@ -352,6 +352,59 @@ int main()
     }
 
     {
+        auto missing = Parse(R"json({"rules":[{"id":"r"}]})json");
+        if (!Expect(!missing.scanContext.enabled,
+                    "missing scanContext is disabled by default"))
+            return 1;
+        if (!Expect(missing.scanContext.maxBufferedBytes == kDefaultScanContextMaxBufferedBytes,
+                    "missing scanContext maxBufferedBytes uses default"))
+            return 1;
+        if (!Expect(missing.scanContext.ttlMs == kDefaultScanContextTtlMs,
+                    "missing scanContext ttlMs uses default"))
+            return 1;
+        if (!Expect(missing.scanContext.maxEvalBytes == kDefaultScanContextMaxEvalBytes,
+                    "missing scanContext maxEvalBytes uses default"))
+            return 1;
+        if (!Expect(missing.scanContext.clearOnMatch,
+                    "missing scanContext clearOnMatch defaults true"))
+            return 1;
+
+        auto configured = Parse(R"json({"scanContext":{"enabled":true,"maxBufferedBytes":4096,"ttlMs":500,"maxEvalBytes":12000,"clearOnMatch":false},"rules":[{"id":"r"}]})json");
+        if (!Expect(configured.hasScanContext, "configured scanContext is marked present"))
+            return 1;
+        if (!Expect(configured.scanContext.enabled, "configured scanContext enabled parses"))
+            return 1;
+        if (!Expect(configured.scanContext.maxBufferedBytes == 4096,
+                    "configured scanContext maxBufferedBytes parses"))
+            return 1;
+        if (!Expect(configured.scanContext.ttlMs == 500,
+                    "configured scanContext ttlMs parses"))
+            return 1;
+        if (!Expect(configured.scanContext.maxEvalBytes == 12000,
+                    "configured scanContext maxEvalBytes parses"))
+            return 1;
+        if (!Expect(!configured.scanContext.clearOnMatch,
+                    "configured scanContext clearOnMatch parses"))
+            return 1;
+
+        auto clamped = Parse(R"json({"scanContext":{"enabled":true,"maxBufferedBytes":999999,"ttlMs":1,"maxEvalBytes":1},"rules":[{"id":"r"}]})json");
+        if (!Expect(clamped.scanContext.maxBufferedBytes == kMaxScanContextMaxBufferedBytes,
+                    "large scanContext maxBufferedBytes clamps to maximum"))
+            return 1;
+        if (!Expect(clamped.scanContext.ttlMs == kMinScanContextTtlMs,
+                    "small scanContext ttlMs clamps to minimum"))
+            return 1;
+        if (!Expect(clamped.scanContext.maxEvalBytes == clamped.maxScanContentBytes,
+                    "small scanContext maxEvalBytes is raised to maxScanContentBytes"))
+            return 1;
+
+        auto raised = Parse(R"json({"maxScanContentBytes":8192,"scanContext":{"enabled":true,"maxEvalBytes":4096},"rules":[{"id":"r"}]})json");
+        if (!Expect(raised.scanContext.maxEvalBytes == raised.maxScanContentBytes,
+                    "scanContext maxEvalBytes is raised to maxScanContentBytes"))
+            return 1;
+    }
+
+    {
         auto result = Parse(R"json({"globalLibraries":"bGliLXNpbmdsZQ==","rules":[]})json");
         if (!Expect(!result.ok, "bundle without valid rules is reported as failure"))
             return 1;
