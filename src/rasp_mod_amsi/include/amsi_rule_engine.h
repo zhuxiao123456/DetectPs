@@ -90,6 +90,8 @@ protected:
 protected:
     struct RuleSnapshot {
         std::vector<AmsiRaspRuleConfig> rules;
+        std::vector<size_t> blockRuleIndexes;
+        std::vector<size_t> alertRuleIndexes;
         std::vector<std::string> trustProcessPaths;
         std::shared_ptr<RaspLuaEngine> luaEngine;
         bool hasGlobalMode = false;

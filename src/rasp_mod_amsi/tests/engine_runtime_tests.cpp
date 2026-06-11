@@ -1114,18 +1114,17 @@ static bool RunEngineRuntimeTestGroup3()
                                                         {"second_block_stop", "block"},
                                                         {"third_after_block", "block"}}),
                         ""),
-                    "scanOptimization block mode audit-before-block snapshot publishes"))
+                    "scanOptimization block mode block-first snapshot publishes"))
             return false;
 
         RaspLuaContext ctx;
         ctx.fields.push_back({"body", "amsiutils", true});
         auto results = engine.Evaluate("AmsiProvider", ctx);
-        if (!Expect(results.size() == 2,
-                    "block mode does not apply auditMaxEventsPerScan before a block rule"))
+        if (!Expect(results.size() == 1,
+                    "block mode stops after first block-group match before alert group"))
             return false;
-        if (!Expect(results[0].ruleId == "first_audit_continue" && !results[0].block &&
-                    results[1].ruleId == "second_block_stop" && results[1].block,
-                    "block mode continues past audit result and stops at block result"))
+        if (!Expect(results[0].ruleId == "second_block_stop" && results[0].block,
+                    "block mode evaluates block rules before earlier alert rules"))
             return false;
 
         AmsiEvalResult publicResult = engine.Evaluate(L"demo.ps1",
@@ -1135,6 +1134,32 @@ static bool RunEngineRuntimeTestGroup3()
         if (!Expect(publicResult.ruleMatched && publicResult.block &&
                     publicResult.ruleId == "second_block_stop",
                     "public AMSI result blocks when any later result is block"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const std::string json =
+            "{\"globalMode\":\"block\","
+            "\"scanOptimization\":{\"auditMaxEventsPerScan\":1,\"stopAfterFirstBlock\":true},"
+            "\"rules\":["
+            "{\"id\":\"alert_only_match\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"alert\","
+            "\"description\":\"scan_opt\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}},"
+            "{\"id\":\"block_no_match\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+            "\"description\":\"scan_opt\",\"config\":{\"regexPatterns\":[\"nevermatch\"]}}"
+            "]}";
+        if (!Expect(engine.ParseAndSwap(json, ""),
+                    "scanOptimization alert phase snapshot publishes"))
+            return false;
+
+        RaspLuaContext ctx;
+        ctx.fields.push_back({"body", "amsiutils", true});
+        auto results = engine.Evaluate("AmsiProvider", ctx);
+        if (!Expect(results.size() == 1 && results[0].ruleId == "alert_only_match",
+                    "block mode evaluates alert group when block group has no match"))
+            return false;
+        if (!Expect(!results[0].block,
+                    "alert group never returns block in block global mode"))
             return false;
     }
 

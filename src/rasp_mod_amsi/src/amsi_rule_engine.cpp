@@ -121,6 +121,21 @@ namespace {
         }
     }
 
+    bool IsAmsiPerfLogEnabled()
+    {
+        static int enabled = []() -> int {
+            char value[16] = {};
+            DWORD len = GetEnvironmentVariableA("RASP_AMSI_PERF_LOG", value, sizeof(value));
+            if (len == 0 || len >= sizeof(value))
+                return 0;
+
+            return (_stricmp(value, "1") == 0 ||
+                    _stricmp(value, "true") == 0 ||
+                    _stricmp(value, "yes") == 0) ? 1 : 0;
+        }();
+        return enabled != 0;
+    }
+
     bool ContentNameLooksLikeInfrastructure(std::string_view contentName)
     {
         if (contentName.empty())
@@ -625,12 +640,26 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
         configs.push_back(std::move(*derived));
     }
 
+    std::vector<size_t> blockRuleIndexes;
+    std::vector<size_t> alertRuleIndexes;
+    blockRuleIndexes.reserve(configs.size());
+    alertRuleIndexes.reserve(configs.size());
+    for (size_t i = 0; i < configs.size(); ++i) {
+        if (configs[i].IsBlock()) {
+            blockRuleIndexes.push_back(i);
+        } else {
+            alertRuleIndexes.push_back(i);
+        }
+    }
+
     auto luaEngine = std::make_shared<RaspLuaEngine>();
     luaEngine->SetLogFn(RaspLuaLog);
     luaEngine->SetLeveledLogFn(RaspLuaLogWithSeverity);
     PrecompileAll(configs, effectiveLib, *luaEngine);
     return std::make_shared<RuleSnapshot>(
             RuleSnapshot{std::move(configs),
+                         std::move(blockRuleIndexes),
+                         std::move(alertRuleIndexes),
                          std::move(trustProcessPaths),
                          std::move(luaEngine),
                           hasGlobalMode,
@@ -1147,12 +1176,25 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
 
 // 原子交换规则快照
 void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
+    std::vector<size_t> blockRuleIndexes;
+    std::vector<size_t> alertRuleIndexes;
+    blockRuleIndexes.reserve(rules.size());
+    alertRuleIndexes.reserve(rules.size());
+    for (size_t i = 0; i < rules.size(); ++i) {
+        if (rules[i].IsBlock()) {
+            blockRuleIndexes.push_back(i);
+        } else {
+            alertRuleIndexes.push_back(i);
+        }
+    }
     std::shared_ptr<const RuleSnapshot> next =
             std::make_shared<RuleSnapshot>(
-                    RuleSnapshot{std::move(rules),
-                                 {},
-                                 std::make_shared<RaspLuaEngine>(),
-                                 false,
+                     RuleSnapshot{std::move(rules),
+                                  std::move(blockRuleIndexes),
+                                  std::move(alertRuleIndexes),
+                                  {},
+                                  std::make_shared<RaspLuaEngine>(),
+                                  false,
                           RaspGlobalMode::Block,
                                  kDefaultMaxScanContentBytes,
                                  kDefaultTotalScanTimeoutMs,
@@ -1440,197 +1482,249 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
         }
     }
 
-    // 遍历每个规则
+    const bool perfLogEnabled = IsAmsiPerfLogEnabled();
+    const uint64_t ruleEvalStartMs = perfLogEnabled ? GetTickCount64() : 0;
+
+    struct RuleGroupStats {
+        uint32_t rulesVisited = 0;
+        uint32_t regexCalls = 0;
+        bool matched = false;
+        bool blockMatched = false;
+    };
+
     uint32_t emittedEvents = 0;
     const bool globalAuditMode = snap->hasGlobalMode && snap->globalMode == RaspGlobalMode::Audit;
-    for (size_t ruleIndex = 0; ruleIndex < snap->rules.size(); ++ruleIndex) {
-        const auto &rule = snap->rules[ruleIndex];
-        exec.SetRuleContext(static_cast<int>(ruleIndex));
-        exec.ClearCurrentRuleLimit();
-        if (!exec.TryEnterRule())
-            break;
+    RuleGroupStats blockStats;
+    RuleGroupStats alertStats;
 
-        if (!rule.enabled || rule.IsOff())
-            continue;
+    auto evaluateRuleGroup = [&](const std::vector<size_t>& ruleIndexes,
+                                 bool allowBlock,
+                                 RuleGroupStats& stats) -> bool {
+        const uint32_t regexCallsBeforeGroup = exec.regexCalls;
+        for (size_t ruleIndexValue : ruleIndexes) {
+            if (ruleIndexValue >= snap->rules.size())
+                continue;
 
-        // Parent path gate is rule-local: skip only this rule and keep
-        // evaluating later rules in the same scan.
-        if (!ParentPathGatePasses(rule, scanContext))
-            continue;
-
-        bool matched = false;
-        bool skipCurrentRule = false;
-        std::string desc;
-        std::string payload;
-
-        auto skipRuleForRegexLimit = [&]() {
-            ++exec.rulesSkippedByRegexLimit;
-            LogWithSeverity(RaspDiagSeverity::Debug,
-                            "Evaluate: ruleIndex=%d checkIndex=%d patternIndex=%d skipped because regex pattern limit hit type=%s",
-                            exec.currentRuleIndex,
-                            exec.currentRegexCheckIndex,
-                            exec.currentRegexPatternIndex,
-                            exec.currentRuleLimitType.empty() ? "unknown" : exec.currentRuleLimitType.c_str());
+            const auto &rule = snap->rules[ruleIndexValue];
+            exec.SetRuleContext(static_cast<int>(ruleIndexValue));
             exec.ClearCurrentRuleLimit();
-        };
+            if (!exec.TryEnterRule()) {
+                stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
+                return true;
+            }
+            ++stats.rulesVisited;
+
+            if (!rule.enabled || rule.IsOff())
+                continue;
+
+            // Parent path gate is rule-local: skip only this rule and keep
+            // evaluating later rules in the same scan.
+            if (!ParentPathGatePasses(rule, scanContext))
+                continue;
+
+            bool matched = false;
+            bool skipCurrentRule = false;
+            std::string desc;
+            std::string payload;
+
+            auto skipRuleForRegexLimit = [&]() {
+                ++exec.rulesSkippedByRegexLimit;
+                LogWithSeverity(RaspDiagSeverity::Debug,
+                                "Evaluate: ruleIndex=%d checkIndex=%d patternIndex=%d skipped because regex pattern limit hit type=%s",
+                                exec.currentRuleIndex,
+                                exec.currentRegexCheckIndex,
+                                exec.currentRegexPatternIndex,
+                                exec.currentRuleLimitType.empty() ? "unknown" : exec.currentRuleLimitType.c_str());
+                exec.ClearCurrentRuleLimit();
+            };
 
 #ifdef RASP_PCRE2_AVAILABLE
-        // 优先匹配正则表达式
-        if (!rule.regexChecks.empty()) {
-            // ── Multi-check gate (regexChecks) ─────────────────────────────
-            // Evaluate each named check; collect IDs of checks that matched.
-            std::vector<std::string> matchedIds;
-            for (size_t checkIndex = 0; checkIndex < rule.regexChecks.size(); ++checkIndex) {
-                const auto &chk = rule.regexChecks[checkIndex];
-                exec.SetRegexCheckContext(static_cast<int>(checkIndex));
-                const std::string *fp = nullptr;
-                const std::string &want = chk.field.empty() ? std::string("body") : chk.field;
-                for (const auto &f : evalCtx.fields)
-                    if (f.name == want) {
-                        fp = &f.value;
+            // 优先匹配正则表达式
+            if (!rule.regexChecks.empty()) {
+                // ── Multi-check gate (regexChecks) ─────────────────────────────
+                // Evaluate each named check; collect IDs of checks that matched.
+                std::vector<std::string> matchedIds;
+                for (size_t checkIndex = 0; checkIndex < rule.regexChecks.size(); ++checkIndex) {
+                    const auto &chk = rule.regexChecks[checkIndex];
+                    exec.SetRegexCheckContext(static_cast<int>(checkIndex));
+                    const std::string *fp = nullptr;
+                    const std::string &want = chk.field.empty() ? std::string("body") : chk.field;
+                    for (const auto &f : evalCtx.fields)
+                        if (f.name == want) {
+                            fp = &f.value;
+                            break;
+                        }
+                    std::string mp;
+                    if (fp && !fp->empty() &&
+                        luaEngine.MatchesAnyRegex(chk.patterns, *fp, mp, &exec))
+                        matchedIds.push_back(chk.id);
+                    if (exec.currentRuleLimited) {
+                        skipCurrentRule = true;
                         break;
                     }
-                std::string mp;
-                if (fp && !fp->empty() &&
-                    luaEngine.MatchesAnyRegex(chk.patterns, *fp, mp, &exec))
-                    matchedIds.push_back(chk.id);
+                    if (exec.ShouldStopScan())
+                        break;
+                }
                 if (exec.currentRuleLimited) {
                     skipCurrentRule = true;
-                    break;
                 }
-                if (exec.ShouldStopScan())
-                    break;
+                if (skipCurrentRule) {
+                    skipRuleForRegexLimit();
+                    continue;
+                }
+                if (exec.ShouldStopScan()) {
+                    stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
+                    return true;
+                }
+                bool gatePassed = (rule.regexCondition == RegexCondition::All)
+                    ? matchedIds.size() == rule.regexChecks.size()
+                    : !matchedIds.empty();
+                if (!gatePassed)
+                    continue; // gate not satisfied — skip rule
+
+                if (luaEngine.IsLoaded(rule.id))
+                {
+                    // Gate passed → run Lua with matched IDs injected into context
+                    RaspLuaResult lr = luaEngine.Run(rule.id, sensor, evalCtx, rule.scriptTimeoutInstructions, matchedIds, &exec);
+                    if (lr.timedOut || exec.ShouldStopScan()) {
+                        stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
+                        return true;
+                    }
+                    if (lr.matched) {
+                        matched = true;
+                        desc    = lr.desc.empty() ? rule.description : lr.desc;
+                        payload = lr.payload;
+                    }
+                }
+                else
+                {
+                    // Gate passed, no script — fire directly; join matched IDs as payload
+                    matched = true;
+                    desc    = rule.description;
+                    for (size_t i = 0; i < matchedIds.size(); i++)
+                    {
+                        if (i > 0) payload += ';';
+                        payload += matchedIds[i];
+                    }
+                }
             }
+            else if (!rule.regexPatterns.empty())
+            {
+                // ── Legacy single-field regex check (no Lua required) ──────────
+                const std::string *fieldPtr = nullptr;
+                const std::string &wantField = rule.regexField.empty()
+                                                   ? std::string("body")
+                                                   : rule.regexField;
+                for (const auto &f : evalCtx.fields)
+                    if (f.name == wantField) { fieldPtr = &f.value; break; }
+                if (fieldPtr && !fieldPtr->empty())
+                {
+                    exec.SetRegexCheckContext(-1);
+                    std::string matchedPat;
+                    if (luaEngine.MatchesAnyRegex(rule.regexPatterns, *fieldPtr, matchedPat, &exec))
+                    {
+                        matched = true;
+                        desc    = rule.description;
+                        payload = matchedPat;
+                    }
+                    if (exec.currentRuleLimited) {
+                        skipCurrentRule = true;
+                    }
+                    if (exec.ShouldStopScan()) {
+                        stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
+                        return true;
+                    }
+                }
+            }
+#endif // RASP_PCRE2_AVAILABLE
+
             if (skipCurrentRule) {
                 skipRuleForRegexLimit();
                 continue;
             }
-            if (exec.ShouldStopScan())
-                break;
-            bool gatePassed = (rule.regexCondition == RegexCondition::All)
-                ? matchedIds.size() == rule.regexChecks.size()
-                : !matchedIds.empty();
-            if (!gatePassed)
-                continue; // gate not satisfied — skip rule
 
-            if (luaEngine.IsLoaded(rule.id))
-            {
-                // Gate passed → run Lua with matched IDs injected into context
-                RaspLuaResult lr = luaEngine.Run(rule.id, sensor, evalCtx, rule.scriptTimeoutInstructions, matchedIds, &exec);
-                if (lr.timedOut || exec.ShouldStopScan())
-                    break;
+            // ── lua脚本check, PrecompileAll在这里预编译, 可以不走此部分 ─
+            if (!matched && rule.regexChecks.empty() && luaEngine.IsLoaded(rule.id)) {
+                RaspLuaResult lr = luaEngine.Run(rule.id, sensor, evalCtx,
+                                                 rule.scriptTimeoutInstructions,
+                                                 {},
+                                                 &exec);
+                if (lr.timedOut || exec.ShouldStopScan()) {
+                    stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
+                    return true;
+                }
                 if (lr.matched) {
                     matched = true;
-                    desc    = lr.desc.empty() ? rule.description : lr.desc;
+                    desc = lr.desc.empty() ? rule.description : lr.desc;
                     payload = lr.payload;
                 }
+            } else if (!matched && rule.regexChecks.empty() &&
+                       !luaEngine.IsLoaded(rule.id) && rule.regexPatterns.empty()) {
+                LogWithSeverity(RaspDiagSeverity::Warning, "Evaluate: rule=%s has no regexChecks, no Lua, and no regexPatterns — skipping",
+                                rule.id.c_str());
+                continue;
             }
-            else
-            {
-                // Gate passed, no script — fire directly; join matched IDs as payload
-                matched = true;
-                desc    = rule.description;
-                for (size_t i = 0; i < matchedIds.size(); i++)
-                {
-                    if (i > 0) payload += ';';
-                    payload += matchedIds[i];
-                }
-            }
-        }
-        else if (!rule.regexPatterns.empty())
-        {
-            // ── Legacy single-field regex check (no Lua required) ──────────
-            const std::string *fieldPtr = nullptr;
-            const std::string &wantField = rule.regexField.empty()
-                                               ? std::string("body")
-                                               : rule.regexField;
-            for (const auto &f : evalCtx.fields)
-                if (f.name == wantField) { fieldPtr = &f.value; break; }
-            if (fieldPtr && !fieldPtr->empty())
-            {
-                exec.SetRegexCheckContext(-1);
-                std::string matchedPat;
-                if (luaEngine.MatchesAnyRegex(rule.regexPatterns, *fieldPtr, matchedPat, &exec))
-                {
-                    matched = true;
-                    desc    = rule.description;
-                    payload = matchedPat;
-                }
-                if (exec.currentRuleLimited) {
-                    skipCurrentRule = true;
-                }
-                if (exec.ShouldStopScan())
-                    break;
-            }
-        }
-#endif // RASP_PCRE2_AVAILABLE
+            // 正则和lua均匹配不到、放行
+            if (!matched)
+                continue;
 
-        if (skipCurrentRule) {
-            skipRuleForRegexLimit();
-            continue;
-        }
-
-        // ── lua脚本check, PrecompileAll在这里预编译, 可以不走此部分 ─
-        if (!matched && rule.regexChecks.empty() && luaEngine.IsLoaded(rule.id)) {
-            RaspLuaResult lr = luaEngine.Run(rule.id, sensor, evalCtx,
-                                             rule.scriptTimeoutInstructions,
-                                             {},
-                                             &exec);
-            if (lr.timedOut || exec.ShouldStopScan())
-                break;
-            if (lr.matched) {
-                matched = true;
-                desc = lr.desc.empty() ? rule.description : lr.desc;
-                payload = lr.payload;
+            RaspEvalResult r;
+            r.matched = true;
+            r.block = allowBlock && ShouldBlockRule(*snap, rule);
+            r.ruleId = rule.id;
+            r.sensor = sensor;
+            r.desc = desc;
+            r.payload = payload;
+            r.severity = rule.severity;
+            // url/method carry contentName/appName so SendDetectionEvent JSONL is complete
+            r.contentName = contentName;
+            r.appName = appName;
+            r.processPid = processPid;
+            r.processName = processName;
+            r.processPath = processPath;
+            r.scriptContent = scriptContent;
+            // Batch 3: parent process fields
+            r.parentPid = parentPid;
+            r.parentProcessName = parentProcessName;
+            r.parentProcessPath = parentProcessPath;
+            if (rule.confidence) {
+                r.confidence = rule.confidence;
+            } else {
+                r.confidence = DEFAULT_CONFIDENCE;
             }
-        } else if (!matched && rule.regexChecks.empty() &&
-                   !luaEngine.IsLoaded(rule.id) && rule.regexPatterns.empty()) {
-            LogWithSeverity(RaspDiagSeverity::Warning, "Evaluate: rule=%s has no regexChecks, no Lua, and no regexPatterns — skipping",
-                            rule.id.c_str());
-            continue;
+            TrySubmitDetectionEvent(r);
+            exec.matchedBeforeTimeout = true;
+            const bool shouldBlock = r.block;
+            stats.matched = true;
+            if (shouldBlock)
+                stats.blockMatched = true;
+            results.push_back(std::move(r));
+            ++emittedEvents;
+            if (shouldBlock && snap->stopAfterFirstBlock) {
+                stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
+                return true;
+            }
+            if (globalAuditMode && snap->auditMaxEventsPerScan > 0 &&
+                emittedEvents >= snap->auditMaxEventsPerScan) {
+                LogWithSeverity(RaspDiagSeverity::Debug,
+                                "scanOptimization: auditMaxEventsPerScan reached, stop evaluating remaining rules");
+                stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
+                return true;
+            }
         }
-        // 正则和lua均匹配不到、放行
-        if (!matched)
-            continue;
+        stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
+        return false;
+    };
 
-        RaspEvalResult r;
-        r.matched = true;
-        r.block = ShouldBlockRule(*snap, rule);
-        r.ruleId = rule.id;
-        r.sensor = sensor;
-        r.desc = desc;
-        r.payload = payload;
-        r.severity = rule.severity;
-        // url/method carry contentName/appName so SendDetectionEvent JSONL is complete
-        r.contentName = contentName;
-        r.appName = appName;
-        r.processPid = processPid;
-        r.processName = processName;
-        r.processPath = processPath;
-        r.scriptContent = scriptContent;
-        // Batch 3: parent process fields
-        r.parentPid = parentPid;
-        r.parentProcessName = parentProcessName;
-        r.parentProcessPath = parentProcessPath;
-        if (rule.confidence) {
-            r.confidence = rule.confidence;
-        } else {
-            r.confidence = DEFAULT_CONFIDENCE;
-        }
-        TrySubmitDetectionEvent(r);
-        exec.matchedBeforeTimeout = true;
-        const bool shouldBlock = r.block;
-        results.push_back(std::move(r));
-        ++emittedEvents;
-        if (shouldBlock && snap->stopAfterFirstBlock) {
-            break;
-        }
-        if (globalAuditMode && snap->auditMaxEventsPerScan > 0 &&
-            emittedEvents >= snap->auditMaxEventsPerScan) {
-            LogWithSeverity(RaspDiagSeverity::Debug,
-                            "scanOptimization: auditMaxEventsPerScan reached, stop evaluating remaining rules");
-            break;
-        }
+    bool stopEvaluation = false;
+    if (globalAuditMode) {
+        stopEvaluation = evaluateRuleGroup(snap->blockRuleIndexes, false, blockStats);
+        if (!stopEvaluation)
+            stopEvaluation = evaluateRuleGroup(snap->alertRuleIndexes, false, alertStats);
+    } else {
+        stopEvaluation = evaluateRuleGroup(snap->blockRuleIndexes, true, blockStats);
+        if (!stopEvaluation)
+            stopEvaluation = evaluateRuleGroup(snap->alertRuleIndexes, false, alertStats);
     }
 
     if (exec.timedOut)
@@ -1639,6 +1733,36 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     ScanContextFinalizeResult contextResult;
     contextResult.matched = !results.empty();
     contextResult.globalTimeout = exec.timedOut;
+    if (perfLogEnabled) {
+        bool hasBlock = false;
+        for (const auto& item : results) {
+            if (item.block) {
+                hasBlock = true;
+                break;
+            }
+        }
+        const uint64_t costMs = GetTickCount64() - ruleEvalStartMs;
+        const uint32_t rulesVisited = blockStats.rulesVisited + alertStats.rulesVisited;
+        LogWithSeverity(RaspDiagSeverity::Debug,
+                        "[RaspAmsi][perf] rule_eval costMs=%llu rulesVisited=%lu rulesTotal=%zu regexCalls=%u matched=%d block=%d timedOut=%d currentLen=%zu evalLen=%zu appendAllowed=%d appendSkipReason=%s blockRulesVisited=%lu alertRulesVisited=%lu blockRegexCalls=%lu alertRegexCalls=%lu blockMatched=%d alertMatched=%d",
+                        static_cast<unsigned long long>(costMs),
+                        static_cast<unsigned long>(rulesVisited),
+                        snap->rules.size(),
+                        exec.regexCalls,
+                        results.empty() ? 0 : 1,
+                        hasBlock ? 1 : 0,
+                        exec.timedOut ? 1 : 0,
+                        contextInfo.currentLen,
+                        contextInfo.evalLen,
+                        contextInfo.appendAllowed ? 1 : 0,
+                        ScanContextAppendSkipReasonToString(contextInfo.appendSkipReason),
+                        static_cast<unsigned long>(blockStats.rulesVisited),
+                        static_cast<unsigned long>(alertStats.rulesVisited),
+                        static_cast<unsigned long>(blockStats.regexCalls),
+                        static_cast<unsigned long>(alertStats.regexCalls),
+                        blockStats.matched ? 1 : 0,
+                        alertStats.matched ? 1 : 0);
+    }
     FinalizeScanContext(*snap, currentBody, scanNowMs, contextResult, contextInfo);
     return results;
 }
