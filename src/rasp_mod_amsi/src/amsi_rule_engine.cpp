@@ -197,23 +197,15 @@ namespace {
     constexpr size_t kScanContentDebugDumpMaxBytes = 8 * 1024;
     constexpr LONGLONG kScanContentDebugDumpMaxFileBytes = 64LL * 1024LL * 1024LL;
 
-    std::wstring GetScanContentDebugDumpPath()
+    bool TryGetScanContentDebugDumpPath(std::wstring& path)
     {
         wchar_t overridePath[MAX_PATH] = {};
         DWORD overrideLen = GetEnvironmentVariableW(L"RASP_AMSI_SCAN_DUMP_PATH", overridePath, MAX_PATH);
-        if (overrideLen > 0 && overrideLen < MAX_PATH)
-            return std::wstring(overridePath, overrideLen);
+        if (overrideLen == 0 || overrideLen >= MAX_PATH)
+            return false;
 
-        wchar_t tempPath[MAX_PATH] = {};
-        DWORD tempLen = GetTempPathW(MAX_PATH, tempPath);
-        std::wstring path;
-        if (tempLen > 0 && tempLen < MAX_PATH) {
-            path.assign(tempPath, tempLen);
-        } else {
-            path = L"C:\\Windows\\Temp\\";
-        }
-        path += L"rasp_amsi_scan_content_debug.txt";
-        return path;
+        path.assign(overridePath, overrideLen);
+        return true;
     }
 
     std::string EscapeForScanContentDump(const std::string& value, size_t maxBytes)
@@ -262,6 +254,10 @@ namespace {
                                    const std::string& currentBody,
                                    const std::string& evalBody)
     {
+        std::wstring path;
+        if (!TryGetScanContentDebugDumpPath(path))
+            return;
+
         std::string out;
         out.reserve((std::min)(currentBody.size(), kScanContentDebugDumpMaxBytes) +
                     (std::min)(evalBody.size(), kScanContentDebugDumpMaxBytes) + 1024);
@@ -295,7 +291,6 @@ namespace {
         out += EscapeForScanContentDump(evalBody, kScanContentDebugDumpMaxBytes);
         out += "\r\n================ END RASP AMSI SCAN CONTENT DUMP ================\r\n";
 
-        const std::wstring path = GetScanContentDebugDumpPath();
         HANDLE file = CreateFileW(path.c_str(),
                                   FILE_APPEND_DATA,
                                   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -1350,6 +1345,37 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     RaspLuaContext evalCtx = ctx;
     ScanContextBuildInfo contextInfo;
     if (!currentBody.empty()) {
+        ScanContextAppendDecision infrastructureDecision;
+        if (ContentNameLooksLikeInfrastructure(contentName)) {
+            infrastructureDecision.reason = ScanContextAppendSkipReason::ContentNameInfrastructure;
+        } else if (BodyPrefixLooksLikeInfrastructure(currentBody, snap->scanContext.prefixFilterBytes)) {
+            infrastructureDecision.reason = ScanContextAppendSkipReason::BodyPrefixInfrastructure;
+        }
+        if (infrastructureDecision.reason == ScanContextAppendSkipReason::ContentNameInfrastructure ||
+            infrastructureDecision.reason == ScanContextAppendSkipReason::BodyPrefixInfrastructure) {
+            contextInfo.enabled = snap->scanContext.enabled;
+            contextInfo.appendAllowed = false;
+            contextInfo.appendSkipReason = infrastructureDecision.reason;
+            contextInfo.currentLen = currentBody.size();
+            contextInfo.bufferedLen = 0;
+            contextInfo.evalLen = currentBody.size();
+            contextInfo.snapshotHash = snap->effectiveHash;
+            WriteScanContentDebugDump(scanContext ? scanContext->process : nullptr,
+                                      contentName,
+                                      appName,
+                                      contextInfo.enabled,
+                                      contextInfo.expired,
+                                      contextInfo.appendAllowed,
+                                      contextInfo.appendSkipReason,
+                                      contextInfo.currentLen,
+                                      contextInfo.bufferedLen,
+                                      contextInfo.evalLen,
+                                      contextInfo.snapshotHash,
+                                      currentBody,
+                                      currentBody);
+            return results;
+        }
+
         const ScanContextAppendDecision appendDecision =
             ShouldAppendToScanContext(contentName, currentBody, snap->scanContext);
         const std::string evalBody =

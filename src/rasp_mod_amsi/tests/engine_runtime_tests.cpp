@@ -802,6 +802,54 @@ static bool RunEngineRuntimeTestGroup2()
 
     {
         TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("infra_content_name_bypass", "amsi"), ""),
+                    "infrastructure contentName bypass rule snapshot publishes"))
+            return false;
+
+        AmsiEvalResult skipped = engine.Evaluate(L"PSReadLine.psm1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!skipped.ruleMatched,
+                    "infrastructure contentName bypasses rule evaluation"))
+            return false;
+
+        AmsiEvalResult normal = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
+        if (!Expect(normal.ruleMatched && normal.ruleId == "infra_content_name_bypass",
+                    ".ps1 contentName still evaluates rules"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(OneRegexRuleJson("infra_body_prefix_bypass", "FullyQualifiedErrorId"), ""),
+                    "infrastructure body prefix bypass rule snapshot publishes"))
+            return false;
+
+        const char* errorFormatter = "FullyQualifiedErrorId : CommandNotFoundException";
+        AmsiEvalResult skipped = engine.Evaluate(L"", L"powershell.exe", errorFormatter, std::strlen(errorFormatter));
+        if (!Expect(!skipped.ruleMatched,
+                    "infrastructure body prefix bypasses rule evaluation"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(true, 8192, 3000, 16384, true, "amsi", 8),
+                        ""),
+                    "too-large current body still evaluates snapshot publishes"))
+            return false;
+
+        std::string padded = std::string(300, 'A') + " amsi";
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1",
+                                                 L"powershell.exe",
+                                                 padded.c_str(),
+                                                 padded.size());
+        if (!Expect(matched.ruleMatched && matched.ruleId == "scan_context_rule",
+                    "too-large current body is still evaluated as a single scan"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
         if (!Expect(engine.ParseAndSwap(
                         ScanContextRegexRuleJson(true, 8192, 3000, 16384, true, "(?s)amsi.*utils"),
                         ""),
