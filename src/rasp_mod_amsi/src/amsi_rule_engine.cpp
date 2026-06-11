@@ -1312,11 +1312,35 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     // Extract context fields for result population
     std::string contentName;
     std::string appName;
+    std::string amsiSampleLen;
+    std::string normalizerRawLen;
+    std::string normalizerNormalizedLen;
+    std::string normalizerMaxScanContentBytes;
+    std::string normalizerTruncated;
+    std::string normalizerUtf16;
+    std::string normalizerBase64;
+    std::string normalizerNulls;
     for (const auto &f: ctx.fields) {
         if (f.name == "contentName")
             contentName = f.value;
         else if (f.name == "appName")
             appName = f.value;
+        else if (f.name == "__amsiSampleLen")
+            amsiSampleLen = f.value;
+        else if (f.name == "__normalizerRawLen")
+            normalizerRawLen = f.value;
+        else if (f.name == "__normalizerNormalizedLen")
+            normalizerNormalizedLen = f.value;
+        else if (f.name == "__normalizerMaxScanContentBytes")
+            normalizerMaxScanContentBytes = f.value;
+        else if (f.name == "__normalizerTruncated")
+            normalizerTruncated = f.value;
+        else if (f.name == "__normalizerUtf16")
+            normalizerUtf16 = f.value;
+        else if (f.name == "__normalizerBase64")
+            normalizerBase64 = f.value;
+        else if (f.name == "__normalizerNulls")
+            normalizerNulls = f.value;
     }
 
     std::string matchedTrustProcess;
@@ -1375,6 +1399,20 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
                                       currentBody);
             return results;
         }
+
+        LogWithSeverity(RaspDiagSeverity::Debug,
+                        "[AMSI:Scan] sampleLen=%s evalLen=%zu",
+                        amsiSampleLen.empty() ? "0" : amsiSampleLen.c_str(),
+                        currentBody.size());
+        LogWithSeverity(RaspDiagSeverity::Debug,
+                        "normalizer rawLen=%s normalizedLen=%s maxScanContentBytes=%s truncated=%s utf16=%s b64=%s nulls=%s",
+                        normalizerRawLen.empty() ? "0" : normalizerRawLen.c_str(),
+                        normalizerNormalizedLen.empty() ? "0" : normalizerNormalizedLen.c_str(),
+                        normalizerMaxScanContentBytes.empty() ? "0" : normalizerMaxScanContentBytes.c_str(),
+                        normalizerTruncated.empty() ? "0" : normalizerTruncated.c_str(),
+                        normalizerUtf16.empty() ? "0" : normalizerUtf16.c_str(),
+                        normalizerBase64.empty() ? "0" : normalizerBase64.c_str(),
+                        normalizerNulls.empty() ? "0" : normalizerNulls.c_str());
 
         const ScanContextAppendDecision appendDecision =
             ShouldAppendToScanContext(contentName, currentBody, snap->scanContext);
@@ -1660,18 +1698,17 @@ AmsiEvalResult AmsiRuleEngine::Evaluate(
         sample,
         sampleLen,
         maxScanContentBytes);
+    ctx.fields.push_back({"__amsiSampleLen", std::to_string(sampleLen)});
+    ctx.fields.push_back({"__normalizerRawLen", std::to_string(normalized.rawLen)});
+    ctx.fields.push_back({"__normalizerNormalizedLen", std::to_string(normalized.normalizedLen)});
+    ctx.fields.push_back({"__normalizerMaxScanContentBytes", std::to_string(maxScanContentBytes)});
+    ctx.fields.push_back({"__normalizerTruncated", normalized.truncated ? "1" : "0"});
+    ctx.fields.push_back({"__normalizerUtf16", normalized.decodedUtf16Le ? "1" : "0"});
+    ctx.fields.push_back({"__normalizerBase64", normalized.decodedBase64 ? "1" : "0"});
+    ctx.fields.push_back({"__normalizerNulls", normalized.hadNullBytes ? "1" : "0"});
     if (!normalized.normalized.empty()) {
         ctx.fields.push_back({"body", normalized.normalized, true});
         ctx.fields.push_back({"script_content", TruncateForEventField(normalized.normalized, kMaxScriptContentEventBytes)});
-        LogWithSeverity(RaspDiagSeverity::Debug,
-                        "normalizer rawLen=%zu normalizedLen=%zu maxScanContentBytes=%zu truncated=%d utf16=%d b64=%d nulls=%d",
-                        normalized.rawLen,
-                        normalized.normalizedLen,
-                        maxScanContentBytes,
-                        normalized.truncated ? 1 : 0,
-                        normalized.decodedUtf16Le ? 1 : 0,
-                        normalized.decodedBase64 ? 1 : 0,
-                        normalized.hadNullBytes ? 1 : 0);
     }
 
     auto results = Evaluate("AmsiProvider", ctx);  // 调用真正的 Evaluate 函数

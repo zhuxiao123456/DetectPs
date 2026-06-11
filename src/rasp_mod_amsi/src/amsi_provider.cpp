@@ -139,12 +139,6 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
         }
     }
 
-    {
-        runtime.LogWithSeverity(RaspDiagSeverity::Debug,
-                                "[AMSI:Scan] contentSize=%llu sampleRead=%lu evalLen=%lu",
-                                contentSize, sampleRead, evalLen);
-    }
-
     const ProcessContextSnapshot& process = GetProcessContextProvider().GetSnapshot();
     ScanContext scanContext;
     scanContext.process = &process;
