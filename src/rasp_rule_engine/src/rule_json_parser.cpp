@@ -86,6 +86,23 @@ uint32_t ClampScanContextMaxEvalBytes(int value)
         return kMaxScanContextMaxEvalBytes;
     return static_cast<uint32_t>(value);
 }
+uint32_t ClampScanContextMaxAppendBytes(int value)
+{
+    if (value < static_cast<int>(kMinScanContextMaxAppendBytes))
+        return kMinScanContextMaxAppendBytes;
+    if (value > static_cast<int>(kMaxScanContextMaxAppendBytes))
+        return kMaxScanContextMaxAppendBytes;
+    return static_cast<uint32_t>(value);
+}
+
+uint32_t ClampScanContextPrefixFilterBytes(int value)
+{
+    if (value < static_cast<int>(kMinScanContextPrefixFilterBytes))
+        return kMinScanContextPrefixFilterBytes;
+    if (value > static_cast<int>(kMaxScanContextPrefixFilterBytes))
+        return kMaxScanContextPrefixFilterBytes;
+    return static_cast<uint32_t>(value);
+}
 
 int NormalizeRuleSeverity(int value)
 {
@@ -185,6 +202,18 @@ void ParseScanContext(RuleJsonParser::Parser& p, RuleParseResult& result)
             bool value = true;
             if (p.read_bool(value))
                 result.scanContext.clearOnMatch = value;
+            else
+                p.skip_value();
+        } else if (key == "maxAppendBytes") {
+            int value = 0;
+            if (p.read_int(value))
+                result.scanContext.maxAppendBytes = ClampScanContextMaxAppendBytes(value);
+            else
+                p.skip_value();
+        } else if (key == "prefixFilterBytes") {
+            int value = 0;
+            if (p.read_int(value))
+                result.scanContext.prefixFilterBytes = ClampScanContextPrefixFilterBytes(value);
             else
                 p.skip_value();
         } else {

@@ -19,6 +19,22 @@
 
 struct ScanContext;
 
+enum class ScanContextAppendSkipReason {
+    None,
+    ContentNameInfrastructure,
+    BodyPrefixInfrastructure,
+    TooLarge,
+    EmptyBody,
+    Disabled,
+    RateLimited,
+    GlobalTimeout,
+    Exception
+};
+
+struct ScanContextAppendDecision {
+    bool allowed = false;
+    ScanContextAppendSkipReason reason = ScanContextAppendSkipReason::Disabled;
+};
 struct AmsiRaspRuleConfig : public RaspRuleBase {
     std::vector<std::string> parentPathAllowContains;
     std::vector<std::string> parentPathBlockContains;
@@ -99,6 +115,8 @@ protected:
 
     struct ScanContextBuildInfo {
         bool enabled = false;
+        bool appendAllowed = false;
+        ScanContextAppendSkipReason appendSkipReason = ScanContextAppendSkipReason::Disabled;
         size_t currentLen = 0;
         size_t bufferedLen = 0;
         size_t evalLen = 0;
@@ -121,16 +139,22 @@ protected:
     ScanRateLimitDecision ShouldBypassByScanRateLimit(
         const ScanRateLimitConfig& config,
         uint64_t nowMs);
+    ScanContextAppendDecision ShouldAppendToScanContext(
+        const std::string& contentName,
+        const std::string& currentContent,
+        const ScanContextConfig& config) const;
     std::string BuildScanEvaluationContent(
         const RuleSnapshot& snapshot,
         const std::string& currentContent,
+        const ScanContextAppendDecision& appendDecision,
         uint64_t nowMs,
         ScanContextBuildInfo& info);
     void FinalizeScanContext(
         const RuleSnapshot& snapshot,
         const std::string& currentContent,
         uint64_t nowMs,
-        const ScanContextFinalizeResult& result);
+        const ScanContextFinalizeResult& result,
+        const ScanContextBuildInfo& buildInfo);
     void ClearScanContext(const char* reason);
 
 private:

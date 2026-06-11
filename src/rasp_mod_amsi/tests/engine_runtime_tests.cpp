@@ -265,7 +265,9 @@ std::string ScanContextRegexRuleJson(bool enabled,
                                      uint32_t ttlMs,
                                      uint32_t maxEvalBytes,
                                      bool clearOnMatch,
-                                     const char* pattern)
+                                     const char* pattern,
+                                     uint32_t maxAppendBytes = 256,
+                                     uint32_t prefixFilterBytes = 128)
 {
     return std::string("{\"scanContext\":{\"enabled\":") +
            (enabled ? "true" : "false") +
@@ -273,6 +275,8 @@ std::string ScanContextRegexRuleJson(bool enabled,
            ",\"ttlMs\":" + std::to_string(ttlMs) +
            ",\"maxEvalBytes\":" + std::to_string(maxEvalBytes) +
            ",\"clearOnMatch\":" + (clearOnMatch ? "true" : "false") +
+           ",\"maxAppendBytes\":" + std::to_string(maxAppendBytes) +
+           ",\"prefixFilterBytes\":" + std::to_string(prefixFilterBytes) +
            "},\"rules\":[{\"id\":\"scan_context_rule\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"scan_context\",\"config\":{\"regexPatterns\":[\"" +
            pattern + "\"]}}]}";
 }
@@ -775,6 +779,98 @@ static bool RunEngineRuntimeTestGroup2()
         AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "utils", 5);
         if (!Expect(!second.ruleMatched,
                     "scanRateLimit bypass returns NoMatch before scanContext evaluation"))
+            return false;
+    }
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(true, 8192, 3000, 16384, true, "(?s)amsi.*utils"),
+                        ""),
+                    "infrastructure contentName scanContext snapshot publishes"))
+            return false;
+
+        AmsiEvalResult first = engine.Evaluate(L"PSReadLine.psm1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!first.ruleMatched,
+                    "infrastructure contentName first chunk is still scanned alone"))
+            return false;
+
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "utils", 5);
+        if (!Expect(!second.ruleMatched,
+                    "infrastructure contentName chunk does not append to scanContext"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(true, 8192, 3000, 16384, true, "(?s)amsi.*utils"),
+                        ""),
+                    "ps1 scanContext snapshot publishes"))
+            return false;
+
+        AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!first.ruleMatched,
+                    ".ps1 first chunk alone does not match"))
+            return false;
+
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "utils", 5);
+        if (!Expect(second.ruleMatched && second.ruleId == "scan_context_rule",
+                    ".ps1 contentName is allowed to append to scanContext"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(true, 8192, 3000, 16384, true, "malicious", 8, 128),
+                        ""),
+                    "too-large single-scan snapshot publishes"))
+            return false;
+
+        const std::string body = "0123456789 malicious";
+        AmsiEvalResult matched = engine.Evaluate(L"demo.ps1", L"powershell.exe", body.data(), static_cast<ULONG>(body.size()));
+        if (!Expect(matched.ruleMatched && matched.ruleId == "scan_context_rule",
+                    "too-large current body is still evaluated as a single scan"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(true, 8192, 3000, 16384, true, "(?s)amsi.*utils", 8, 128),
+                        ""),
+                    "too-large no-history snapshot publishes"))
+            return false;
+
+        AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!first.ruleMatched,
+                    "too-large no-history first chunk appends"))
+            return false;
+
+        const std::string body = "0123456789 utils";
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", body.data(), static_cast<ULONG>(body.size()));
+        if (!Expect(!second.ruleMatched,
+                    "too-large current body does not read historical scanContext"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(true, 8192, 3000, 16384, true, "(?s)amsi.*utils", 256, 128),
+                        ""),
+                    "body-prefix infrastructure snapshot publishes"))
+            return false;
+
+        AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!first.ruleMatched,
+                    "body-prefix first chunk appends"))
+            return false;
+
+        const char* body = "function prompt { utils }";
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", body, static_cast<ULONG>(std::strlen(body)));
+        if (!Expect(!second.ruleMatched,
+                    "body-prefix infrastructure input does not read historical scanContext"))
             return false;
     }
 

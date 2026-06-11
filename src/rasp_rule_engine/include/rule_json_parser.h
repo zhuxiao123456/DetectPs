@@ -34,6 +34,12 @@ constexpr uint32_t kMaxScanContextTtlMs = 60000;
 constexpr uint32_t kDefaultScanContextMaxEvalBytes = 16384;
 constexpr uint32_t kMinScanContextMaxEvalBytes = 1024;
 constexpr uint32_t kMaxScanContextMaxEvalBytes = 131072;
+constexpr uint32_t kDefaultScanContextMaxAppendBytes = 256;
+constexpr uint32_t kMinScanContextMaxAppendBytes = 0;
+constexpr uint32_t kMaxScanContextMaxAppendBytes = 65536;
+constexpr uint32_t kDefaultScanContextPrefixFilterBytes = 128;
+constexpr uint32_t kMinScanContextPrefixFilterBytes = 0;
+constexpr uint32_t kMaxScanContextPrefixFilterBytes = 4096;
 
 struct ScanRateLimitConfig {
     bool enabled = false;
@@ -48,6 +54,8 @@ struct ScanContextConfig {
     uint32_t ttlMs = kDefaultScanContextTtlMs;
     uint32_t maxEvalBytes = kDefaultScanContextMaxEvalBytes;
     bool clearOnMatch = true;
+    uint32_t maxAppendBytes = kDefaultScanContextMaxAppendBytes;
+    uint32_t prefixFilterBytes = kDefaultScanContextPrefixFilterBytes;
 };
 
 struct RuleParseResult {

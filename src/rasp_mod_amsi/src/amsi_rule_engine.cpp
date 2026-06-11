@@ -95,6 +95,90 @@ namespace {
         return false;
     }
 
+    const char* ScanContextAppendSkipReasonToString(ScanContextAppendSkipReason reason)
+    {
+        switch (reason) {
+            case ScanContextAppendSkipReason::None:
+                return "none";
+            case ScanContextAppendSkipReason::ContentNameInfrastructure:
+                return "content_name_infrastructure";
+            case ScanContextAppendSkipReason::BodyPrefixInfrastructure:
+                return "body_prefix_infrastructure";
+            case ScanContextAppendSkipReason::TooLarge:
+                return "too_large";
+            case ScanContextAppendSkipReason::EmptyBody:
+                return "empty_body";
+            case ScanContextAppendSkipReason::Disabled:
+                return "disabled";
+            case ScanContextAppendSkipReason::RateLimited:
+                return "rate_limited";
+            case ScanContextAppendSkipReason::GlobalTimeout:
+                return "global_timeout";
+            case ScanContextAppendSkipReason::Exception:
+                return "exception";
+            default:
+                return "unknown";
+        }
+    }
+
+    bool ContentNameLooksLikeInfrastructure(std::string_view contentName)
+    {
+        if (contentName.empty())
+            return false;
+        static constexpr const char* kInfrastructureNames[] = {
+            ".psm1",
+            ".psd1",
+            ".ps1xml",
+            "psreadline",
+            "microsoft.powershell.utility"
+        };
+        for (const char* pattern : kInfrastructureNames) {
+            if (ContainsIgnoreCase(contentName, pattern))
+                return true;
+        }
+        return false;
+    }
+
+    bool BodyPrefixLooksLikeInfrastructure(std::string_view body, uint32_t prefixFilterBytes)
+    {
+        if (body.empty() || prefixFilterBytes == 0)
+            return false;
+        const size_t limit = (std::min)(body.size(), static_cast<size_t>(prefixFilterBytes));
+        const std::string_view prefix(body.data(), limit);
+        static constexpr const char* kInfrastructurePrefixes[] = {
+            "ModuleVersion",
+            "GUID",
+            "RootModule",
+            "NestedModules",
+            "FunctionsToExport",
+            "CmdletsToExport",
+            "AliasesToExport",
+            "HelpInfoURI",
+            "CompanyName",
+            "Copyright",
+            "function prompt",
+            "$NestedPromptLevel",
+            "$host.UI.RawUI",
+            "PSConsoleHostReadline",
+            "[System.Diagnostics.DebuggerHidden()]",
+            "FullyQualifiedErrorId",
+            "InvocationInfo",
+            "PositionMessage",
+            "PSMessageDetails",
+            "ErrorCategory_Message",
+            "CategoryInfo",
+            "http://go.microsoft.com/fwlink/",
+            "prompt",
+            "PS $($executionContext.SessionState.Path.CurrentLocation)",
+            "Set-StrictMode -Version 1",
+            "OriginInfo"
+        };
+        for (const char* pattern : kInfrastructurePrefixes) {
+            if (ContainsIgnoreCase(prefix, pattern))
+                return true;
+        }
+        return false;
+    }
     void TrimStringTailInPlace(std::string& value, size_t maxBytes)
     {
         if (maxBytes == 0) {
@@ -109,6 +193,131 @@ namespace {
     {
         TrimStringTailInPlace(value, maxBytes);
         return value;
+    }
+    constexpr size_t kScanContentDebugDumpMaxBytes = 8 * 1024;
+    constexpr LONGLONG kScanContentDebugDumpMaxFileBytes = 64LL * 1024LL * 1024LL;
+
+    std::wstring GetScanContentDebugDumpPath()
+    {
+        wchar_t overridePath[MAX_PATH] = {};
+        DWORD overrideLen = GetEnvironmentVariableW(L"RASP_AMSI_SCAN_DUMP_PATH", overridePath, MAX_PATH);
+        if (overrideLen > 0 && overrideLen < MAX_PATH)
+            return std::wstring(overridePath, overrideLen);
+
+        wchar_t tempPath[MAX_PATH] = {};
+        DWORD tempLen = GetTempPathW(MAX_PATH, tempPath);
+        std::wstring path;
+        if (tempLen > 0 && tempLen < MAX_PATH) {
+            path.assign(tempPath, tempLen);
+        } else {
+            path = L"C:\\Windows\\Temp\\";
+        }
+        path += L"rasp_amsi_scan_content_debug.txt";
+        return path;
+    }
+
+    std::string EscapeForScanContentDump(const std::string& value, size_t maxBytes)
+    {
+        const size_t limit = (std::min)(value.size(), maxBytes);
+        std::string out;
+        out.reserve(limit + limit / 8 + 64);
+        char hex[8] = {};
+        for (size_t i = 0; i < limit; ++i) {
+            const unsigned char ch = static_cast<unsigned char>(value[i]);
+            switch (ch) {
+                case '\r': out += "\\r"; break;
+                case '\n': out += "\\n\r\n"; break;
+                case '\t': out += "\\t"; break;
+                case '\\': out += "\\\\"; break;
+                case 0: out += "\\0"; break;
+                default:
+                    if (ch < 0x20 || ch == 0x7f) {
+                        std::snprintf(hex, sizeof(hex), "\\x%02X", static_cast<unsigned int>(ch));
+                        out += hex;
+                    } else {
+                        out.push_back(static_cast<char>(ch));
+                    }
+                    break;
+            }
+        }
+        if (value.size() > maxBytes) {
+            out += "\r\n...[truncated bytes=";
+            out += std::to_string(value.size() - maxBytes);
+            out += "]";
+        }
+        return out;
+    }
+
+    void WriteScanContentDebugDump(const ProcessContextSnapshot* process,
+                                   const std::string& contentName,
+                                   const std::string& appName,
+                                   bool scanContextEnabled,
+                                   bool scanContextExpired,
+                                   bool appendAllowed,
+                                   ScanContextAppendSkipReason appendSkipReason,
+                                   size_t currentLen,
+                                   size_t bufferedLen,
+                                   size_t evalLen,
+                                   const std::string& snapshotHash,
+                                   const std::string& currentBody,
+                                   const std::string& evalBody)
+    {
+        std::string out;
+        out.reserve((std::min)(currentBody.size(), kScanContentDebugDumpMaxBytes) +
+                    (std::min)(evalBody.size(), kScanContentDebugDumpMaxBytes) + 1024);
+        out += "\r\n================ RASP AMSI SCAN CONTENT DUMP ================\r\n";
+        out += "tickMs=" + std::to_string(GetTickCount64());
+        out += " pid=" + std::to_string(GetCurrentProcessId());
+        out += " tid=" + std::to_string(GetCurrentThreadId());
+        out += " contentName=" + EscapeForScanContentDump(contentName, 1024);
+        out += " appName=" + EscapeForScanContentDump(appName, 512);
+        if (process) {
+            out += " processPid=" + std::to_string(process->currentPid);
+            out += " processName=" + process->currentProcessName;
+            out += " processPath=" + process->currentProcessPath;
+            out += " parentPid=" + std::to_string(process->parentPid);
+            out += " parentProcessName=" + process->parentProcessName;
+            out += " parentProcessPath=" + process->parentProcessPath;
+        }
+        out += "\r\nscanContextEnabled=" + std::to_string(scanContextEnabled ? 1 : 0);
+        out += " expired=" + std::to_string(scanContextExpired ? 1 : 0);
+        out += " appendAllowed=" + std::to_string(appendAllowed ? 1 : 0);
+        out += " appendSkipReason=" + std::string(ScanContextAppendSkipReasonToString(appendSkipReason));
+        out += " currentLen=" + std::to_string(currentLen);
+        out += " bufferedLen=" + std::to_string(bufferedLen);
+        out += " evalLen=" + std::to_string(evalLen);
+        if (!snapshotHash.empty()) {
+            out += " snapshotHash=" + snapshotHash;
+        }
+        out += "\r\n-- currentBody(normalized/current scan body) --\r\n";
+        out += EscapeForScanContentDump(currentBody, kScanContentDebugDumpMaxBytes);
+        out += "\r\n-- evalBody(actual rule input: context tail + currentBody) --\r\n";
+        out += EscapeForScanContentDump(evalBody, kScanContentDebugDumpMaxBytes);
+        out += "\r\n================ END RASP AMSI SCAN CONTENT DUMP ================\r\n";
+
+        const std::wstring path = GetScanContentDebugDumpPath();
+        HANDLE file = CreateFileW(path.c_str(),
+                                  FILE_APPEND_DATA,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                  nullptr,
+                                  OPEN_ALWAYS,
+                                  FILE_ATTRIBUTE_NORMAL,
+                                  nullptr);
+        if (file == INVALID_HANDLE_VALUE)
+            return;
+
+        LARGE_INTEGER fileSize = {};
+        if (GetFileSizeEx(file, &fileSize) && fileSize.QuadPart > kScanContentDebugDumpMaxFileBytes) {
+            CloseHandle(file);
+            return;
+        }
+
+        DWORD written = 0;
+        size_t cappedWriteBytes = out.size();
+        if (cappedWriteBytes > 1024 * 1024)
+            cappedWriteBytes = 1024 * 1024;
+        WriteFile(file, out.data(), static_cast<DWORD>(cappedWriteBytes), &written, nullptr);
+        CloseHandle(file);
     }
 
     std::string TrimAscii(std::string_view value)
@@ -511,20 +720,62 @@ AmsiRuleEngine::ScanRateLimitDecision AmsiRuleEngine::ShouldBypassByScanRateLimi
     return decision;
 }
 
+ScanContextAppendDecision AmsiRuleEngine::ShouldAppendToScanContext(
+        const std::string& contentName,
+        const std::string& currentContent,
+        const ScanContextConfig& config) const
+{
+    ScanContextAppendDecision decision;
+    if (!config.enabled || config.maxBufferedBytes == 0 || config.maxAppendBytes == 0) {
+        decision.reason = ScanContextAppendSkipReason::Disabled;
+        return decision;
+    }
+    if (currentContent.empty()) {
+        decision.reason = ScanContextAppendSkipReason::EmptyBody;
+        return decision;
+    }
+    if (ContentNameLooksLikeInfrastructure(contentName)) {
+        decision.reason = ScanContextAppendSkipReason::ContentNameInfrastructure;
+        return decision;
+    }
+    if (BodyPrefixLooksLikeInfrastructure(currentContent, config.prefixFilterBytes)) {
+        decision.reason = ScanContextAppendSkipReason::BodyPrefixInfrastructure;
+        return decision;
+    }
+    if (currentContent.size() > config.maxAppendBytes) {
+        decision.reason = ScanContextAppendSkipReason::TooLarge;
+        return decision;
+    }
+
+    decision.allowed = true;
+    decision.reason = ScanContextAppendSkipReason::None;
+    return decision;
+}
+
 std::string AmsiRuleEngine::BuildScanEvaluationContent(
         const RuleSnapshot& snapshot,
         const std::string& currentContent,
+        const ScanContextAppendDecision& appendDecision,
         uint64_t nowMs,
         ScanContextBuildInfo& info)
 {
     const ScanContextConfig& config = snapshot.scanContext;
     info.snapshotHash = snapshot.effectiveHash;
     info.currentLen = currentContent.size();
+    info.enabled = config.enabled && config.maxBufferedBytes != 0;
+    info.appendAllowed = appendDecision.allowed;
+    info.appendSkipReason = appendDecision.reason;
 
-    if (!config.enabled || config.maxBufferedBytes == 0) {
-        info.enabled = false;
+    if (!appendDecision.allowed) {
         std::string eval = TrimStringTail(currentContent, config.maxEvalBytes);
+        info.bufferedLen = 0;
         info.evalLen = eval.size();
+        LogWithSeverity(RaspDiagSeverity::Debug,
+                        "scan_context enabled=%d current_len=%zu buffered_len=0 eval_len=%zu expired=0 append_allowed=0 append_skip_reason=%s",
+                        info.enabled ? 1 : 0,
+                        info.currentLen,
+                        info.evalLen,
+                        ScanContextAppendSkipReasonToString(info.appendSkipReason));
         return eval;
     }
 
@@ -550,7 +801,6 @@ std::string AmsiRuleEngine::BuildScanEvaluationContent(
         }
 
         contextCopy = m_scanContextBuffer;
-        info.enabled = true;
         info.bufferedLen = contextCopy.size();
         info.expired = expired;
     }
@@ -577,7 +827,7 @@ std::string AmsiRuleEngine::BuildScanEvaluationContent(
     info.evalLen = eval.size();
 
     LogWithSeverity(RaspDiagSeverity::Debug,
-                    "scan_context enabled=1 current_len=%zu buffered_len=%zu eval_len=%zu expired=%d appended=0 cleared_on_match=0",
+                    "scan_context enabled=1 current_len=%zu buffered_len=%zu eval_len=%zu expired=%d append_allowed=1 append_skip_reason=none appended=0 cleared_on_match=0",
                     info.currentLen,
                     info.bufferedLen,
                     info.evalLen,
@@ -590,7 +840,8 @@ void AmsiRuleEngine::FinalizeScanContext(
         const RuleSnapshot& snapshot,
         const std::string& currentContent,
         uint64_t nowMs,
-        const ScanContextFinalizeResult& result)
+        const ScanContextFinalizeResult& result,
+        const ScanContextBuildInfo& buildInfo)
 {
     const ScanContextConfig& config = snapshot.scanContext;
     if (!config.enabled || config.maxBufferedBytes == 0)
@@ -614,6 +865,8 @@ void AmsiRuleEngine::FinalizeScanContext(
     }
 
     if (result.rateLimitedBypass || result.globalTimeout || result.exception)
+        return;
+    if (!buildInfo.appendAllowed)
         return;
     if (currentContent.empty())
         return;
@@ -1095,10 +1348,25 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     }
 
     RaspLuaContext evalCtx = ctx;
+    ScanContextBuildInfo contextInfo;
     if (!currentBody.empty()) {
-        ScanContextBuildInfo contextInfo;
+        const ScanContextAppendDecision appendDecision =
+            ShouldAppendToScanContext(contentName, currentBody, snap->scanContext);
         const std::string evalBody =
-            BuildScanEvaluationContent(*snap, currentBody, scanNowMs, contextInfo);
+            BuildScanEvaluationContent(*snap, currentBody, appendDecision, scanNowMs, contextInfo);
+        WriteScanContentDebugDump(scanContext ? scanContext->process : nullptr,
+                                  contentName,
+                                  appName,
+                                  contextInfo.enabled,
+                                  contextInfo.expired,
+                                  contextInfo.appendAllowed,
+                                  contextInfo.appendSkipReason,
+                                  contextInfo.currentLen,
+                                  contextInfo.bufferedLen,
+                                  contextInfo.evalLen,
+                                  contextInfo.snapshotHash,
+                                  currentBody,
+                                  evalBody);
         for (auto& f : evalCtx.fields) {
             if (f.name == "body") {
                 f.value = evalBody;
@@ -1307,7 +1575,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     ScanContextFinalizeResult contextResult;
     contextResult.matched = !results.empty();
     contextResult.globalTimeout = exec.timedOut;
-    FinalizeScanContext(*snap, currentBody, scanNowMs, contextResult);
+    FinalizeScanContext(*snap, currentBody, scanNowMs, contextResult, contextInfo);
     return results;
 }
 
