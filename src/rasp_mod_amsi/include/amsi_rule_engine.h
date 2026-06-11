@@ -26,14 +26,17 @@ enum class ScanContextAppendSkipReason {
     TooLarge,
     EmptyBody,
     Disabled,
+    // Reserved for future end-to-end context telemetry. These reasons are not
+    // produced by ShouldAppendToScanContext(), because rate-limit, timeout, and
+    // exception outcomes are known only after append decision/build time.
     RateLimited,
     GlobalTimeout,
     Exception
 };
 
 struct ScanContextAppendDecision {
-    bool allowed = false;
     ScanContextAppendSkipReason reason = ScanContextAppendSkipReason::Disabled;
+    bool Allowed() const { return reason == ScanContextAppendSkipReason::None; }
 };
 struct AmsiRaspRuleConfig : public RaspRuleBase {
     std::vector<std::string> parentPathAllowContains;

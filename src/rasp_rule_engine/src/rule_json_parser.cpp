@@ -229,6 +229,11 @@ void FinalizeScanContextConfig(RuleParseResult& result)
 {
     if (result.scanContext.maxEvalBytes < result.maxScanContentBytes)
         result.scanContext.maxEvalBytes = result.maxScanContentBytes;
+    if (result.scanContext.maxBufferedBytes > 0 &&
+        result.scanContext.maxAppendBytes > result.scanContext.maxBufferedBytes)
+        result.scanContext.maxAppendBytes = result.scanContext.maxBufferedBytes;
+    if (result.scanContext.prefixFilterBytes > result.scanContext.maxAppendBytes)
+        result.scanContext.prefixFilterBytes = result.scanContext.maxAppendBytes;
 }
 
 void ParseScanOptimization(RuleJsonParser::Parser& p, RuleParseResult& result)

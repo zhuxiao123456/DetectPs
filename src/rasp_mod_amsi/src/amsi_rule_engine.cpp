@@ -144,8 +144,8 @@ namespace {
             ".psm1",
             ".psd1",
             ".ps1xml",
-            "psreadline",
-            "microsoft.powershell.utility"
+            "psreadline.psm1",
+            "microsoft.powershell.utility.psm1"
         };
         for (const char* pattern : kInfrastructureNames) {
             if (ContainsIgnoreCase(contentName, pattern))
@@ -183,7 +183,6 @@ namespace {
             "ErrorCategory_Message",
             "CategoryInfo",
             "http://go.microsoft.com/fwlink/",
-            "prompt",
             "PS $($executionContext.SessionState.Path.CurrentLocation)",
             "Set-StrictMode -Version 1",
             "OriginInfo"
@@ -255,17 +254,21 @@ namespace {
         return out;
     }
 
+    struct ScanContentDebugDumpInfo {
+        bool enabled = false;
+        bool appendAllowed = false;
+        ScanContextAppendSkipReason appendSkipReason = ScanContextAppendSkipReason::Disabled;
+        size_t currentLen = 0;
+        size_t bufferedLen = 0;
+        size_t evalLen = 0;
+        bool expired = false;
+        std::string snapshotHash;
+    };
+
     void WriteScanContentDebugDump(const ProcessContextSnapshot* process,
                                    const std::string& contentName,
                                    const std::string& appName,
-                                   bool scanContextEnabled,
-                                   bool scanContextExpired,
-                                   bool appendAllowed,
-                                   ScanContextAppendSkipReason appendSkipReason,
-                                   size_t currentLen,
-                                   size_t bufferedLen,
-                                   size_t evalLen,
-                                   const std::string& snapshotHash,
+                                   const ScanContentDebugDumpInfo& buildInfo,
                                    const std::string& currentBody,
                                    const std::string& evalBody)
     {
@@ -290,15 +293,15 @@ namespace {
             out += " parentProcessName=" + process->parentProcessName;
             out += " parentProcessPath=" + process->parentProcessPath;
         }
-        out += "\r\nscanContextEnabled=" + std::to_string(scanContextEnabled ? 1 : 0);
-        out += " expired=" + std::to_string(scanContextExpired ? 1 : 0);
-        out += " appendAllowed=" + std::to_string(appendAllowed ? 1 : 0);
-        out += " appendSkipReason=" + std::string(ScanContextAppendSkipReasonToString(appendSkipReason));
-        out += " currentLen=" + std::to_string(currentLen);
-        out += " bufferedLen=" + std::to_string(bufferedLen);
-        out += " evalLen=" + std::to_string(evalLen);
-        if (!snapshotHash.empty()) {
-            out += " snapshotHash=" + snapshotHash;
+        out += "\r\nscanContextEnabled=" + std::to_string(buildInfo.enabled ? 1 : 0);
+        out += " expired=" + std::to_string(buildInfo.expired ? 1 : 0);
+        out += " appendAllowed=" + std::to_string(buildInfo.appendAllowed ? 1 : 0);
+        out += " appendSkipReason=" + std::string(ScanContextAppendSkipReasonToString(buildInfo.appendSkipReason));
+        out += " currentLen=" + std::to_string(buildInfo.currentLen);
+        out += " bufferedLen=" + std::to_string(buildInfo.bufferedLen);
+        out += " evalLen=" + std::to_string(buildInfo.evalLen);
+        if (!buildInfo.snapshotHash.empty()) {
+            out += " snapshotHash=" + buildInfo.snapshotHash;
         }
         out += "\r\n-- currentBody(normalized/current scan body) --\r\n";
         out += EscapeForScanContentDump(currentBody, kScanContentDebugDumpMaxBytes);
@@ -750,7 +753,7 @@ ScanContextAppendDecision AmsiRuleEngine::ShouldAppendToScanContext(
         const ScanContextConfig& config) const
 {
     ScanContextAppendDecision decision;
-    if (!config.enabled || config.maxBufferedBytes == 0 || config.maxAppendBytes == 0) {
+    if (!config.enabled || config.maxBufferedBytes == 0) {
         decision.reason = ScanContextAppendSkipReason::Disabled;
         return decision;
     }
@@ -771,7 +774,6 @@ ScanContextAppendDecision AmsiRuleEngine::ShouldAppendToScanContext(
         return decision;
     }
 
-    decision.allowed = true;
     decision.reason = ScanContextAppendSkipReason::None;
     return decision;
 }
@@ -787,10 +789,10 @@ std::string AmsiRuleEngine::BuildScanEvaluationContent(
     info.snapshotHash = snapshot.effectiveHash;
     info.currentLen = currentContent.size();
     info.enabled = config.enabled && config.maxBufferedBytes != 0;
-    info.appendAllowed = appendDecision.allowed;
+    info.appendAllowed = appendDecision.Allowed();
     info.appendSkipReason = appendDecision.reason;
 
-    if (!appendDecision.allowed) {
+    if (!appendDecision.Allowed()) {
         std::string eval = TrimStringTail(currentContent, config.maxEvalBytes);
         info.bufferedLen = 0;
         info.evalLen = eval.size();
@@ -870,6 +872,10 @@ void AmsiRuleEngine::FinalizeScanContext(
     const ScanContextConfig& config = snapshot.scanContext;
     if (!config.enabled || config.maxBufferedBytes == 0)
         return;
+    if (!buildInfo.appendAllowed)
+        return;
+    if (currentContent.empty())
+        return;
 
     std::lock_guard<std::mutex> lock(m_scanContextMutex);
     auto current = std::atomic_load(&m_snapshot);
@@ -889,10 +895,6 @@ void AmsiRuleEngine::FinalizeScanContext(
     }
 
     if (result.rateLimitedBypass || result.globalTimeout || result.exception)
-        return;
-    if (!buildInfo.appendAllowed)
-        return;
-    if (currentContent.empty())
         return;
 
     if (!m_scanContextBuffer.empty())
@@ -1411,37 +1413,6 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     RaspLuaContext evalCtx = ctx;
     ScanContextBuildInfo contextInfo;
     if (!currentBody.empty()) {
-        ScanContextAppendDecision infrastructureDecision;
-        if (ContentNameLooksLikeInfrastructure(contentName)) {
-            infrastructureDecision.reason = ScanContextAppendSkipReason::ContentNameInfrastructure;
-        } else if (BodyPrefixLooksLikeInfrastructure(currentBody, snap->scanContext.prefixFilterBytes)) {
-            infrastructureDecision.reason = ScanContextAppendSkipReason::BodyPrefixInfrastructure;
-        }
-        if (infrastructureDecision.reason == ScanContextAppendSkipReason::ContentNameInfrastructure ||
-            infrastructureDecision.reason == ScanContextAppendSkipReason::BodyPrefixInfrastructure) {
-            contextInfo.enabled = snap->scanContext.enabled;
-            contextInfo.appendAllowed = false;
-            contextInfo.appendSkipReason = infrastructureDecision.reason;
-            contextInfo.currentLen = currentBody.size();
-            contextInfo.bufferedLen = 0;
-            contextInfo.evalLen = currentBody.size();
-            contextInfo.snapshotHash = snap->effectiveHash;
-            WriteScanContentDebugDump(scanContext ? scanContext->process : nullptr,
-                                      contentName,
-                                      appName,
-                                      contextInfo.enabled,
-                                      contextInfo.expired,
-                                      contextInfo.appendAllowed,
-                                      contextInfo.appendSkipReason,
-                                      contextInfo.currentLen,
-                                      contextInfo.bufferedLen,
-                                      contextInfo.evalLen,
-                                      contextInfo.snapshotHash,
-                                      currentBody,
-                                      currentBody);
-            return results;
-        }
-
         LogWithSeverity(RaspDiagSeverity::Debug,
                         "[AMSI:Scan] sampleLen=%s evalLen=%zu",
                         amsiSampleLen.empty() ? "0" : amsiSampleLen.c_str(),
@@ -1460,17 +1431,20 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             ShouldAppendToScanContext(contentName, currentBody, snap->scanContext);
         const std::string evalBody =
             BuildScanEvaluationContent(*snap, currentBody, appendDecision, scanNowMs, contextInfo);
+        const ScanContentDebugDumpInfo dumpInfo{
+            contextInfo.enabled,
+            contextInfo.appendAllowed,
+            contextInfo.appendSkipReason,
+            contextInfo.currentLen,
+            contextInfo.bufferedLen,
+            contextInfo.evalLen,
+            contextInfo.expired,
+            contextInfo.snapshotHash
+        };
         WriteScanContentDebugDump(scanContext ? scanContext->process : nullptr,
                                   contentName,
                                   appName,
-                                  contextInfo.enabled,
-                                  contextInfo.expired,
-                                  contextInfo.appendAllowed,
-                                  contextInfo.appendSkipReason,
-                                  contextInfo.currentLen,
-                                  contextInfo.bufferedLen,
-                                  contextInfo.evalLen,
-                                  contextInfo.snapshotHash,
+                                  dumpInfo,
                                   currentBody,
                                   evalBody);
         for (auto& f : evalCtx.fields) {
@@ -1480,6 +1454,11 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
                 break;
             }
         }
+    } else {
+        contextInfo.enabled = snap->scanContext.enabled && snap->scanContext.maxBufferedBytes != 0;
+        contextInfo.appendAllowed = false;
+        contextInfo.appendSkipReason = ScanContextAppendSkipReason::EmptyBody;
+        contextInfo.snapshotHash = snap->effectiveHash;
     }
 
     const bool perfLogEnabled = IsAmsiPerfLogEnabled();

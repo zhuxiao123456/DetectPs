@@ -807,8 +807,8 @@ static bool RunEngineRuntimeTestGroup2()
             return false;
 
         AmsiEvalResult skipped = engine.Evaluate(L"PSReadLine.psm1", L"powershell.exe", "amsi", 4);
-        if (!Expect(!skipped.ruleMatched,
-                    "infrastructure contentName bypasses rule evaluation"))
+        if (!Expect(skipped.ruleMatched && skipped.ruleId == "infra_content_name_bypass",
+                    "infrastructure contentName is evaluated as a single scan"))
             return false;
 
         AmsiEvalResult normal = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
@@ -825,8 +825,8 @@ static bool RunEngineRuntimeTestGroup2()
 
         const char* errorFormatter = "FullyQualifiedErrorId : CommandNotFoundException";
         AmsiEvalResult skipped = engine.Evaluate(L"", L"powershell.exe", errorFormatter, std::strlen(errorFormatter));
-        if (!Expect(!skipped.ruleMatched,
-                    "infrastructure body prefix bypasses rule evaluation"))
+        if (!Expect(skipped.ruleMatched && skipped.ruleId == "infra_body_prefix_bypass",
+                    "infrastructure body prefix is evaluated as a single scan"))
             return false;
     }
 
@@ -919,6 +919,30 @@ static bool RunEngineRuntimeTestGroup2()
         AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", body, static_cast<ULONG>(std::strlen(body)));
         if (!Expect(!second.ruleMatched,
                     "body-prefix infrastructure input does not read historical scanContext"))
+            return false;
+
+        AmsiEvalResult third = engine.Evaluate(L"demo.ps1", L"powershell.exe", "utils", 5);
+        if (!Expect(third.ruleMatched && third.ruleId == "scan_context_rule",
+                    "body-prefix infrastructure match does not clear existing scanContext"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        if (!Expect(engine.ParseAndSwap(
+                        ScanContextRegexRuleJson(true, 8192, 3000, 16384, true, "(?s)amsi.*utils", 256, 128),
+                        ""),
+                    "prompt word scanContext snapshot publishes"))
+            return false;
+
+        AmsiEvalResult first = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsi", 4);
+        if (!Expect(!first.ruleMatched,
+                    "prompt word first chunk appends"))
+            return false;
+
+        AmsiEvalResult second = engine.Evaluate(L"demo.ps1", L"powershell.exe", "please prompt utils", 19);
+        if (!Expect(second.ruleMatched && second.ruleId == "scan_context_rule",
+                    "plain prompt word does not disable scanContext append"))
             return false;
     }
 

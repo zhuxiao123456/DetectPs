@@ -402,6 +402,22 @@ int main()
         if (!Expect(raised.scanContext.maxEvalBytes == raised.maxScanContentBytes,
                     "scanContext maxEvalBytes is raised to maxScanContentBytes"))
             return 1;
+
+        auto bounded = Parse(R"json({"scanContext":{"enabled":true,"maxBufferedBytes":128,"maxAppendBytes":0,"prefixFilterBytes":4096},"rules":[{"id":"r"}]})json");
+        if (!Expect(bounded.scanContext.maxAppendBytes == kMinScanContextMaxAppendBytes,
+                    "scanContext maxAppendBytes zero clamps to minimum instead of disabling context"))
+            return 1;
+        if (!Expect(bounded.scanContext.prefixFilterBytes == bounded.scanContext.maxAppendBytes,
+                    "scanContext prefixFilterBytes is limited by maxAppendBytes"))
+            return 1;
+
+        auto appendBounded = Parse(R"json({"scanContext":{"enabled":true,"maxBufferedBytes":128,"maxAppendBytes":4096,"prefixFilterBytes":256},"rules":[{"id":"r"}]})json");
+        if (!Expect(appendBounded.scanContext.maxAppendBytes == appendBounded.scanContext.maxBufferedBytes,
+                    "scanContext maxAppendBytes is limited by maxBufferedBytes"))
+            return 1;
+        if (!Expect(appendBounded.scanContext.prefixFilterBytes == appendBounded.scanContext.maxAppendBytes,
+                    "scanContext prefixFilterBytes is limited again after maxAppendBytes is bounded"))
+            return 1;
     }
 
     {
