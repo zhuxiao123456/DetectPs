@@ -86,6 +86,7 @@ public:
     explicit ProcessContextProvider(IProcessContextPlatform& platform);
 
     const ProcessContextSnapshot& GetSnapshot();
+    size_t SnapshotCountForTesting() const;
 
 private:
     bool ShouldRetryLocked(uint64_t now) const;
@@ -95,7 +96,7 @@ private:
     void PublishSuccessLocked(ProcessContextSnapshot snapshot);
 
     IProcessContextPlatform& platform_;
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::vector<std::shared_ptr<const ProcessContextSnapshot>> snapshots_;
     std::atomic<const ProcessContextSnapshot*> publishedSnapshot_;
     uint32_t failedAttempts_ = 0;

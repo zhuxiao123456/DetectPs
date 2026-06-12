@@ -117,6 +117,12 @@ public:
                       ScanExecutionContext*           exec                = nullptr);
 
 #ifdef RASP_PCRE2_AVAILABLE
+    struct RegexCompileContext {
+        int ruleIndex = -1;
+        int checkIndex = -1;
+        int patternIndex = -1;
+    };
+
     // Tests text against each PCRE2 pattern in sequence.
     // Returns true on first match; sets matchedPatternOut to the matched pattern.
     // Patterns are compiled lazily and cached for the lifetime of the engine.
@@ -128,13 +134,16 @@ public:
 
     // Eagerly compile and JIT a batch of PCRE2 patterns into this snapshot-local
     // cache. Invalid patterns are logged and skipped, matching lazy behavior.
-    void PrecompileRegex(const std::vector<std::string>& patterns) const;
+    void PrecompileRegex(const std::vector<std::string>& patterns,
+                         int ruleIndex = -1,
+                         int checkIndex = -1) const;
 
     // Compile-or-fetch a PCRE2 pattern from the regex cache.
     // Public only so the static Lua C functions lua_pcre2_match / lua_pcre2_capture
     // (which retrieve the engine pointer via the Lua registry) can call it directly.
     // Returns nullptr if the pattern is invalid (error already logged).
-    pcre2_real_code_8* GetOrCompilePcre2(const std::string& pattern) const;
+    pcre2_real_code_8* GetOrCompilePcre2(const std::string& pattern,
+                                         const RegexCompileContext* context = nullptr) const;
 
     // Test/diagnostic seam for verifying the snapshot-local compiled regex cache.
     // Does not compile, evict, or otherwise mutate cache entries.

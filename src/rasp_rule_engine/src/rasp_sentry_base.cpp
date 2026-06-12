@@ -94,6 +94,9 @@ static void LoadAmsiLogConfOnce()
 
 namespace {
 
+constexpr DWORD kSentryPipeWriteTimeoutMs = 1000;
+constexpr DWORD kSentryPipeReadTimeoutMs = 5000;
+
 struct HostStateEnvelope {
     bool present = false;
     std::string state;
@@ -219,6 +222,74 @@ std::string CurrentModuleSha256Hex()
                         nullptr,
                         nullptr);
     return cachedHash;
+}
+
+bool WaitOverlappedIoWithTimeout(HANDLE file,
+                                 OVERLAPPED& ov,
+                                 DWORD timeoutMs,
+                                 DWORD& transferred)
+{
+    transferred = 0;
+    DWORD wait = WaitForSingleObject(ov.hEvent, timeoutMs);
+    if (wait != WAIT_OBJECT_0) {
+        CancelIo(file);
+        GetOverlappedResult(file, &ov, &transferred, TRUE);
+        SetLastError(ERROR_TIMEOUT);
+        return false;
+    }
+    return GetOverlappedResult(file, &ov, &transferred, TRUE) == TRUE;
+}
+
+bool WritePipeWithTimeout(HANDLE pipe, const char* data, DWORD len, DWORD timeoutMs, DWORD& written)
+{
+    written = 0;
+    OVERLAPPED ov = {};
+    ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ov.hEvent) {
+        return false;
+    }
+
+    BOOL ok = WriteFile(pipe, data, len, nullptr, &ov);
+    DWORD error = ok ? ERROR_SUCCESS : GetLastError();
+    if (!ok && error == ERROR_IO_PENDING) {
+        ok = WaitOverlappedIoWithTimeout(pipe, ov, timeoutMs, written) ? TRUE : FALSE;
+    } else if (ok) {
+        ok = GetOverlappedResult(pipe, &ov, &written, TRUE);
+    }
+
+    CloseHandle(ov.hEvent);
+    return ok == TRUE;
+}
+
+bool ReadPipeWithTimeout(HANDLE pipe, char* data, DWORD len, DWORD timeoutMs, DWORD& bytesRead, DWORD& readError)
+{
+    bytesRead = 0;
+    readError = ERROR_SUCCESS;
+    OVERLAPPED ov = {};
+    ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ov.hEvent) {
+        readError = GetLastError();
+        return false;
+    }
+
+    BOOL ok = ReadFile(pipe, data, len, nullptr, &ov);
+    DWORD error = ok ? ERROR_SUCCESS : GetLastError();
+    if (!ok && error == ERROR_IO_PENDING) {
+        ok = WaitOverlappedIoWithTimeout(pipe, ov, timeoutMs, bytesRead) ? TRUE : FALSE;
+        if (!ok) {
+            readError = WAIT_TIMEOUT;
+        }
+    } else if (ok) {
+        ok = GetOverlappedResult(pipe, &ov, &bytesRead, TRUE);
+        if (!ok) {
+            readError = GetLastError();
+        }
+    } else {
+        readError = error;
+    }
+
+    CloseHandle(ov.hEvent);
+    return ok == TRUE;
 }
 
 bool TryParseHostStateEnvelope(const std::string& response, HostStateEnvelope& envelope)
@@ -533,7 +604,7 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
 
     HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_rules",
                                GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                               OPEN_EXISTING, 0, nullptr);
+                               OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
     if (hPipe == INVALID_HANDLE_VALUE)
     {
         LogWithSeverity(RaspDiagSeverity::Error, "ConnectSentry: CreateFileW failed GLE=%lu", GetLastError());
@@ -550,20 +621,23 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
 
     const char req[] = "GET_ALL_RULES\n";
     DWORD written = 0;
-    if (!WriteFile(hPipe, req, (DWORD)strlen(req), &written, nullptr) || written == 0)
+    if (!WritePipeWithTimeout(hPipe, req, (DWORD)strlen(req), kSentryPipeWriteTimeoutMs, written) || written == 0)
     {
         LogWithSeverity(RaspDiagSeverity::Error, "ConnectSentry: WriteFile failed GLE=%lu", GetLastError());
         CloseHandle(hPipe);
         return false;
     }
-
     std::string response;
     response.resize(524288); // 512 KB
     DWORD bytesRead = 0;
-    BOOL  ok        = ReadFile(hPipe, &response[0], (DWORD)response.size(), &bytesRead, nullptr);
-    DWORD readErr   = ok ? 0 : GetLastError();
+    DWORD readErr = 0;
+    BOOL ok = ReadPipeWithTimeout(hPipe,
+                                  &response[0],
+                                  (DWORD)response.size(),
+                                  kSentryPipeReadTimeoutMs,
+                                  bytesRead,
+                                  readErr) ? TRUE : FALSE;
     CloseHandle(hPipe);
-
     if (!ok || bytesRead == 0)
     {
         LogWithSeverity(RaspDiagSeverity::Error, "ConnectSentry: ReadFile failed GLE=%lu bytes=%lu", readErr, bytesRead);
@@ -929,7 +1003,7 @@ void RaspSentryBase::SendRuleLoadResult(bool success,
 
     HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_control_status",
                                GENERIC_WRITE, 0, nullptr,
-                               OPEN_EXISTING, 0, nullptr);
+                               OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
     if (hPipe == INVALID_HANDLE_VALUE)
     {
         LogWithSeverity(RaspDiagSeverity::Warning, "SendRuleLoadResult: control status pipe unavailable GLE=%lu", GetLastError());
@@ -938,7 +1012,7 @@ void RaspSentryBase::SendRuleLoadResult(bool success,
 
     DWORD written = 0;
     const DWORD expected = static_cast<DWORD>(strlen(json));
-    if (!WriteFile(hPipe, json, expected, &written, nullptr) || written != expected)
+    if (!WritePipeWithTimeout(hPipe, json, expected, kSentryPipeWriteTimeoutMs, written) || written != expected)
     {
         LogWithSeverity(RaspDiagSeverity::Warning, "SendRuleLoadResult: WriteFile failed GLE=%lu written=%lu expected=%lu", GetLastError(), written, expected);
     }

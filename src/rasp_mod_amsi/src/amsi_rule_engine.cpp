@@ -418,57 +418,42 @@ namespace {
         return false;
     }
 
-    std::string JsonEscapeLocal(const std::string& value)
+    bool WriteDrainAckWithTimeout(const char* ackLine, DWORD timeoutMs)
     {
-        std::string out;
-        out.reserve(value.size() + 8);
-        for (unsigned char ch : value) {
-            switch (ch) {
-                case '\\': out += "\\\\"; break;
-                case '"': out += "\\\""; break;
-                case '\b': out += "\\b"; break;
-                case '\f': out += "\\f"; break;
-                case '\n': out += "\\n"; break;
-                case '\r': out += "\\r"; break;
-                case '\t': out += "\\t"; break;
-                default:
-                    if (ch < 0x20) {
-                        char buf[7];
-                        snprintf(buf, sizeof(buf), "\\u%04x", ch);
-                        out += buf;
-                    } else {
-                        out += static_cast<char>(ch);
-                    }
-                    break;
-            }
-        }
-        return out;
-    }
-
-    void SendTrustProcessSkipStatus(const ProcessContextSnapshot& process,
-                                    const std::string& matchedTrustProcess)
-    {
-        char json[2048];
-        _snprintf_s(json, sizeof(json), _TRUNCATE,
-                    "{\"msgType\":\"TRUST_PROCESS_SKIP\","
-                    "\"processPath\":\"%s\","
-                    "\"parentProcessPath\":\"%s\","
-                    "\"matchedTrustProcess\":\"%s\","
-                    "\"reason\":\"trusted_parent_process\"}",
-                    JsonEscapeLocal(process.currentProcessPath).c_str(),
-                    JsonEscapeLocal(process.parentProcessPath).c_str(),
-                    JsonEscapeLocal(matchedTrustProcess).c_str());
-
-        HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_control_status",
+        HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_events",
                                    GENERIC_WRITE, 0, nullptr,
-                                   OPEN_EXISTING, 0, nullptr);
+                                   OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
         if (hPipe == INVALID_HANDLE_VALUE)
-            return;
+            return false;
+
+        OVERLAPPED ov = {};
+        ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!ov.hEvent) {
+            CloseHandle(hPipe);
+            return false;
+        }
 
         DWORD written = 0;
-        const DWORD expected = static_cast<DWORD>(strlen(json));
-        WriteFile(hPipe, json, expected, &written, nullptr);
+        const DWORD expected = static_cast<DWORD>(strlen(ackLine));
+        BOOL ok = WriteFile(hPipe, ackLine, expected, nullptr, &ov);
+        DWORD error = ok ? ERROR_SUCCESS : GetLastError();
+        if (!ok && error == ERROR_IO_PENDING) {
+            DWORD wait = WaitForSingleObject(ov.hEvent, timeoutMs);
+            if (wait == WAIT_OBJECT_0) {
+                ok = GetOverlappedResult(hPipe, &ov, &written, TRUE);
+            } else {
+                CancelIo(hPipe);
+                GetOverlappedResult(hPipe, &ov, &written, TRUE);
+                SetLastError(ERROR_TIMEOUT);
+                ok = FALSE;
+            }
+        } else if (ok) {
+            ok = GetOverlappedResult(hPipe, &ov, &written, TRUE);
+        }
+
+        CloseHandle(ov.hEvent);
         CloseHandle(hPipe);
+        return ok == TRUE && written == expected;
     }
 
     bool ParentPathGatePasses(const AmsiRaspRuleConfig& rule, const ScanContext* scanContext)
@@ -515,11 +500,19 @@ namespace {
 static std::string WideToUtf8(const wchar_t *w) {
     if (!w || w[0] == L'\0')
         return {};
-    int len = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
+    constexpr size_t kMaxAmsiMetadataChars = 4096;
+    size_t boundedLen = 0;
+    while (boundedLen < kMaxAmsiMetadataChars && w[boundedLen] != L'\0')
+        ++boundedLen;
+    if (boundedLen == 0)
+        return {};
+
+    int inputLen = static_cast<int>(boundedLen);
+    int len = WideCharToMultiByte(CP_UTF8, 0, w, inputLen, nullptr, 0, nullptr, nullptr);
     if (len <= 0)
         return {};
-    std::string s(len - 1, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w, -1, &s[0], len, nullptr, nullptr);
+    std::string s(len, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w, inputLen, &s[0], len, nullptr, nullptr);
     return s;
 }
 
@@ -1147,11 +1140,15 @@ PrecompileAll / SwapRules
 void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules,
                                    const std::string &libSource,
                                    RaspLuaEngine& luaEngine) {
-    for (const auto &rule: rules) {
+    for (size_t ruleIndex = 0; ruleIndex < rules.size(); ++ruleIndex) {
+        const auto &rule = rules[ruleIndex];
 #ifdef RASP_PCRE2_AVAILABLE
-        luaEngine.PrecompileRegex(rule.regexPatterns);
-        for (const auto &check : rule.regexChecks) {
-            luaEngine.PrecompileRegex(check.patterns);
+        luaEngine.PrecompileRegex(rule.regexPatterns, static_cast<int>(ruleIndex), -1);
+        for (size_t checkIndex = 0; checkIndex < rule.regexChecks.size(); ++checkIndex) {
+            const auto &check = rule.regexChecks[checkIndex];
+            luaEngine.PrecompileRegex(check.patterns,
+                                      static_cast<int>(ruleIndex),
+                                      static_cast<int>(checkIndex));
         }
 #endif
 
@@ -1254,13 +1251,7 @@ DWORD WINAPI AmsiRuleEngine::UnloadThreadProc(LPVOID)
         snprintf(ackLine, sizeof(ackLine),
         "{\"cat\":\"drain-ack\",\"mod\":\"hss_amsi\",\"pid\":%s}", pid);
 
-        HANDLE hPipe = CreateFileW(L"\\\\.\\pipe\\amsi_detect_events",
-        GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
-        if (hPipe != INVALID_HANDLE_VALUE) {
-            DWORD written = 0;
-            WriteFile(hPipe, ackLine, static_cast<DWORD>(strlen(ackLine)), &written, nullptr);
-            CloseHandle(hPipe);
-        }
+        WriteDrainAckWithTimeout(ackLine, 200);
 
         return 0;
         }
@@ -1396,7 +1387,6 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
 
     std::string matchedTrustProcess;
     if (TrustProcessMatches(snap->trustProcessPaths, scanContext, &matchedTrustProcess)) {
-        SendTrustProcessSkipStatus(*scanContext->process, matchedTrustProcess);
         LogWithSeverity(RaspDiagSeverity::Debug, "trust_process skip: parentProcessPath=%s matched=%s",
                         scanContext->process->parentProcessPath.c_str(),
                         matchedTrustProcess.c_str());

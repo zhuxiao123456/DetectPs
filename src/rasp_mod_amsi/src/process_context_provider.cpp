@@ -283,6 +283,12 @@ const ProcessContextSnapshot& ProcessContextProvider::GetSnapshot()
     return *publishedSnapshot_.load(std::memory_order_acquire);
 }
 
+size_t ProcessContextProvider::SnapshotCountForTesting() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return snapshots_.size();
+}
+
 bool ProcessContextProvider::ShouldRetryLocked(uint64_t now) const
 {
     if (failedAttempts_ >= kMaxFailedAttempts)
@@ -387,6 +393,10 @@ void ProcessContextProvider::PublishSnapshotLocked(ProcessContextSnapshot snapsh
     auto owned = std::make_shared<ProcessContextSnapshot>(std::move(snapshot));
     const ProcessContextSnapshot* raw = owned.get();
     snapshots_.push_back(std::move(owned));
+    constexpr size_t kMaxSnapshots = 4;
+    while (snapshots_.size() > kMaxSnapshots) {
+        snapshots_.erase(snapshots_.begin());
+    }
     publishedSnapshot_.store(raw, std::memory_order_release);
 }
 

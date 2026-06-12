@@ -3,6 +3,41 @@
 #include <limits>
 #include <utility>
 
+namespace {
+
+bool WriteFileWithTimeout(HANDLE pipe, std::string_view payload, uint32_t timeoutMs, DWORD& written)
+{
+    written = 0;
+    const DWORD expected = static_cast<DWORD>(payload.size());
+    const DWORD boundedTimeoutMs = timeoutMs == 0 ? 1000 : timeoutMs;
+
+    OVERLAPPED ov = {};
+    ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ov.hEvent)
+        return false;
+
+    BOOL ok = WriteFile(pipe, payload.data(), expected, nullptr, &ov);
+    DWORD error = ok ? ERROR_SUCCESS : GetLastError();
+    if (!ok && error == ERROR_IO_PENDING) {
+        DWORD wait = WaitForSingleObject(ov.hEvent, boundedTimeoutMs);
+        if (wait == WAIT_OBJECT_0) {
+            ok = GetOverlappedResult(pipe, &ov, &written, TRUE);
+        } else {
+            CancelIo(pipe);
+            GetOverlappedResult(pipe, &ov, &written, TRUE);
+            SetLastError(ERROR_TIMEOUT);
+            ok = FALSE;
+        }
+    } else if (ok) {
+        ok = GetOverlappedResult(pipe, &ov, &written, TRUE);
+    }
+
+    CloseHandle(ov.hEvent);
+    return ok == TRUE;
+}
+
+} // namespace
+
 LegacyPipeEventTransport::LegacyPipeEventTransport()
     : LegacyPipeEventTransport(LR"(\\.\pipe\amsi_detect_events)")
 {
@@ -15,8 +50,6 @@ LegacyPipeEventTransport::LegacyPipeEventTransport(std::wstring pipeName)
 
 EventTransportStatus LegacyPipeEventTransport::Send(std::string_view payload, uint32_t timeoutMs)
 {
-    (void)timeoutMs;
-
     if (payload.size() > static_cast<size_t>((std::numeric_limits<DWORD>::max)()))
         return EventTransportStatus::Failed;
 
@@ -25,18 +58,14 @@ EventTransportStatus LegacyPipeEventTransport::Send(std::string_view payload, ui
                               0,
                               nullptr,
                               OPEN_EXISTING,
-                              0,
+                              FILE_FLAG_OVERLAPPED,
                               nullptr);
     if (pipe == INVALID_HANDLE_VALUE)
         return MapCreateFileErrorForEventPipe(GetLastError());
 
     DWORD written = 0;
     const DWORD expected = static_cast<DWORD>(payload.size());
-    BOOL ok = WriteFile(pipe,
-                        payload.data(),
-                        expected,
-                        &written,
-                        nullptr);
+    BOOL ok = WriteFileWithTimeout(pipe, payload, timeoutMs, written) ? TRUE : FALSE;
     const DWORD error = ok ? ERROR_SUCCESS : GetLastError();
     CloseHandle(pipe);
 

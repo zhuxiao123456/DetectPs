@@ -306,7 +306,8 @@ void LogRegexFailure(const RaspLuaEngine* engine,
  *   3. 通过 pcre2_pattern_info 自动提取 firstCodeType、firstCodeUnit、firstBitmap、minLength。
  *   4. 将 compiled code 和元数据作为 CompiledRegexEntry 原子写入缓存。
  */
-pcre2_real_code_8 *RaspLuaEngine::GetOrCompilePcre2(const std::string &pattern) const
+pcre2_real_code_8 *RaspLuaEngine::GetOrCompilePcre2(const std::string &pattern,
+                                                     const RegexCompileContext* context) const
 {
     {
         std::lock_guard<std::mutex> lk(m_regexMutex);
@@ -328,10 +329,16 @@ pcre2_real_code_8 *RaspLuaEngine::GetOrCompilePcre2(const std::string &pattern) 
         PCRE2_UCHAR8 errbuf[256];
         pcre2_get_error_message(errcode, errbuf, sizeof(errbuf));
         char msg[512];
+        const int ruleIndex = context ? context->ruleIndex : -1;
+        const int checkIndex = context ? context->checkIndex : -1;
+        const int patternIndex = context ? context->patternIndex : -1;
         snprintf(msg, sizeof(msg),
-                 "[AmsiLuaEngine] regex compile error at offset %zu: %s\n",
+                 "[AmsiLuaEngine] regex compile error at offset %zu: %s ruleIndex=%d checkIndex=%d patternIndex=%d\n",
                  (size_t)erroffset,
-                 reinterpret_cast<const char *>(errbuf));
+                 reinterpret_cast<const char *>(errbuf),
+                 ruleIndex,
+                 checkIndex,
+                 patternIndex);
         Log(msg);
         return nullptr;
     }
@@ -424,11 +431,19 @@ size_t RaspLuaEngine::RegexCacheSizeForTesting() const
     return m_regexCache.size();
 }
 
-void RaspLuaEngine::PrecompileRegex(const std::vector<std::string>& patterns) const
+void RaspLuaEngine::PrecompileRegex(const std::vector<std::string>& patterns,
+                                    int ruleIndex,
+                                    int checkIndex) const
 {
-    for (const auto& pattern : patterns) {
-        if (!pattern.empty())
-            (void)GetOrCompilePcre2(pattern);
+    for (size_t patternIndex = 0; patternIndex < patterns.size(); ++patternIndex) {
+        const auto& pattern = patterns[patternIndex];
+        if (!pattern.empty()) {
+            RegexCompileContext context;
+            context.ruleIndex = ruleIndex;
+            context.checkIndex = checkIndex;
+            context.patternIndex = static_cast<int>(patternIndex);
+            (void)GetOrCompilePcre2(pattern, &context);
+        }
     }
 }
 
@@ -466,7 +481,15 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
         if (exec)
             exec->SetRegexPatternIndex(static_cast<int>(patternIndex));
 
-        pcre2_code *re = reinterpret_cast<pcre2_code*>(GetOrCompilePcre2(pat));
+        RegexCompileContext compileContext;
+        if (exec) {
+            compileContext.ruleIndex = exec->currentRuleIndex;
+            compileContext.checkIndex = exec->currentRegexCheckIndex;
+            compileContext.patternIndex = exec->currentRegexPatternIndex;
+        } else {
+            compileContext.patternIndex = static_cast<int>(patternIndex);
+        }
+        pcre2_code *re = reinterpret_cast<pcre2_code*>(GetOrCompilePcre2(pat, &compileContext));
         if (!re)
             continue;
 

@@ -4,6 +4,7 @@
 #include <bcrypt.h>
 #include <cctype>
 #include <cstring>
+#include <mutex>
 #include <vector>
 
 namespace {
@@ -25,33 +26,45 @@ std::string Hex(const unsigned char* data, size_t len)
 
 std::string Sha256Hex(const char* data, size_t len)
 {
-    BCRYPT_ALG_HANDLE alg = nullptr;
+    static std::once_flag s_initOnce;
+    static BCRYPT_ALG_HANDLE s_alg = nullptr;
+    static DWORD s_hashLen = 0;
+    static bool s_ready = false;
+
+    std::call_once(s_initOnce, []() {
+        DWORD cbData = 0;
+        BCRYPT_ALG_HANDLE alg = nullptr;
+        DWORD hashLen = 0;
+        if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) == 0 &&
+            BCryptGetProperty(alg, BCRYPT_HASH_LENGTH,
+                              reinterpret_cast<PUCHAR>(&hashLen),
+                              sizeof(hashLen), &cbData, 0) == 0 &&
+            hashLen > 0) {
+            s_alg = alg;
+            s_hashLen = hashLen;
+            s_ready = true;
+        } else if (alg) {
+            BCryptCloseAlgorithmProvider(alg, 0);
+        }
+    });
+
     BCRYPT_HASH_HANDLE hash = nullptr;
-    DWORD cbData = 0;
-    DWORD hashLen = 0;
     std::string result(64, '0');
 
-    if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, nullptr, 0) != 0)
+    if (!s_ready || !s_alg || s_hashLen == 0)
         return result;
-    if (BCryptGetProperty(alg, BCRYPT_HASH_LENGTH,
-                          reinterpret_cast<PUCHAR>(&hashLen),
-                          sizeof(hashLen), &cbData, 0) != 0 || hashLen == 0) {
-        BCryptCloseAlgorithmProvider(alg, 0);
-        return result;
-    }
 
-    std::vector<unsigned char> hashBytes(hashLen);
-    if (BCryptCreateHash(alg, &hash, nullptr, 0, nullptr, 0, 0) == 0 &&
+    std::vector<unsigned char> hashBytes(s_hashLen);
+    if (BCryptCreateHash(s_alg, &hash, nullptr, 0, nullptr, 0, 0) == 0 &&
         BCryptHashData(hash,
                        reinterpret_cast<PUCHAR>(const_cast<char*>(data)),
                        static_cast<ULONG>(len), 0) == 0 &&
-        BCryptFinishHash(hash, hashBytes.data(), hashLen, 0) == 0) {
+        BCryptFinishHash(hash, hashBytes.data(), s_hashLen, 0) == 0) {
         result = Hex(hashBytes.data(), hashBytes.size());
     }
 
     if (hash)
         BCryptDestroyHash(hash);
-    BCryptCloseAlgorithmProvider(alg, 0);
     return result;
 }
 

@@ -323,6 +323,28 @@ bool TestRetryExhaustedIsFastTerminalSnapshot()
                   "retry exhausted fast path does not attempt recapture");
 }
 
+bool TestSnapshotStorageIsBounded()
+{
+    FakeProcessContextPlatform fake;
+    fake.parentPidResult = ParentPidQueryResult::QueryFailed;
+    fake.parentPidError = 0xC0000001;
+
+    ProcessContextProvider provider(fake);
+    provider.GetSnapshot();
+    fake.tick += 1000;
+    provider.GetSnapshot();
+    fake.tick += 5000;
+    provider.GetSnapshot();
+    fake.tick += 30000;
+    const auto& exhausted = provider.GetSnapshot();
+
+    if (!Expect(exhausted.retryState == ProcessRetryState::Exhausted,
+                "test reaches exhausted retry state"))
+        return false;
+    return Expect(provider.SnapshotCountForTesting() <= 4,
+                  "snapshot storage is bounded");
+}
+
 bool TestConcurrentGetSnapshot()
 {
     FakeProcessContextPlatform fake;
@@ -389,6 +411,7 @@ int main()
     failures += TestRetryStateStringMapping() ? 0 : 1;
     failures += TestParentPathQueryFailedIsDistinct() ? 0 : 1;
     failures += TestRetryExhaustedIsFastTerminalSnapshot() ? 0 : 1;
+    failures += TestSnapshotStorageIsBounded() ? 0 : 1;
     failures += TestConcurrentGetSnapshot() ? 0 : 1;
     failures += TestConcurrentInitialCaptureReturnsInitializing() ? 0 : 1;
 

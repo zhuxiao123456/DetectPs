@@ -3,6 +3,7 @@
 // =========================================================================
 
 #include <new>
+#include <memory>
 #include <vector>
 
 #include "../include/rasp_mod_amsi.h"
@@ -13,6 +14,23 @@
 
 
 long g_serverLocks(0);
+
+namespace {
+
+template <size_t N>
+void NullTerminateAmsiWideAttribute(wchar_t (&buffer)[N], ULONG bytesWritten)
+{
+    if (N == 0)
+        return;
+
+    size_t charsWritten = static_cast<size_t>(bytesWritten / sizeof(wchar_t));
+    if (charsWritten >= N)
+        charsWritten = N - 1;
+    buffer[charsWritten] = L'\0';
+    buffer[N - 1] = L'\0';
+}
+
+} // namespace
 
 CRaspAmsiProvider::CRaspAmsiProvider() : _refCount(1) {
     InterlockedIncrement(&g_serverLocks);
@@ -69,14 +87,19 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
 
     wchar_t contentName[512] = {};
     ULONG cbOut = 0;
-    stream->GetAttribute(AMSI_ATTRIBUTE_CONTENT_NAME,
-                         static_cast<ULONG>(sizeof(contentName)),
-                         reinterpret_cast<PBYTE>(contentName), &cbOut);
+    if (SUCCEEDED(stream->GetAttribute(AMSI_ATTRIBUTE_CONTENT_NAME,
+                                       static_cast<ULONG>(sizeof(contentName)),
+                                       reinterpret_cast<PBYTE>(contentName), &cbOut))) {
+        NullTerminateAmsiWideAttribute(contentName, cbOut);
+    }
 
     wchar_t appName[256] = {};
-    stream->GetAttribute(AMSI_ATTRIBUTE_APP_NAME,
-                         static_cast<ULONG>(sizeof(appName)),
-                         reinterpret_cast<PBYTE>(appName), &cbOut);
+    cbOut = 0;
+    if (SUCCEEDED(stream->GetAttribute(AMSI_ATTRIBUTE_APP_NAME,
+                                       static_cast<ULONG>(sizeof(appName)),
+                                       reinterpret_cast<PBYTE>(appName), &cbOut))) {
+        NullTerminateAmsiWideAttribute(appName, cbOut);
+    }
 
     ULONGLONG contentSize = 0;
     cbOut = sizeof(contentSize);
@@ -110,7 +133,7 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
 
     const char *evalSample = sample.data();
     ULONG evalLen = sampleRead;
-    std::vector<char> narrowBuf(kMaxAmsiReadBytes + 1, '\0');
+    std::unique_ptr<std::vector<char>> narrowBuf;
 
     if (sampleRead >= 4) {
         bool hasBom = (static_cast<unsigned char>(sample[0]) == 0xFF &&
@@ -126,15 +149,21 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
         }
 
         if (likelyWide) {
-            const wchar_t *wptr = reinterpret_cast<const wchar_t *>(hasBom ? sample.data() + 2 : sample.data());
-            int wlen = static_cast<int>((sampleRead - (hasBom ? 2u : 0u)) / sizeof(wchar_t));
-            int nb = WideCharToMultiByte(CP_UTF8, 0, wptr, wlen,
-                                         narrowBuf.data(), static_cast<int>(narrowBuf.size() - 1),
-                                         nullptr, nullptr);
-            if (nb > 0) {
-                narrowBuf[nb] = '\0';
-                evalSample = narrowBuf.data();
-                evalLen = static_cast<ULONG>(nb);
+            narrowBuf.reset(new(std::nothrow) std::vector<char>(kMaxAmsiReadBytes + 1, '\0'));
+            if (!narrowBuf) {
+                runtime.LogWithSeverity(RaspDiagSeverity::Warning,
+                                        "[AMSI:Scan] UTF-16 conversion buffer allocation failed");
+            } else {
+                const wchar_t *wptr = reinterpret_cast<const wchar_t *>(hasBom ? sample.data() + 2 : sample.data());
+                int wlen = static_cast<int>((sampleRead - (hasBom ? 2u : 0u)) / sizeof(wchar_t));
+                int nb = WideCharToMultiByte(CP_UTF8, 0, wptr, wlen,
+                                             narrowBuf->data(), static_cast<int>(narrowBuf->size() - 1),
+                                             nullptr, nullptr);
+                if (nb > 0) {
+                    (*narrowBuf)[nb] = '\0';
+                    evalSample = narrowBuf->data();
+                    evalLen = static_cast<ULONG>(nb);
+                }
             }
         }
     }
