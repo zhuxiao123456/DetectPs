@@ -305,6 +305,65 @@ int main()
         if (!Expect(otherEngine.RegexCacheSizeForTesting() == 0, "separate engine has independent regex cache"))
             return 1;
     }
+    {
+        RaspLuaEngine engine;
+        engine.SetLogFn(SilentLog);
+
+        ScanExecutionContext exec;
+        exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
+        std::string matched;
+        bool ok = engine.MatchesAnyRegex({"downloadstring"}, "AMSI context only", matched, &exec);
+        if (!Expect(!ok, "literal-prefix fast reject skips impossible fixed-first-char pattern"))
+            return 1;
+        if (!Expect(exec.regexCalls == 0, "fast rejected pattern does not consume regexCalls budget"))
+            return 1;
+        if (!Expect(exec.regexPrefixSkips == 1, "fast rejected pattern increments regexPrefixSkips"))
+            return 1;
+
+        ScanExecutionContext minExec;
+        minExec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(minExec.budget.totalBudgetMs));
+        matched.clear();
+        ok = engine.MatchesAnyRegex({"downloadstring"}, "down", matched, &minExec);
+        if (!Expect(!ok, "minLength fast reject skips subject shorter than possible match"))
+            return 1;
+        if (!Expect(minExec.regexCalls == 0, "minLength fast reject does not consume regexCalls budget"))
+            return 1;
+        if (!Expect(minExec.regexPrefixSkips == 1, "minLength fast reject increments regexPrefixSkips"))
+            return 1;
+
+        ScanExecutionContext matchExec;
+        matchExec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(matchExec.budget.totalBudgetMs));
+        matched.clear();
+        ok = engine.MatchesAnyRegex({"downloadstring"}, "Invoke downloadstring now", matched, &matchExec);
+        if (!Expect(ok && matched == "downloadstring", "possible fixed-first-char pattern still reaches pcre2_match"))
+            return 1;
+        if (!Expect(matchExec.regexCalls == 1, "matching pattern consumes exactly one regexCalls budget"))
+            return 1;
+        if (!Expect(matchExec.regexPrefixSkips == 0, "matching pattern is not counted as prefix skipped"))
+            return 1;
+
+        ScanExecutionContext bitmapExec;
+        bitmapExec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(bitmapExec.budget.totalBudgetMs));
+        matched.clear();
+        ok = engine.MatchesAnyRegex({"(?i)amsiutils"}, "ZZZ no useful first byte", matched, &bitmapExec);
+        if (!Expect(!ok, "case-insensitive first bitmap rejects subject with no possible first byte"))
+            return 1;
+        if (!Expect(bitmapExec.regexCalls == 0, "bitmap fast reject does not consume regexCalls budget"))
+            return 1;
+        if (!Expect(bitmapExec.regexPrefixSkips == 1, "bitmap fast reject increments regexPrefixSkips"))
+            return 1;
+
+        ScanExecutionContext anyExec;
+        anyExec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(anyExec.budget.totalBudgetMs));
+        matched.clear();
+        ok = engine.MatchesAnyRegex({".{0,16}IEX"}, "AAAA", matched, &anyExec);
+        if (!Expect(!ok, "pattern without a fixed first byte still evaluates normally"))
+            return 1;
+        if (!Expect(anyExec.regexCalls == 1, "non-prefix-constrained pattern consumes regexCalls budget"))
+            return 1;
+        if (!Expect(anyExec.regexPrefixSkips == 0, "non-prefix-constrained pattern is not prefix skipped"))
+            return 1;
+    }
 #endif
 
     {

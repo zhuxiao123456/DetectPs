@@ -65,7 +65,7 @@ RaspLuaEngine::~RaspLuaEngine()
 #ifdef RASP_PCRE2_AVAILABLE
     std::lock_guard<std::mutex> lk(m_regexMutex);
     for (auto &kv : m_regexCache)
-        pcre2_code_free(kv.second);
+        pcre2_code_free(reinterpret_cast<pcre2_code*>(kv.second.code));
     m_regexCache.clear();
 #endif
 }
@@ -102,6 +102,53 @@ void RaspLuaEngine::LogWithSeverity(RaspDiagSeverity severity, const char *msg) 
 
 namespace {
 
+struct Pcre2ThreadContextCache
+{
+    pcre2_match_context* matchContext = nullptr;
+    pcre2_jit_stack* jitStack = nullptr;
+    bool initialized = false;
+
+    bool Init()
+    {
+        if (initialized)
+            return true;
+
+        matchContext = pcre2_match_context_create(nullptr);
+        if (!matchContext)
+            return false;
+
+        jitStack = pcre2_jit_stack_create(32 * 1024, 512 * 1024, nullptr);
+        if (jitStack)
+            pcre2_jit_stack_assign(matchContext, nullptr, jitStack);
+        initialized = true;
+        return true;
+    }
+
+    void SetBudgetLimits(const ScanExecutionContext* exec)
+    {
+        if (!matchContext)
+            return;
+
+        if (exec) {
+            pcre2_set_match_limit(matchContext, exec->budget.pcre2MatchLimit);
+            pcre2_set_depth_limit(matchContext, exec->budget.pcre2DepthLimit);
+            pcre2_set_heap_limit(matchContext, exec->budget.pcre2HeapLimitKiB);
+        } else {
+            pcre2_set_match_limit(matchContext, 500000);
+        }
+    }
+
+    ~Pcre2ThreadContextCache()
+    {
+        if (jitStack)
+            pcre2_jit_stack_free(jitStack);
+        if (matchContext)
+            pcre2_match_context_free(matchContext);
+    }
+};
+
+static thread_local Pcre2ThreadContextCache t_pcre2ThreadContext;
+
 pcre2_match_context* CreateBudgetedMatchContext(const ScanExecutionContext* exec)
 {
     pcre2_match_context* mctx = pcre2_match_context_create(nullptr);
@@ -116,6 +163,24 @@ pcre2_match_context* CreateBudgetedMatchContext(const ScanExecutionContext* exec
         pcre2_set_match_limit(mctx, 500000);
     }
     return mctx;
+}
+
+pcre2_match_context* AcquireBudgetedMatchContext(const ScanExecutionContext* exec, bool& mustFree)
+{
+    mustFree = false;
+    if (t_pcre2ThreadContext.Init()) {
+        t_pcre2ThreadContext.SetBudgetLimits(exec);
+        return t_pcre2ThreadContext.matchContext;
+    }
+
+    mustFree = true;
+    return CreateBudgetedMatchContext(exec);
+}
+
+void ReleaseBudgetedMatchContext(pcre2_match_context* mctx, bool mustFree)
+{
+    if (mustFree && mctx)
+        pcre2_match_context_free(mctx);
 }
 
 void RecordRegexLimit(int rc, ScanExecutionContext* exec)
@@ -229,13 +294,25 @@ void LogRegexFailure(const RaspLuaEngine* engine,
  * 在MatchesAnyRegex和Lua绑定中，每次调用的匹配限制为500000步，这限制了任何病理模式的回溯（正则的ddos攻击）。
  * 流程: 先查锁，如果缓存有直接返回 -> 编译正则 -> 尝试开启 PCRE2_JIT_COMPLETE 硬件级加速 -> 存入缓存 m_regexCache
  * */
+/*
+ * 函数说明: 编译或复用一个 PCRE2 正则表达式，并把可用于快速拒绝的元数据写入缓存。
+ * 输入:
+ *   pattern - 规则中的 PCRE2 正则表达式字符串。
+ * 输出:
+ *   返回已编译的 pcre2_code 指针；如果 pattern 非法或编译失败，返回 nullptr。
+ * 重点步骤:
+ *   1. 先查快照级缓存，命中则直接返回已编译对象。
+ *   2. 未命中时编译 pattern，并尝试执行 JIT 编译。
+ *   3. 通过 pcre2_pattern_info 自动提取 firstCodeType、firstCodeUnit、firstBitmap、minLength。
+ *   4. 将 compiled code 和元数据作为 CompiledRegexEntry 原子写入缓存。
+ */
 pcre2_real_code_8 *RaspLuaEngine::GetOrCompilePcre2(const std::string &pattern) const
 {
     {
         std::lock_guard<std::mutex> lk(m_regexMutex);
         auto it = m_regexCache.find(pattern);
         if (it != m_regexCache.end())
-            return it->second;
+            return it->second.code;
     }
 
     int errcode = 0;
@@ -262,34 +339,124 @@ pcre2_real_code_8 *RaspLuaEngine::GetOrCompilePcre2(const std::string &pattern) 
     // Best-effort JIT; continues without JIT if platform doesn't support it.
     pcre2_jit_compile(re, PCRE2_JIT_COMPLETE);
 
+    CompiledRegexEntry entry;
+    entry.code = reinterpret_cast<pcre2_real_code_8*>(re);
+
+    /*
+     * 提取 PCRE2 自动计算出的首字符约束。
+     * firstCodeType == 1 表示固定首字符；只有该字符能用单字节表示时才用于 memchr 快速拒绝。
+     * 如果 firstCodeUnit 超出 0xFF，则降级为 firstCodeType == 0，保持缓存条目语义自洽。
+     */
+    uint32_t firstCodeType = 0;
+    if (pcre2_pattern_info(re, PCRE2_INFO_FIRSTCODETYPE, &firstCodeType) == 0)
+        entry.firstCodeType = firstCodeType;
+
+    uint32_t firstCodeUnit = 0;
+    if (entry.firstCodeType == 1 &&
+        pcre2_pattern_info(re, PCRE2_INFO_FIRSTCODEUNIT, &firstCodeUnit) == 0) {
+        if (firstCodeUnit <= 0xFF) {
+            entry.firstCodeUnit = firstCodeUnit;
+        } else {
+            entry.firstCodeType = 0;
+            entry.firstCodeUnit = 0;
+        }
+    }
+
+    /*
+     * firstCodeType == 2 表示 PCRE2 给出了可能首字符集合。
+     * PCRE2 返回的是 32 字节 bitset，覆盖 0..255 的 256 个 byte 值；这里复制到 entry 自有内存，避免保存内部指针。
+     */
+    if (entry.firstCodeType == 2) {
+        const uint8_t* bitmap = nullptr;
+        if (pcre2_pattern_info(re, PCRE2_INFO_FIRSTBITMAP, &bitmap) == 0 && bitmap != nullptr)
+            std::memcpy(entry.firstBitmap, bitmap, sizeof(entry.firstBitmap));
+        else
+            entry.firstCodeType = 0;
+    }
+
+    /*
+     * minLength 是 PCRE2 计算出的最小可能匹配长度。
+     * subject 比该长度短时可以直接跳过，不消耗 regexCalls budget。
+     */
+    PCRE2_SIZE minLength = 0;
+    if (pcre2_pattern_info(re, PCRE2_INFO_MINLENGTH, &minLength) == 0)
+        entry.minLength = static_cast<size_t>(minLength);
+
     {
         std::lock_guard<std::mutex> lk(m_regexMutex);
-        // Check again under lock — another thread may have compiled while we did.
+        // Check again under lock; another thread may have compiled while we did.
         auto it = m_regexCache.find(pattern);
         if (it != m_regexCache.end())
         {
             pcre2_code_free(re); // discard our copy
-            return it->second;
+            return it->second.code;
         }
-        m_regexCache.emplace(pattern, re);
+        m_regexCache.emplace(pattern, entry);
     }
-    return re;
+    return reinterpret_cast<pcre2_real_code_8*>(re);
 }
 
+/*
+ * 函数说明: 从正则缓存中按值取出已编译正则及其快速拒绝元数据。
+ * 输入:
+ *   pattern - 需要查询的正则表达式字符串。
+ *   out     - 输出参数，接收 CompiledRegexEntry 的独立副本。
+ * 输出:
+ *   true  - 缓存命中，out 已填充。
+ *   false - 参数为空或缓存未命中。
+ * 说明:
+ *   该函数不返回缓存内部指针，避免锁释放后 unordered_map rehash 或写入导致调用方持有悬空引用。
+ */
+bool RaspLuaEngine::GetCompiledRegexEntry(const std::string& pattern, CompiledRegexEntry* out) const
+{
+    if (!out)
+        return false;
+    std::lock_guard<std::mutex> lk(m_regexMutex);
+    auto it = m_regexCache.find(pattern);
+    if (it == m_regexCache.end())
+        return false;
+    *out = it->second;
+    return true;
+}
 size_t RaspLuaEngine::RegexCacheSizeForTesting() const
 {
     std::lock_guard<std::mutex> lk(m_regexMutex);
     return m_regexCache.size();
 }
 
+void RaspLuaEngine::PrecompileRegex(const std::vector<std::string>& patterns) const
+{
+    for (const auto& pattern : patterns) {
+        if (!pattern.empty())
+            (void)GetOrCompilePcre2(pattern);
+    }
+}
+
 // ── MatchesAnyRegex ───────────────────────────────────────────────────────────
 
+/*
+ * 函数说明: 使用 C++ PCRE2 路径按顺序匹配多个正则表达式。
+ * 输入:
+ *   patterns          - 待匹配的正则表达式列表。
+ *   text              - 本次 Scan 的检测文本。
+ *   matchedPatternOut - 输出参数，命中时写入第一个命中的 pattern。
+ *   exec              - 可选的扫描预算/telemetry 上下文，用于统计 regexCalls、regexPrefixSkips 和超时状态。
+ * 输出:
+ *   true  - 任意 pattern 命中。
+ *   false - 没有命中、pattern 编译失败、预算耗尽或当前规则遇到 PCRE2 资源限制。
+ * 重点步骤:
+ *   1. 对 text 按 maxRegexSubjectBytes 做长度上限裁剪。
+ *   2. 获取已编译正则和 firstCode/minLength 元数据。
+ *   3. 先执行 literal-prefix fast reject；被拒绝的 pattern 不消耗 regexCalls budget。
+ *   4. 只有无法快速拒绝的 pattern 才进入 TryEnterRegexCall 和 pcre2_match。
+ */
 bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
                                      const std::string &text,
                                      std::string &matchedPatternOut,
                                      ScanExecutionContext *exec) const
 {
     size_t subjectLen = exec ? exec->BoundedRegexSubjectLength(text.size()) : text.size();
+    const char* subjectPtr = text.data();
     for (size_t patternIndex = 0; patternIndex < patterns.size(); ++patternIndex)
     {
         const auto &pat = patterns[patternIndex];
@@ -299,31 +466,67 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
         if (exec)
             exec->SetRegexPatternIndex(static_cast<int>(patternIndex));
 
+        pcre2_code *re = reinterpret_cast<pcre2_code*>(GetOrCompilePcre2(pat));
+        if (!re)
+            continue;
+
+        CompiledRegexEntry entry;
+        bool hasEntry = GetCompiledRegexEntry(pat, &entry);
+        bool fastRejected = false;
+
+        if (hasEntry) {
+            /* 当前文本短于正则最小匹配长度，必然无法命中，直接跳过。 */
+            if (entry.minLength > 0 && subjectLen < entry.minLength) {
+                fastRejected = true;
+            } else if (entry.firstCodeType == 1 && entry.firstCodeUnit <= 0xFF) {
+                fastRejected = std::memchr(subjectPtr,
+                                           static_cast<unsigned char>(entry.firstCodeUnit),
+                                           subjectLen) == nullptr;
+            } else if (entry.firstCodeType == 2) {
+                /* bitmap 是 32 字节 bitset；只要文本里没有任何可能首字符，就可以安全跳过完整匹配。 */
+                bool foundPossibleFirstByte = false;
+                for (size_t i = 0; i < subjectLen; ++i) {
+                    const uint8_t ch = static_cast<uint8_t>(subjectPtr[i]);
+                    if ((entry.firstBitmap[ch >> 3] & static_cast<uint8_t>(1u << (ch & 7))) != 0) {
+                        foundPossibleFirstByte = true;
+                        break;
+                    }
+                }
+                fastRejected = !foundPossibleFirstByte;
+            }
+        }
+
+        if (fastRejected) {
+            if (exec)
+                ++exec->regexPrefixSkips;
+            continue;
+        }
+
+        /* 只有真实进入 pcre2_match 的 pattern 才消耗 regexCalls budget。 */
         if (exec && !exec->TryEnterRegexCall()) {
             LogRegexFailure(this, "MatchesAnyRegex", PCRE2_ERROR_MATCHLIMIT, pat, subjectLen, exec);
             return false;
         }
 
-        pcre2_code *re = GetOrCompilePcre2(pat);
-        if (!re)
-            continue;
-
-        pcre2_match_context *mctx = CreateBudgetedMatchContext(exec);
+        bool mustFreeMctx = false;
+        pcre2_match_context *mctx = AcquireBudgetedMatchContext(exec, mustFreeMctx);
         if (!mctx)
+        {
             LogRegexFailure(this, "MatchesAnyRegex", PCRE2_ERROR_NOMEMORY, pat, subjectLen, exec);
+            continue;
+        }
 
         pcre2_match_data *md = pcre2_match_data_create_from_pattern(re, nullptr);
         if (!md)
         {
             LogRegexFailure(this, "MatchesAnyRegex", PCRE2_ERROR_NOMEMORY, pat, subjectLen, exec);
-            if (mctx)
-                pcre2_match_context_free(mctx);
+            ReleaseBudgetedMatchContext(mctx, mustFreeMctx);
             continue;
         }
 
         int rc = pcre2_match(
             re,
-            reinterpret_cast<PCRE2_SPTR8>(text.c_str()),
+            reinterpret_cast<PCRE2_SPTR8>(subjectPtr),
             subjectLen,
             0, // start offset
             0, // options
@@ -331,8 +534,7 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
             mctx);
 
         pcre2_match_data_free(md);
-        if (mctx)
-            pcre2_match_context_free(mctx);
+        ReleaseBudgetedMatchContext(mctx, mustFreeMctx);
 
         if (rc >= 0)
         {
@@ -347,7 +549,6 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
     }
     return false;
 }
-
 // ── Lua C functions: regex_match / regex_capture ──────────────────────────────
 /*
  * 功能：注册到 Lua 内部的全局函数（供 Lua 脚本调用）。
@@ -393,9 +594,14 @@ static int lua_pcre2_match(lua_State *L)
         return 1;
     }
 
-    pcre2_match_context *mctx = CreateBudgetedMatchContext(exec);
+    bool mustFreeMctx = false;
+    pcre2_match_context *mctx = AcquireBudgetedMatchContext(exec, mustFreeMctx);
     if (!mctx)
+    {
         LogRegexFailure(eng, "lua_regex_match", PCRE2_ERROR_NOMEMORY, std::string(pattern), textLen, exec);
+        lua_pushboolean(L, 0);
+        return 1;
+    }
 
     pcre2_match_data *md = pcre2_match_data_create_from_pattern(re, nullptr);
     int rc = md ? pcre2_match(re,
@@ -405,8 +611,7 @@ static int lua_pcre2_match(lua_State *L)
 
     if (md)
         pcre2_match_data_free(md);
-    if (mctx)
-        pcre2_match_context_free(mctx);
+    ReleaseBudgetedMatchContext(mctx, mustFreeMctx);
 
     RecordRegexLimit(rc, exec);
     LogRegexFailure(eng, "lua_regex_match", rc, std::string(pattern), textLen, exec);
@@ -453,16 +658,20 @@ static int lua_pcre2_capture(lua_State *L)
         return 1;
     }
 
-    pcre2_match_context *mctx = CreateBudgetedMatchContext(exec);
+    bool mustFreeMctx = false;
+    pcre2_match_context *mctx = AcquireBudgetedMatchContext(exec, mustFreeMctx);
     if (!mctx)
+    {
         LogRegexFailure(eng, "lua_regex_capture", PCRE2_ERROR_NOMEMORY, std::string(pattern), textLen, exec);
+        lua_pushnil(L);
+        return 1;
+    }
 
     pcre2_match_data *md = pcre2_match_data_create_from_pattern(re, nullptr);
     if (!md)
     {
         LogRegexFailure(eng, "lua_regex_capture", PCRE2_ERROR_NOMEMORY, std::string(pattern), textLen, exec);
-        if (mctx)
-            pcre2_match_context_free(mctx);
+        ReleaseBudgetedMatchContext(mctx, mustFreeMctx);
         lua_pushnil(L);
         return 1;
     }
@@ -489,8 +698,7 @@ static int lua_pcre2_capture(lua_State *L)
     }
 
     pcre2_match_data_free(md);
-    if (mctx)
-        pcre2_match_context_free(mctx);
+    ReleaseBudgetedMatchContext(mctx, mustFreeMctx);
 
     return 1;
 }

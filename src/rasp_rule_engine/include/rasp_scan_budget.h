@@ -58,6 +58,7 @@ struct ScanExecutionContext
 
     uint32_t rulesEvaluated = 0;
     uint32_t regexCalls = 0;
+    uint32_t regexPrefixSkips = 0;
     uint32_t luaInstructions = 0;
     bool timedOut = false;
     bool regexLimitHit = false;

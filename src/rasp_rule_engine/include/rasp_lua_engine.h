@@ -26,6 +26,7 @@
 #include <vector>
 #include <unordered_map>
 #include <mutex>
+#include <cstdint>
 
 #include "rasp_scan_budget.h"
 #include "legacy_diag_json_builder.h"
@@ -125,6 +126,10 @@ public:
                          std::string&                     matchedPatternOut,
                          ScanExecutionContext*            exec = nullptr) const;
 
+    // Eagerly compile and JIT a batch of PCRE2 patterns into this snapshot-local
+    // cache. Invalid patterns are logged and skipped, matching lazy behavior.
+    void PrecompileRegex(const std::vector<std::string>& patterns) const;
+
     // Compile-or-fetch a PCRE2 pattern from the regex cache.
     // Public only so the static Lua C functions lua_pcre2_match / lua_pcre2_capture
     // (which retrieve the engine pointer via the Lua registry) can call it directly.
@@ -148,11 +153,21 @@ private:
     RaspLuaLeveledLogFn                          m_leveledLogFn = nullptr;
 
 #ifdef RASP_PCRE2_AVAILABLE
+    struct CompiledRegexEntry {
+        pcre2_real_code_8* code = nullptr;
+        uint32_t firstCodeType = 0;
+        uint32_t firstCodeUnit = 0;
+        uint8_t firstBitmap[32] = {};
+        size_t minLength = 0;
+    };
+
     // Snapshot-local PCRE2 compiled-pattern cache. AMSI RuleSnapshot owns one
     // RaspLuaEngine instance, so compiled pcre2_code objects never cross reload
     // snapshot boundaries. GetOrCompilePcre2() attempts best-effort JIT during
     // compile; Layer A only reuses pcre2_code, not per-scan match context/data.
-    mutable std::mutex                                           m_regexMutex;
-    mutable std::unordered_map<std::string, pcre2_real_code_8*> m_regexCache;
+    mutable std::mutex                                          m_regexMutex;
+    mutable std::unordered_map<std::string, CompiledRegexEntry> m_regexCache;
+
+    bool GetCompiledRegexEntry(const std::string& pattern, CompiledRegexEntry* out) const;
 #endif // RASP_PCRE2_AVAILABLE
 };

@@ -1148,6 +1148,13 @@ void AmsiRuleEngine::PrecompileAll(const std::vector <AmsiRaspRuleConfig> &rules
                                    const std::string &libSource,
                                    RaspLuaEngine& luaEngine) {
     for (const auto &rule: rules) {
+#ifdef RASP_PCRE2_AVAILABLE
+        luaEngine.PrecompileRegex(rule.regexPatterns);
+        for (const auto &check : rule.regexChecks) {
+            luaEngine.PrecompileRegex(check.patterns);
+        }
+#endif
+
         if (rule.scriptBodyBase64.empty())
             continue;
 
@@ -1723,11 +1730,12 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
         const uint64_t costMs = GetTickCount64() - ruleEvalStartMs;
         const uint32_t rulesVisited = blockStats.rulesVisited + alertStats.rulesVisited;
         LogWithSeverity(RaspDiagSeverity::Debug,
-                        "[RaspAmsi][perf] rule_eval costMs=%llu rulesVisited=%lu rulesTotal=%zu regexCalls=%u matched=%d block=%d timedOut=%d currentLen=%zu evalLen=%zu appendAllowed=%d appendSkipReason=%s blockRulesVisited=%lu alertRulesVisited=%lu blockRegexCalls=%lu alertRegexCalls=%lu blockMatched=%d alertMatched=%d",
+                        "[RaspAmsi][perf] rule_eval costMs=%llu rulesVisited=%lu rulesTotal=%zu regexCalls=%u regexPrefixSkips=%u matched=%d block=%d timedOut=%d currentLen=%zu evalLen=%zu appendAllowed=%d appendSkipReason=%s blockRulesVisited=%lu alertRulesVisited=%lu blockRegexCalls=%lu alertRegexCalls=%lu blockMatched=%d alertMatched=%d",
                         static_cast<unsigned long long>(costMs),
                         static_cast<unsigned long>(rulesVisited),
                         snap->rules.size(),
                         exec.regexCalls,
+                        exec.regexPrefixSkips,
                         results.empty() ? 0 : 1,
                         hasBlock ? 1 : 0,
                         exec.timedOut ? 1 : 0,

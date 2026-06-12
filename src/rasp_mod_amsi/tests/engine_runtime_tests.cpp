@@ -93,8 +93,8 @@ public:
 
         if (first->luaEngine.get() == second->luaEngine.get())
             return false;
-        if (first->luaEngine->RegexCacheSizeForTesting() != 0 ||
-            second->luaEngine->RegexCacheSizeForTesting() != 0)
+        if (first->luaEngine->RegexCacheSizeForTesting() < 1 ||
+            second->luaEngine->RegexCacheSizeForTesting() < 1)
             return false;
 
         ScanExecutionContext firstExec;
@@ -105,8 +105,8 @@ public:
                                                matched,
                                                &firstExec))
             return false;
-        if (first->luaEngine->RegexCacheSizeForTesting() != 1 ||
-            second->luaEngine->RegexCacheSizeForTesting() != 0)
+        if (first->luaEngine->RegexCacheSizeForTesting() < 1 ||
+            second->luaEngine->RegexCacheSizeForTesting() < 1)
             return false;
 
         ScanExecutionContext secondExec;
@@ -117,8 +117,8 @@ public:
                                                 matched,
                                                 &secondExec))
             return false;
-        if (first->luaEngine->RegexCacheSizeForTesting() != 1 ||
-            second->luaEngine->RegexCacheSizeForTesting() != 1)
+        if (first->luaEngine->RegexCacheSizeForTesting() < 1 ||
+            second->luaEngine->RegexCacheSizeForTesting() < 1)
             return false;
 
         ScanExecutionContext oldScanAfterSecondBuild;
@@ -129,7 +129,7 @@ public:
                                                  "IEX remains available",
                                                  matched,
                                                  &oldScanAfterSecondBuild) &&
-               first->luaEngine->RegexCacheSizeForTesting() == 1;
+               first->luaEngine->RegexCacheSizeForTesting() >= 1;
 #else
         (void)firstJson;
         (void)secondJson;
@@ -249,6 +249,13 @@ std::string OneRegexRuleJson(const char* id, const char* pattern)
     return std::string("{\"rules\":[{\"id\":\"") + id +
            "\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\",\"description\":\"split_regex\",\"config\":{\"regexPatterns\":[\"" +
            pattern + "\"]}}]}";
+}
+
+std::string MultiRegexRuleJson()
+{
+    return "{\"rules\":[{\"id\":\"multi_regex_snapshot\",\"sensor\":\"AmsiProvider\","
+           "\"enabled\":true,\"mode\":\"block\",\"description\":\"multi_regex\","
+           "\"config\":{\"regexPatterns\":[\"IEX\",\"DownloadString\",\"AmsiUtils\"]}}]}";
 }
 
 std::string RateLimitedRegexRuleJson(uint32_t maxScans, double bypassRatio)
@@ -683,6 +690,18 @@ static bool RunEngineRuntimeTestGroup2()
                         OneRegexRuleJson("regex_old_snapshot", "IEX"),
                         OneRegexRuleJson("regex_new_snapshot", "DownloadString")),
                     "regex compiled cache is isolated per snapshot-local Lua engine"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        std::string effectiveLib;
+        auto snapshot = engine.BuildNextSnapshot(MultiRegexRuleJson(), "", effectiveLib);
+        if (!Expect(snapshot && snapshot->luaEngine,
+                    "multi regex snapshot publishes with Lua engine"))
+            return false;
+        if (!Expect(snapshot->luaEngine->RegexCacheSizeForTesting() >= 3,
+                    "multi regex rule precompiles all regex patterns"))
             return false;
     }
 #endif
