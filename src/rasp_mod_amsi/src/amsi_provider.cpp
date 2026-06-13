@@ -4,6 +4,7 @@
 
 #include <new>
 #include <memory>
+#include <cstring>
 #include <vector>
 
 #include "../include/rasp_mod_amsi.h"
@@ -28,6 +29,19 @@ void NullTerminateAmsiWideAttribute(wchar_t (&buffer)[N], ULONG bytesWritten)
         charsWritten = N - 1;
     buffer[charsWritten] = L'\0';
     buffer[N - 1] = L'\0';
+}
+
+bool SafeCopyAmsiContentAddress(void* dst, const void* src, size_t bytes)
+{
+    if (!dst || !src || bytes == 0)
+        return false;
+
+    __try {
+        std::memcpy(dst, src, bytes);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
 }
 
 } // namespace
@@ -113,14 +127,22 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
 
     PVOID contentAddr = nullptr;
     ULONG addrOut = 0;
+    bool copiedFromAddress = false;
     if (SUCCEEDED(stream->GetAttribute(AMSI_ATTRIBUTE_CONTENT_ADDRESS,
                                        static_cast<ULONG>(sizeof(contentAddr)),
                                        reinterpret_cast<PBYTE>(&contentAddr), &addrOut)) &&
         contentAddr != nullptr && contentSize > 0) {
         ULONG toCopy = static_cast<ULONG>(min(contentSize, static_cast<ULONGLONG>(sample.size() - 1)));
-        memcpy(sample.data(), contentAddr, toCopy);
-        sampleRead = toCopy;
-    } else {
+        if (SafeCopyAmsiContentAddress(sample.data(), contentAddr, toCopy)) {
+            sampleRead = toCopy;
+            copiedFromAddress = true;
+        } else {
+            runtime.LogWithSeverity(RaspDiagSeverity::Warning,
+                                    "[AMSI:Scan] content address copy failed - falling back to Read");
+        }
+    }
+
+    if (!copiedFromAddress) {
         HRESULT hrRead = stream->Read(0, static_cast<ULONG>(sample.size() - 1),
                                       reinterpret_cast<unsigned char *>(sample.data()), &sampleRead);
         runtime.LogWithSeverity(RaspDiagSeverity::Debug,
@@ -168,9 +190,10 @@ IFACEMETHODIMP CRaspAmsiProvider::Scan(IAmsiStream *stream, AMSI_RESULT *result)
         }
     }
 
-    const ProcessContextSnapshot& process = GetProcessContextProvider().GetSnapshot();
+    auto processSnapshot = GetProcessContextProvider().GetSnapshot();
     ScanContext scanContext;
-    scanContext.process = &process;
+    scanContext.processSnapshot = processSnapshot;
+    scanContext.process = processSnapshot.get();
     scanContext.emitProcessPathFields = false;
 
     AmsiEvalResult eval = engine->Evaluate(contentName, appName, evalSample, evalLen, scanContext);

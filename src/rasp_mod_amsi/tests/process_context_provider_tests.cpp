@@ -98,28 +98,28 @@ bool TestSuccessSnapshotIsImmutable()
     FakeProcessContextPlatform fake;
     ProcessContextProvider provider(fake);
 
-    const auto& first = provider.GetSnapshot();
-    if (!Expect(first.valid, "success snapshot is valid"))
+    auto first = provider.GetSnapshot();
+    if (!Expect(first->valid, "success snapshot is valid"))
         return false;
-    if (!Expect(first.parentResolved, "success snapshot resolves parent"))
+    if (!Expect(first->parentResolved, "success snapshot resolves parent"))
         return false;
-    if (!Expect(first.status == ProcessCaptureStatus::Success, "success status"))
+    if (!Expect(first->status == ProcessCaptureStatus::Success, "success status"))
         return false;
-    if (!Expect(first.currentPid == 4242, "current pid captured"))
+    if (!Expect(first->currentPid == 4242, "current pid captured"))
         return false;
-    if (!Expect(first.currentProcessName == "powershell.exe", "current basename preserved"))
+    if (!Expect(first->currentProcessName == "powershell.exe", "current basename preserved"))
         return false;
-    if (!Expect(first.parentPid == 100, "parent pid captured"))
+    if (!Expect(first->parentPid == 100, "parent pid captured"))
         return false;
-    if (!Expect(first.parentProcessName == "cmd.exe", "parent basename preserved"))
+    if (!Expect(first->parentProcessName == "cmd.exe", "parent basename preserved"))
         return false;
 
     fake.parentPid = 200;
     fake.parentPath = L"C:\\Windows\\System32\\wscript.exe";
-    const auto& second = provider.GetSnapshot();
-    if (!Expect(&first == &second, "successful snapshot reference is stable"))
+    auto second = provider.GetSnapshot();
+    if (!Expect(first.get() == second.get(), "successful snapshot reference is stable"))
         return false;
-    if (!Expect(second.parentPid == 100, "successful snapshot is not refreshed"))
+    if (!Expect(second->parentPid == 100, "successful snapshot is not refreshed"))
         return false;
     return Expect(fake.queryParentPidCalls == 1, "success path captures parent once");
 }
@@ -131,16 +131,16 @@ bool TestParentOpenDeniedKeepsValidSnapshot()
     fake.parentPathError = 5;
 
     ProcessContextProvider provider(fake);
-    const auto& snapshot = provider.GetSnapshot();
-    if (!Expect(snapshot.valid, "current process context remains valid when parent open is denied"))
+    auto snapshot = provider.GetSnapshot();
+    if (!Expect(snapshot->valid, "current process context remains valid when parent open is denied"))
         return false;
-    if (!Expect(!snapshot.parentResolved, "parent is unresolved on access denied"))
+    if (!Expect(!snapshot->parentResolved, "parent is unresolved on access denied"))
         return false;
-    if (!Expect(snapshot.status == ProcessCaptureStatus::ParentOpenDenied, "access denied status"))
+    if (!Expect(snapshot->status == ProcessCaptureStatus::ParentOpenDenied, "access denied status"))
         return false;
-    if (!Expect(snapshot.parentPid == fake.parentPid, "parent pid retained on access denied"))
+    if (!Expect(snapshot->parentPid == fake.parentPid, "parent pid retained on access denied"))
         return false;
-    return Expect(snapshot.parentProcessName.empty(), "unavailable parent name is empty string");
+    return Expect(snapshot->parentProcessName.empty(), "unavailable parent name is empty string");
 }
 
 bool TestParentProcessExitedStatus()
@@ -150,8 +150,8 @@ bool TestParentProcessExitedStatus()
     fake.parentPathError = 87;
 
     ProcessContextProvider provider(fake);
-    const auto& snapshot = provider.GetSnapshot();
-    return Expect(snapshot.status == ProcessCaptureStatus::ParentProcessExited,
+    auto snapshot = provider.GetSnapshot();
+    return Expect(snapshot->status == ProcessCaptureStatus::ParentProcessExited,
                   "invalid parameter maps to parent process exited");
 }
 
@@ -161,14 +161,14 @@ bool TestParentSystemStatus()
     fake.parentPid = 4;
 
     ProcessContextProvider provider(fake);
-    const auto& snapshot = provider.GetSnapshot();
-    if (!Expect(snapshot.valid, "system parent snapshot is valid"))
+    auto snapshot = provider.GetSnapshot();
+    if (!Expect(snapshot->valid, "system parent snapshot is valid"))
         return false;
-    if (!Expect(snapshot.parentResolved, "system parent is resolved"))
+    if (!Expect(snapshot->parentResolved, "system parent is resolved"))
         return false;
-    if (!Expect(snapshot.status == ProcessCaptureStatus::ParentSystem, "system parent status"))
+    if (!Expect(snapshot->status == ProcessCaptureStatus::ParentSystem, "system parent status"))
         return false;
-    return Expect(snapshot.parentProcessName == "System", "system parent name is stable sentinel");
+    return Expect(snapshot->parentProcessName == "System", "system parent name is stable sentinel");
 }
 
 bool TestRetrySnapshotAndBackoff()
@@ -178,20 +178,20 @@ bool TestRetrySnapshotAndBackoff()
     fake.parentPidError = 0xC0000001;
 
     ProcessContextProvider provider(fake);
-    const auto& first = provider.GetSnapshot();
-    if (!Expect(first.valid, "ppid failure still returns current process snapshot"))
+    auto first = provider.GetSnapshot();
+    if (!Expect(first->valid, "ppid failure still returns current process snapshot"))
         return false;
-    if (!Expect(first.status == ProcessCaptureStatus::PpidQueryFailed, "first failure preserves root cause"))
+    if (!Expect(first->status == ProcessCaptureStatus::PpidQueryFailed, "first failure preserves root cause"))
         return false;
-    if (!Expect(first.retryState == ProcessRetryState::Pending, "first failure enters retry pending"))
+    if (!Expect(first->retryState == ProcessRetryState::Pending, "first failure enters retry pending"))
         return false;
     if (!Expect(fake.queryParentPidCalls == 1, "first failure attempts ppid query"))
         return false;
 
-    const auto& second = provider.GetSnapshot();
-    if (!Expect(second.status == ProcessCaptureStatus::PpidQueryFailed, "before backoff preserves root cause"))
+    auto second = provider.GetSnapshot();
+    if (!Expect(second->status == ProcessCaptureStatus::PpidQueryFailed, "before backoff preserves root cause"))
         return false;
-    if (!Expect(second.retryState == ProcessRetryState::Pending, "before backoff returns retry snapshot"))
+    if (!Expect(second->retryState == ProcessRetryState::Pending, "before backoff returns retry snapshot"))
         return false;
     if (!Expect(fake.queryParentPidCalls == 1, "before backoff does not retry"))
         return false;
@@ -207,12 +207,12 @@ bool TestRetrySnapshotAndBackoff()
         return false;
 
     fake.tick += 30000;
-    const auto& exhausted = provider.GetSnapshot();
+    auto exhausted = provider.GetSnapshot();
     if (!Expect(fake.queryParentPidCalls == 3, "retry exhausted does not attempt fourth capture"))
         return false;
-    if (!Expect(exhausted.status == ProcessCaptureStatus::PpidQueryFailed, "retry exhausted preserves root cause"))
+    if (!Expect(exhausted->status == ProcessCaptureStatus::PpidQueryFailed, "retry exhausted preserves root cause"))
         return false;
-    return Expect(exhausted.retryState == ProcessRetryState::Exhausted, "retry exhausted state");
+    return Expect(exhausted->retryState == ProcessRetryState::Exhausted, "retry exhausted state");
 }
 
 bool TestFailureThenSuccessClearsRetry()
@@ -226,17 +226,17 @@ bool TestFailureThenSuccessClearsRetry()
     fake.tick += 1000;
     fake.parentPidResult = ParentPidQueryResult::Success;
 
-    const auto& success = provider.GetSnapshot();
-    if (!Expect(success.status == ProcessCaptureStatus::Success, "retry can recover to success"))
+    auto success = provider.GetSnapshot();
+    if (!Expect(success->status == ProcessCaptureStatus::Success, "retry can recover to success"))
         return false;
-    if (!Expect(success.parentResolved, "recovered snapshot resolves parent"))
+    if (!Expect(success->parentResolved, "recovered snapshot resolves parent"))
         return false;
 
     fake.parentPid = 300;
     fake.parentPath = L"C:\\Windows\\System32\\mshta.exe";
     fake.tick += 30000;
-    const auto& stable = provider.GetSnapshot();
-    if (!Expect(stable.parentPid == 100, "successful retry result is frozen"))
+    auto stable = provider.GetSnapshot();
+    if (!Expect(stable->parentPid == 100, "successful retry result is frozen"))
         return false;
     return Expect(fake.queryParentPidCalls == 2, "success clears retry path");
 }
@@ -247,11 +247,11 @@ bool TestNtdllUnavailableIsObservable()
     fake.parentPidResult = ParentPidQueryResult::NtdllUnavailable;
 
     ProcessContextProvider provider(fake);
-    const auto& snapshot = provider.GetSnapshot();
-    if (!Expect(snapshot.status == ProcessCaptureStatus::NtdllUnavailable,
+    auto snapshot = provider.GetSnapshot();
+    if (!Expect(snapshot->status == ProcessCaptureStatus::NtdllUnavailable,
                 "ntdll unavailable is observable"))
         return false;
-    return Expect(snapshot.retryState == ProcessRetryState::Pending,
+    return Expect(snapshot->retryState == ProcessRetryState::Pending,
                   "ntdll unavailable can be retried");
 }
 
@@ -261,11 +261,11 @@ bool TestNtQuerySymbolUnavailableIsObservable()
     fake.parentPidResult = ParentPidQueryResult::SymbolUnavailable;
 
     ProcessContextProvider provider(fake);
-    const auto& snapshot = provider.GetSnapshot();
-    if (!Expect(snapshot.status == ProcessCaptureStatus::NtQuerySymbolUnavailable,
+    auto snapshot = provider.GetSnapshot();
+    if (!Expect(snapshot->status == ProcessCaptureStatus::NtQuerySymbolUnavailable,
                 "ntquery symbol unavailable is observable"))
         return false;
-    return Expect(ProcessCaptureStatusToString(snapshot.status) ==
+    return Expect(ProcessCaptureStatusToString(snapshot->status) ==
                       std::string("ntquery-symbol-unavailable"),
                   "ntquery symbol unavailable has stable string form");
 }
@@ -289,12 +289,12 @@ bool TestParentPathQueryFailedIsDistinct()
     fake.parentPathError = 1234;
 
     ProcessContextProvider provider(fake);
-    const auto& snapshot = provider.GetSnapshot();
-    if (!Expect(snapshot.status == ProcessCaptureStatus::ParentPathQueryFailed,
+    auto snapshot = provider.GetSnapshot();
+    if (!Expect(snapshot->status == ProcessCaptureStatus::ParentPathQueryFailed,
                 "path query failure is distinct from internal error"))
         return false;
-    return Expect(snapshot.errorDomain == ProcessErrorDomain::Win32 &&
-                      snapshot.nativeError == 1234,
+    return Expect(snapshot->errorDomain == ProcessErrorDomain::Win32 &&
+                      snapshot->nativeError == 1234,
                   "path query failure records win32 error domain");
 }
 
@@ -311,12 +311,12 @@ bool TestRetryExhaustedIsFastTerminalSnapshot()
     fake.tick += 5000;
     provider.GetSnapshot();
     fake.tick += 30000;
-    const auto& exhausted = provider.GetSnapshot();
+    auto exhausted = provider.GetSnapshot();
     const int callsAtExhaustion = fake.queryParentPidCalls;
 
     fake.tick += 30000;
-    const auto& stillExhausted = provider.GetSnapshot();
-    if (!Expect(&exhausted == &stillExhausted,
+    auto stillExhausted = provider.GetSnapshot();
+    if (!Expect(exhausted.get() == stillExhausted.get(),
                 "retry exhausted snapshot is reused as terminal failure"))
         return false;
     return Expect(fake.queryParentPidCalls == callsAtExhaustion,
@@ -336,13 +336,40 @@ bool TestSnapshotStorageIsBounded()
     fake.tick += 5000;
     provider.GetSnapshot();
     fake.tick += 30000;
-    const auto& exhausted = provider.GetSnapshot();
+    auto exhausted = provider.GetSnapshot();
 
-    if (!Expect(exhausted.retryState == ProcessRetryState::Exhausted,
+    if (!Expect(exhausted->retryState == ProcessRetryState::Exhausted,
                 "test reaches exhausted retry state"))
         return false;
     return Expect(provider.SnapshotCountForTesting() <= 4,
                   "snapshot storage is bounded");
+}
+
+bool TestHeldSnapshotSurvivesStorageEviction()
+{
+    FakeProcessContextPlatform fake;
+    fake.parentPidResult = ParentPidQueryResult::QueryFailed;
+    fake.parentPidError = 0xC0000001;
+
+    ProcessContextProvider provider(fake);
+    auto held = provider.GetSnapshot();
+    const uint32_t heldPid = held->currentPid;
+
+    fake.tick += 1000;
+    provider.GetSnapshot();
+    fake.tick += 5000;
+    provider.GetSnapshot();
+    fake.tick += 30000;
+    provider.GetSnapshot();
+
+    if (!Expect(provider.SnapshotCountForTesting() <= 4,
+                "provider storage remains bounded while caller holds old snapshot"))
+        return false;
+    if (!Expect(held->currentPid == heldPid,
+                "held snapshot remains readable after provider storage eviction"))
+        return false;
+    return Expect(held->status == ProcessCaptureStatus::PpidQueryFailed,
+                  "held snapshot preserves original status after eviction");
 }
 
 bool TestConcurrentGetSnapshot()
@@ -351,16 +378,16 @@ bool TestConcurrentGetSnapshot()
     ProcessContextProvider provider(fake);
 
     std::vector<std::thread> threads;
-    std::vector<const ProcessContextSnapshot*> snapshots(16, nullptr);
+    std::vector<std::shared_ptr<const ProcessContextSnapshot>> snapshots(16);
     for (size_t i = 0; i < snapshots.size(); ++i) {
         threads.emplace_back([&provider, &snapshots, i]() {
-            snapshots[i] = &provider.GetSnapshot();
+            snapshots[i] = provider.GetSnapshot();
         });
     }
     for (auto& thread : threads)
         thread.join();
 
-    for (const auto* snapshot : snapshots) {
+    for (const auto& snapshot : snapshots) {
         if (!Expect(snapshot != nullptr, "concurrent snapshot pointer is non-null"))
             return false;
         if (!Expect(snapshot->valid || snapshot->status == ProcessCaptureStatus::Initializing,
@@ -376,23 +403,23 @@ bool TestConcurrentInitialCaptureReturnsInitializing()
     fake.delayParentPid = true;
     ProcessContextProvider provider(fake);
 
-    const ProcessContextSnapshot* first = nullptr;
+    std::shared_ptr<const ProcessContextSnapshot> first;
     std::thread captureThread([&]() {
-        first = &provider.GetSnapshot();
+        first = provider.GetSnapshot();
     });
 
     for (int i = 0; i < 100 && !fake.enteredParentPid.load(std::memory_order_acquire); ++i)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-    const auto& duringCapture = provider.GetSnapshot();
+    auto duringCapture = provider.GetSnapshot();
     captureThread.join();
 
     if (!Expect(first != nullptr, "first capture thread returned a snapshot"))
         return false;
-    if (!Expect(duringCapture.status == ProcessCaptureStatus::Initializing,
+    if (!Expect(duringCapture->status == ProcessCaptureStatus::Initializing,
                 "lock contention during first capture returns initializing snapshot"))
         return false;
-    return Expect(!duringCapture.valid, "initializing snapshot is not falsely valid");
+    return Expect(!duringCapture->valid, "initializing snapshot is not falsely valid");
 }
 
 } // namespace
@@ -412,6 +439,7 @@ int main()
     failures += TestParentPathQueryFailedIsDistinct() ? 0 : 1;
     failures += TestRetryExhaustedIsFastTerminalSnapshot() ? 0 : 1;
     failures += TestSnapshotStorageIsBounded() ? 0 : 1;
+    failures += TestHeldSnapshotSurvivesStorageEviction() ? 0 : 1;
     failures += TestConcurrentGetSnapshot() ? 0 : 1;
     failures += TestConcurrentInitialCaptureReturnsInitializing() ? 0 : 1;
 

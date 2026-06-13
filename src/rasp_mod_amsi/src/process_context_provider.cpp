@@ -247,27 +247,27 @@ ProcessContextProvider::ProcessContextProvider(IProcessContextPlatform& platform
     PublishSnapshotLocked(MakeSnapshot(ProcessCaptureStatus::Initializing));
 }
 
-const ProcessContextSnapshot& ProcessContextProvider::GetSnapshot()
+std::shared_ptr<const ProcessContextSnapshot> ProcessContextProvider::GetSnapshot()
 {
-    const ProcessContextSnapshot* current = publishedSnapshot_.load(std::memory_order_acquire);
+    auto current = std::atomic_load_explicit(&publishedSnapshot_, std::memory_order_acquire);
     if (current && current->valid &&
         (IsTerminalSnapshotStatus(current->status) ||
          current->retryState == ProcessRetryState::Exhausted))
-        return *current;
+        return current;
 
     std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
     if (!lock.owns_lock())
-        return *current;
+        return current;
 
-    current = publishedSnapshot_.load(std::memory_order_acquire);
+    current = std::atomic_load_explicit(&publishedSnapshot_, std::memory_order_acquire);
     if (current && current->valid &&
         (IsTerminalSnapshotStatus(current->status) ||
          current->retryState == ProcessRetryState::Exhausted))
-        return *current;
+        return current;
 
     const uint64_t now = platform_.MonotonicTickMs();
     if (!ShouldRetryLocked(now))
-        return *current;
+        return current;
 
     ProcessContextSnapshot initializing = current ? *current : MakeSnapshot(ProcessCaptureStatus::Uninitialized);
     initializing.status = ProcessCaptureStatus::Initializing;
@@ -280,7 +280,7 @@ const ProcessContextSnapshot& ProcessContextProvider::GetSnapshot()
         PublishFailureLocked(captured, now);
     }
 
-    return *publishedSnapshot_.load(std::memory_order_acquire);
+    return std::atomic_load_explicit(&publishedSnapshot_, std::memory_order_acquire);
 }
 
 size_t ProcessContextProvider::SnapshotCountForTesting() const
@@ -391,13 +391,13 @@ void ProcessContextProvider::PublishSuccessLocked(ProcessContextSnapshot snapsho
 void ProcessContextProvider::PublishSnapshotLocked(ProcessContextSnapshot snapshot)
 {
     auto owned = std::make_shared<ProcessContextSnapshot>(std::move(snapshot));
-    const ProcessContextSnapshot* raw = owned.get();
     snapshots_.push_back(std::move(owned));
+    std::shared_ptr<const ProcessContextSnapshot> published = snapshots_.back();
     constexpr size_t kMaxSnapshots = 4;
     while (snapshots_.size() > kMaxSnapshots) {
         snapshots_.erase(snapshots_.begin());
     }
-    publishedSnapshot_.store(raw, std::memory_order_release);
+    std::atomic_store_explicit(&publishedSnapshot_, published, std::memory_order_release);
 }
 
 IProcessContextPlatform& GetDefaultProcessContextPlatform()

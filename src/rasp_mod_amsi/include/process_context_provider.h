@@ -85,7 +85,7 @@ class ProcessContextProvider {
 public:
     explicit ProcessContextProvider(IProcessContextPlatform& platform);
 
-    const ProcessContextSnapshot& GetSnapshot();
+    std::shared_ptr<const ProcessContextSnapshot> GetSnapshot();
     size_t SnapshotCountForTesting() const;
 
 private:
@@ -98,7 +98,7 @@ private:
     IProcessContextPlatform& platform_;
     mutable std::mutex mutex_;
     std::vector<std::shared_ptr<const ProcessContextSnapshot>> snapshots_;
-    std::atomic<const ProcessContextSnapshot*> publishedSnapshot_;
+    std::shared_ptr<const ProcessContextSnapshot> publishedSnapshot_;
     uint32_t failedAttempts_ = 0;
     uint64_t nextRetryTickMs_ = 0;
 };

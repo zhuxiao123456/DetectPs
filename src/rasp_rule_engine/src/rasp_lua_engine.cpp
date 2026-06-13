@@ -56,6 +56,15 @@ namespace {
         return reader->data;
     }
 
+    int SafeLuaPCall(lua_State* L, int nargs, int nresults, int errfunc)
+    {
+        __try {
+            return lua_pcall(L, nargs, nresults, errfunc);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            return LUA_ERRRUN;
+        }
+    }
+
 } // namespace
 
 // ── Destructor ────────────────────────────────────────────────────────────────
@@ -101,6 +110,21 @@ void RaspLuaEngine::LogWithSeverity(RaspDiagSeverity severity, const char *msg) 
 #ifdef RASP_PCRE2_AVAILABLE
 
 namespace {
+
+int SafePcre2Match(pcre2_code* re,
+                   PCRE2_SPTR8 subject,
+                   PCRE2_SIZE length,
+                   PCRE2_SIZE startOffset,
+                   uint32_t options,
+                   pcre2_match_data* matchData,
+                   pcre2_match_context* matchContext)
+{
+    __try {
+        return pcre2_match(re, subject, length, startOffset, options, matchData, matchContext);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return PCRE2_ERROR_INTERNAL;
+    }
+}
 
 struct Pcre2ThreadContextCache
 {
@@ -547,7 +571,7 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
             continue;
         }
 
-        int rc = pcre2_match(
+        int rc = SafePcre2Match(
             re,
             reinterpret_cast<PCRE2_SPTR8>(subjectPtr),
             subjectLen,
@@ -627,9 +651,9 @@ static int lua_pcre2_match(lua_State *L)
     }
 
     pcre2_match_data *md = pcre2_match_data_create_from_pattern(re, nullptr);
-    int rc = md ? pcre2_match(re,
-                              reinterpret_cast<PCRE2_SPTR8>(text), textLen,
-                              0, 0, md, mctx)
+    int rc = md ? SafePcre2Match(re,
+                                 reinterpret_cast<PCRE2_SPTR8>(text), textLen,
+                                 0, 0, md, mctx)
                 : PCRE2_ERROR_NOMEMORY;
 
     if (md)
@@ -699,9 +723,9 @@ static int lua_pcre2_capture(lua_State *L)
         return 1;
     }
 
-    int rc = pcre2_match(re,
-                         reinterpret_cast<PCRE2_SPTR8>(text), textLen,
-                         0, 0, md, mctx);
+    int rc = SafePcre2Match(re,
+                            reinterpret_cast<PCRE2_SPTR8>(text), textLen,
+                            0, 0, md, mctx);
     RecordRegexLimit(rc, exec);
     LogRegexFailure(eng, "lua_regex_capture", rc, std::string(pattern), textLen, exec);
 
@@ -972,7 +996,7 @@ RaspLuaResult RaspLuaEngine::Run(
         lua_close(L);
         return result;
     }
-    if (lua_pcall(L, 0, 0, 0) != LUA_OK)
+    if (SafeLuaPCall(L, 0, 0, 0) != LUA_OK)
     {
         const char *err = lua_tostring(L, -1);
         char msg[512];
@@ -1045,7 +1069,7 @@ RaspLuaResult RaspLuaEngine::Run(
     }
 
     // ── Phase 9: call rule(sensor, context) ──────────────────────────────────
-    if (lua_pcall(L, 2, 1, 0) != LUA_OK)
+    if (SafeLuaPCall(L, 2, 1, 0) != LUA_OK)
     {
         const char *err = lua_tostring(L, -1);
         char msg[512];

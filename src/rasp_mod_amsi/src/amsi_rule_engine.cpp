@@ -1214,7 +1214,8 @@ void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
 
 void AmsiRuleEngine::FillDiagnosticLogContext(LegacyDiagJsonBuildInput& input) const
 {
-    const ProcessContextSnapshot& process = GetProcessContextProvider().GetSnapshot();
+    auto processSnapshot = GetProcessContextProvider().GetSnapshot();
+    const ProcessContextSnapshot& process = *processSnapshot;
 
     input.pid = process.currentPid != 0 ? process.currentPid : GetCurrentProcessId();
     char pidText[16] = {};
@@ -1385,11 +1386,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             normalizerNulls = f.value;
     }
 
-    std::string matchedTrustProcess;
-    if (TrustProcessMatches(snap->trustProcessPaths, scanContext, &matchedTrustProcess)) {
-        LogWithSeverity(RaspDiagSeverity::Debug, "trust_process skip: parentProcessPath=%s matched=%s",
-                        scanContext->process->parentProcessPath.c_str(),
-                        matchedTrustProcess.c_str());
+    if (TrustProcessMatches(snap->trustProcessPaths, scanContext, nullptr)) {
         return results;
     }
 

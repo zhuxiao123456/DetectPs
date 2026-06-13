@@ -431,6 +431,41 @@ int main()
     }
 
     {
+        auto huge = Parse(R"json({"maxScanContentBytes":999999999999999999999999999999,"totalScanTimeoutMs":999999999999999999999999999999,"rules":[{"id":"r"}]})json");
+        if (!Expect(huge.maxScanContentBytes == kMaxMaxScanContentBytes,
+                    "huge maxScanContentBytes clamps without integer overflow"))
+            return 1;
+        if (!Expect(huge.totalScanTimeoutMs == kMaxTotalScanTimeoutMs,
+                    "huge totalScanTimeoutMs clamps without integer overflow"))
+            return 1;
+
+        auto negativeHuge = Parse(R"json({"maxScanContentBytes":-999999999999999999999999999999,"rules":[{"id":"r"}]})json");
+        if (!Expect(negativeHuge.maxScanContentBytes == kMinMaxScanContentBytes,
+                    "huge negative maxScanContentBytes clamps without integer overflow"))
+            return 1;
+    }
+
+    {
+        auto result = Parse(R"json({"trust_process":["C:\u005cTools\u005cLauncher.exe"],"rules":[{"id":"rule-\u0041","sensor":"AmsiProvider","description":"\u4e2d\u6587","config":{"regexField":"body","regexPatterns":["\u0041MSI"]}}]})json");
+        if (!Expect(result.ok, "unicode escaped json parses"))
+            return 1;
+        if (!Expect(result.trustProcessPaths.size() == 1 &&
+                    result.trustProcessPaths[0] == "C:\\Tools\\Launcher.exe",
+                    "unicode escape is decoded in trust_process string"))
+            return 1;
+        if (!Expect(result.rules.size() == 1 && result.rules[0]->id == "rule-A",
+                    "unicode escape is decoded in rule id"))
+            return 1;
+        if (!Expect(result.rules[0]->description == "\xE4\xB8\xAD\xE6\x96\x87",
+                    "unicode escape is decoded to UTF-8 in description"))
+            return 1;
+        if (!Expect(result.rules[0]->regexPatterns.size() == 1 &&
+                    result.rules[0]->regexPatterns[0] == "AMSI",
+                    "unicode escape is decoded in regex pattern"))
+            return 1;
+    }
+
+    {
         auto result = Parse("");
         if (!Expect(!result.ok, "empty json fails"))
             return 1;

@@ -3,8 +3,53 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 
 namespace {
+
+int HexValue(char ch)
+{
+    if (ch >= '0' && ch <= '9')
+        return ch - '0';
+    if (ch >= 'a' && ch <= 'f')
+        return 10 + (ch - 'a');
+    if (ch >= 'A' && ch <= 'F')
+        return 10 + (ch - 'A');
+    return -1;
+}
+
+bool ReadJsonUnicodeEscape(const char* p, const char* end, uint32_t& value)
+{
+    if (end - p < 4)
+        return false;
+    value = 0;
+    for (int i = 0; i < 4; ++i) {
+        const int digit = HexValue(p[i]);
+        if (digit < 0)
+            return false;
+        value = (value << 4) | static_cast<uint32_t>(digit);
+    }
+    return true;
+}
+
+void AppendUtf8(uint32_t cp, std::string& out)
+{
+    if (cp <= 0x7F) {
+        out += static_cast<char>(cp);
+    } else if (cp <= 0x7FF) {
+        out += static_cast<char>(0xC0 | (cp >> 6));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp <= 0xFFFF) {
+        out += static_cast<char>(0xE0 | (cp >> 12));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (cp >> 18));
+        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
 
 uint32_t ClampMaxScanContentBytes(int value)
 {
@@ -519,9 +564,43 @@ bool RuleJsonParser::Parser::read_string(std::string& out)
     while (p < end && *p != '"') {
         if (*p == '\\') {
             ++p;
-            if (p < end) {
-                out += *p;
+            if (p >= end)
+                return false;
+
+            switch (*p) {
+            case '"': out += '"'; ++p; break;
+            case '\\': out += '\\'; ++p; break;
+            case '/': out += '/'; ++p; break;
+            case 'b': out += '\b'; ++p; break;
+            case 'f': out += '\f'; ++p; break;
+            case 'n': out += '\n'; ++p; break;
+            case 'r': out += '\r'; ++p; break;
+            case 't': out += '\t'; ++p; break;
+            case 'u': {
                 ++p;
+                uint32_t cp = 0;
+                if (!ReadJsonUnicodeEscape(p, end, cp))
+                    return false;
+                p += 4;
+
+                if (cp >= 0xD800 && cp <= 0xDBFF) {
+                    if (end - p < 6 || p[0] != '\\' || p[1] != 'u')
+                        return false;
+                    uint32_t low = 0;
+                    if (!ReadJsonUnicodeEscape(p + 2, end, low) ||
+                        low < 0xDC00 || low > 0xDFFF)
+                        return false;
+                    p += 6;
+                    cp = 0x10000 + (((cp - 0xD800) << 10) | (low - 0xDC00));
+                } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                    return false;
+                }
+
+                AppendUtf8(cp, out);
+                break;
+            }
+            default:
+                return false;
             }
         } else {
             out += *p++;
@@ -558,11 +637,25 @@ bool RuleJsonParser::Parser::read_int(int& out)
     }
     if (!ok() || !std::isdigit(static_cast<unsigned char>(*p)))
         return false;
-    out = 0;
-    while (ok() && std::isdigit(static_cast<unsigned char>(*p)))
-        out = out * 10 + (*p++ - '0');
-    if (neg)
-        out = -out;
+    const int limit = std::numeric_limits<int>::min();
+    const int cutoff = limit / 10;
+    const int cutlim = neg ? 8 : 7;
+    int value = 0;
+    bool saturated = false;
+    while (ok() && std::isdigit(static_cast<unsigned char>(*p))) {
+        const int digit = *p++ - '0';
+        if (!saturated) {
+            if (value < cutoff || (value == cutoff && digit > cutlim)) {
+                value = limit;
+                saturated = true;
+            } else {
+                value = value * 10 - digit;
+            }
+        }
+    }
+    out = neg ? value : (value == std::numeric_limits<int>::min()
+        ? std::numeric_limits<int>::max()
+        : -value);
     return true;
 }
 
