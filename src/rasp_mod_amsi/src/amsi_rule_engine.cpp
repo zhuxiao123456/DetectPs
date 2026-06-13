@@ -121,21 +121,6 @@ namespace {
         }
     }
 
-    bool IsAmsiPerfLogEnabled()
-    {
-        static int enabled = []() -> int {
-            char value[16] = {};
-            DWORD len = GetEnvironmentVariableA("RASP_AMSI_PERF_LOG", value, sizeof(value));
-            if (len == 0 || len >= sizeof(value))
-                return 0;
-
-            return (_stricmp(value, "1") == 0 ||
-                    _stricmp(value, "true") == 0 ||
-                    _stricmp(value, "yes") == 0) ? 1 : 0;
-        }();
-        return enabled != 0;
-    }
-
     bool ContentNameLooksLikeInfrastructure(std::string_view contentName)
     {
         if (contentName.empty())
@@ -208,20 +193,6 @@ namespace {
         TrimStringTailInPlace(value, maxBytes);
         return value;
     }
-    constexpr size_t kScanContentDebugDumpMaxBytes = 8 * 1024;
-    constexpr LONGLONG kScanContentDebugDumpMaxFileBytes = 64LL * 1024LL * 1024LL;
-
-    bool TryGetScanContentDebugDumpPath(std::wstring& path)
-    {
-        wchar_t overridePath[MAX_PATH] = {};
-        DWORD overrideLen = GetEnvironmentVariableW(L"RASP_AMSI_SCAN_DUMP_PATH", overridePath, MAX_PATH);
-        if (overrideLen == 0 || overrideLen >= MAX_PATH)
-            return false;
-
-        path.assign(overridePath, overrideLen);
-        return true;
-    }
-
     std::string EscapeForScanContentDump(const std::string& value, size_t maxBytes)
     {
         const size_t limit = (std::min)(value.size(), maxBytes);
@@ -232,7 +203,7 @@ namespace {
             const unsigned char ch = static_cast<unsigned char>(value[i]);
             switch (ch) {
                 case '\r': out += "\\r"; break;
-                case '\n': out += "\\n\r\n"; break;
+                case '\n': out += "\\n"; break;
                 case '\t': out += "\\t"; break;
                 case '\\': out += "\\\\"; break;
                 case 0: out += "\\0"; break;
@@ -247,7 +218,7 @@ namespace {
             }
         }
         if (value.size() > maxBytes) {
-            out += "\r\n...[truncated bytes=";
+            out += "\\n...[truncated bytes=";
             out += std::to_string(value.size() - maxBytes);
             out += "]";
         }
@@ -270,16 +241,16 @@ namespace {
                                    const std::string& appName,
                                    const ScanContentDebugDumpInfo& buildInfo,
                                    const std::string& currentBody,
-                                   const std::string& evalBody)
+                                   const std::string& evalBody,
+                                   uint32_t maxDumpBytes)
     {
-        std::wstring path;
-        if (!TryGetScanContentDebugDumpPath(path))
+        if (maxDumpBytes == 0)
             return;
 
         std::string out;
-        out.reserve((std::min)(currentBody.size(), kScanContentDebugDumpMaxBytes) +
-                    (std::min)(evalBody.size(), kScanContentDebugDumpMaxBytes) + 1024);
-        out += "\r\n================ RASP AMSI SCAN CONTENT DUMP ================\r\n";
+        out.reserve((std::min)(currentBody.size(), static_cast<size_t>(maxDumpBytes)) +
+                    (std::min)(evalBody.size(), static_cast<size_t>(maxDumpBytes)) + 1024);
+        out += "[RaspAmsi][scan_dump] ";
         out += "tickMs=" + std::to_string(GetTickCount64());
         out += " pid=" + std::to_string(GetCurrentProcessId());
         out += " tid=" + std::to_string(GetCurrentThreadId());
@@ -293,7 +264,7 @@ namespace {
             out += " parentProcessName=" + process->parentProcessName;
             out += " parentProcessPath=" + process->parentProcessPath;
         }
-        out += "\r\nscanContextEnabled=" + std::to_string(buildInfo.enabled ? 1 : 0);
+        out += " scanContextEnabled=" + std::to_string(buildInfo.enabled ? 1 : 0);
         out += " expired=" + std::to_string(buildInfo.expired ? 1 : 0);
         out += " appendAllowed=" + std::to_string(buildInfo.appendAllowed ? 1 : 0);
         out += " appendSkipReason=" + std::string(ScanContextAppendSkipReasonToString(buildInfo.appendSkipReason));
@@ -303,34 +274,13 @@ namespace {
         if (!buildInfo.snapshotHash.empty()) {
             out += " snapshotHash=" + buildInfo.snapshotHash;
         }
-        out += "\r\n-- currentBody(normalized/current scan body) --\r\n";
-        out += EscapeForScanContentDump(currentBody, kScanContentDebugDumpMaxBytes);
-        out += "\r\n-- evalBody(actual rule input: context tail + currentBody) --\r\n";
-        out += EscapeForScanContentDump(evalBody, kScanContentDebugDumpMaxBytes);
-        out += "\r\n================ END RASP AMSI SCAN CONTENT DUMP ================\r\n";
+        out += " currentBody=\"";
+        out += EscapeForScanContentDump(currentBody, maxDumpBytes);
+        out += "\" evalBody=\"";
+        out += EscapeForScanContentDump(evalBody, maxDumpBytes);
+        out += "\"";
 
-        HANDLE file = CreateFileW(path.c_str(),
-                                  FILE_APPEND_DATA,
-                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                  nullptr,
-                                  OPEN_ALWAYS,
-                                  FILE_ATTRIBUTE_NORMAL,
-                                  nullptr);
-        if (file == INVALID_HANDLE_VALUE)
-            return;
-
-        LARGE_INTEGER fileSize = {};
-        if (GetFileSizeEx(file, &fileSize) && fileSize.QuadPart > kScanContentDebugDumpMaxFileBytes) {
-            CloseHandle(file);
-            return;
-        }
-
-        DWORD written = 0;
-        size_t cappedWriteBytes = out.size();
-        if (cappedWriteBytes > 1024 * 1024)
-            cappedWriteBytes = 1024 * 1024;
-        WriteFile(file, out.data(), static_cast<DWORD>(cappedWriteBytes), &written, nullptr);
-        CloseHandle(file);
+        GetAmsiEngineRuntime().LogWithSeverity(RaspDiagSeverity::Debug, "%s", out.c_str());
     }
 
     std::string TrimAscii(std::string_view value)
@@ -605,6 +555,7 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     bool stopAfterFirstBlock = true;
     ScanRateLimitConfig scanRateLimit;
     ScanContextConfig scanContext;
+    DiagnosticsConfig diagnostics;
     const std::string effectiveHash = ComputeEffectiveSnapshotHash(json);
     if (!ParseRulesJson(json,
                         lib,
@@ -617,10 +568,12 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
                         &auditMaxEventsPerScan,
                         &stopAfterFirstBlock,
                         &totalScanTimeoutMs,
-                        &scanRateLimit,
-                        nullptr,
-                        &scanContext,
-                        nullptr) || rawRules.empty()) {
+                         &scanRateLimit,
+                         nullptr,
+                         &scanContext,
+                         nullptr,
+                         &diagnostics,
+                         nullptr) || rawRules.empty()) {
         LogWithSeverity(RaspDiagSeverity::Warning, "BuildNextSnapshot: no rules parsed");
         return {};
     }
@@ -663,10 +616,11 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
                           maxScanContentBytes,
                           totalScanTimeoutMs,
                           auditMaxEventsPerScan,
-                          stopAfterFirstBlock,
-                          scanRateLimit,
-                          scanContext,
-                          effectiveHash});
+                           stopAfterFirstBlock,
+                           scanRateLimit,
+                           scanContext,
+                           diagnostics,
+                           effectiveHash});
 }
 
 bool AmsiRuleEngine::ShouldBlockRule(const RuleSnapshot& snapshot,
@@ -1205,10 +1159,11 @@ void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
                                  kDefaultMaxScanContentBytes,
                                  kDefaultTotalScanTimeoutMs,
                                  kDefaultAuditMaxEventsPerScan,
-                                 true,
-                                 ScanRateLimitConfig{},
-                                 ScanContextConfig{},
-                                 {}});
+                                  true,
+                                  ScanRateLimitConfig{},
+                                  ScanContextConfig{},
+                                  DiagnosticsConfig{},
+                                  {}});
     std::atomic_store(&m_snapshot, next);
 }
 
@@ -1435,12 +1390,15 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             contextInfo.expired,
             contextInfo.snapshotHash
         };
-        WriteScanContentDebugDump(scanContext ? scanContext->process : nullptr,
-                                  contentName,
-                                  appName,
-                                  dumpInfo,
-                                  currentBody,
-                                  evalBody);
+        if (snap->diagnostics.scanDumpLog) {
+            WriteScanContentDebugDump(scanContext ? scanContext->process : nullptr,
+                                      contentName,
+                                      appName,
+                                      dumpInfo,
+                                      currentBody,
+                                      evalBody,
+                                      snap->diagnostics.scanDumpMaxBytes);
+        }
         for (auto& f : evalCtx.fields) {
             if (f.name == "body") {
                 f.value = evalBody;
@@ -1455,7 +1413,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
         contextInfo.snapshotHash = snap->effectiveHash;
     }
 
-    const bool perfLogEnabled = IsAmsiPerfLogEnabled();
+    const bool perfLogEnabled = snap->diagnostics.perfLog;
     const uint64_t ruleEvalStartMs = perfLogEnabled ? GetTickCount64() : 0;
 
     struct RuleGroupStats {

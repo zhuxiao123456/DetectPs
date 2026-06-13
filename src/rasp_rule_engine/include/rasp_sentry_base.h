@@ -154,7 +154,9 @@ protected:
         ScanRateLimitConfig*                         scanRateLimitOut = nullptr,
         bool*                                        hasScanRateLimitOut = nullptr,
         ScanContextConfig*                           scanContextOut = nullptr,
-        bool*                                        hasScanContextOut = nullptr);
+        bool*                                        hasScanContextOut = nullptr,
+        DiagnosticsConfig*                           diagnosticsOut = nullptr,
+        bool*                                        hasDiagnosticsOut = nullptr);
 
     // Virtual factory override to return module-specific derived type.
     // Default returns new RaspRuleBase().

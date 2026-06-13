@@ -40,6 +40,9 @@ constexpr uint32_t kMaxScanContextMaxAppendBytes = 65536;
 constexpr uint32_t kDefaultScanContextPrefixFilterBytes = 128;
 constexpr uint32_t kMinScanContextPrefixFilterBytes = 0;
 constexpr uint32_t kMaxScanContextPrefixFilterBytes = 4096;
+constexpr uint32_t kDefaultDiagnosticsScanDumpMaxBytes = 4096;
+constexpr uint32_t kMinDiagnosticsScanDumpMaxBytes = 1;
+constexpr uint32_t kMaxDiagnosticsScanDumpMaxBytes = 65536;
 
 struct ScanRateLimitConfig {
     bool enabled = false;
@@ -56,6 +59,12 @@ struct ScanContextConfig {
     bool clearOnMatch = true;
     uint32_t maxAppendBytes = kDefaultScanContextMaxAppendBytes;
     uint32_t prefixFilterBytes = kDefaultScanContextPrefixFilterBytes;
+};
+
+struct DiagnosticsConfig {
+    bool perfLog = false;
+    bool scanDumpLog = false;
+    uint32_t scanDumpMaxBytes = kDefaultDiagnosticsScanDumpMaxBytes;
 };
 
 struct RuleParseResult {
@@ -78,6 +87,8 @@ struct RuleParseResult {
     ScanRateLimitConfig scanRateLimit;
     bool hasScanContext = false;
     ScanContextConfig scanContext;
+    bool hasDiagnostics = false;
+    DiagnosticsConfig diagnostics;
     std::string error;
 };
 

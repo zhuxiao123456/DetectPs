@@ -149,6 +149,15 @@ uint32_t ClampScanContextPrefixFilterBytes(int value)
     return static_cast<uint32_t>(value);
 }
 
+uint32_t ClampDiagnosticsScanDumpMaxBytes(int value)
+{
+    if (value < static_cast<int>(kMinDiagnosticsScanDumpMaxBytes))
+        return kMinDiagnosticsScanDumpMaxBytes;
+    if (value > static_cast<int>(kMaxDiagnosticsScanDumpMaxBytes))
+        return kMaxDiagnosticsScanDumpMaxBytes;
+    return static_cast<uint32_t>(value);
+}
+
 int NormalizeRuleSeverity(int value)
 {
     if (value < 0 || value > 4)
@@ -259,6 +268,48 @@ void ParseScanContext(RuleJsonParser::Parser& p, RuleParseResult& result)
             int value = 0;
             if (p.read_int(value))
                 result.scanContext.prefixFilterBytes = ClampScanContextPrefixFilterBytes(value);
+            else
+                p.skip_value();
+        } else {
+            p.skip_value();
+        }
+
+        p.consume(',');
+    }
+    p.consume('}');
+}
+
+void ParseDiagnostics(RuleJsonParser::Parser& p, RuleParseResult& result)
+{
+    if (!p.consume('{')) {
+        p.skip_value();
+        return;
+    }
+
+    result.hasDiagnostics = true;
+    while (!p.peek('}') && p.ok()) {
+        std::string key;
+        if (!p.read_string(key) || !p.consume(':')) {
+            p.skip_value();
+            break;
+        }
+
+        if (key == "perfLog") {
+            bool value = false;
+            if (p.read_bool(value))
+                result.diagnostics.perfLog = value;
+            else
+                p.skip_value();
+        } else if (key == "scanDumpLog") {
+            bool value = false;
+            if (p.read_bool(value))
+                result.diagnostics.scanDumpLog = value;
+            else
+                p.skip_value();
+        } else if (key == "scanDumpMaxBytes") {
+            int value = 0;
+            if (p.read_int(value))
+                result.diagnostics.scanDumpMaxBytes = ClampDiagnosticsScanDumpMaxBytes(value);
             else
                 p.skip_value();
         } else {
@@ -522,6 +573,8 @@ bool ParseBundleObject(RuleJsonParser::Parser& p,
             ParseScanRateLimit(p, result);
         } else if (key == "scanContext") {
             ParseScanContext(p, result);
+        } else if (key == "diagnostics") {
+            ParseDiagnostics(p, result);
         } else {
             p.skip_value();
         }
@@ -839,6 +892,8 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
             ParseScanRateLimit(p, result);
         } else if (key == "scanContext") {
             ParseScanContext(p, result);
+        } else if (key == "diagnostics") {
+            ParseDiagnostics(p, result);
         } else if (key == "rules") {
             if (!ParseRulesArray(p, result, factory, extensionParser))
                 return result;

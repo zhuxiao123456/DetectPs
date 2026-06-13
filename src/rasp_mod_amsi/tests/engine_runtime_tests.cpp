@@ -151,6 +151,13 @@ public:
         return snapshot ? snapshot->scanRateLimit : ScanRateLimitConfig{};
     }
 
+    DiagnosticsConfig BuildSnapshotDiagnostics(const std::string& json)
+    {
+        std::string effectiveLib;
+        auto snapshot = BuildNextSnapshot(json, "", effectiveLib);
+        return snapshot ? snapshot->diagnostics : DiagnosticsConfig{};
+    }
+
     ScanRateLimitDecision CheckScanRateLimit(const ScanRateLimitConfig& config, uint64_t nowMs)
     {
         return ShouldBypassByScanRateLimit(config, nowMs);
@@ -1219,6 +1226,24 @@ static bool RunEngineRuntimeTestGroup4()
             "\"description\":\"timeout_cfg\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
         if (!Expect(engine.BuildSnapshotTotalScanTimeoutMs(timeoutJson) == 750,
                     "totalScanTimeoutMs is published into the rule snapshot"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const std::string diagnosticsJson =
+            "{\"globalMode\":\"block\",\"diagnostics\":{\"perfLog\":true,\"scanDumpLog\":true,\"scanDumpMaxBytes\":2048},"
+            "\"rules\":[{\"id\":\"diag_cfg\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+            "\"description\":\"diag_cfg\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
+        DiagnosticsConfig cfg = engine.BuildSnapshotDiagnostics(diagnosticsJson);
+        if (!Expect(cfg.perfLog,
+                    "diagnostics perfLog is published into the rule snapshot"))
+            return false;
+        if (!Expect(cfg.scanDumpLog,
+                    "diagnostics scanDumpLog is published into the rule snapshot"))
+            return false;
+        if (!Expect(cfg.scanDumpMaxBytes == 2048,
+                    "diagnostics scanDumpMaxBytes is published into the rule snapshot"))
             return false;
     }
 

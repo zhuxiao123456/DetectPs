@@ -421,6 +421,42 @@ int main()
     }
 
     {
+        auto missing = Parse(R"json({"rules":[{"id":"r"}]})json");
+        if (!Expect(!missing.diagnostics.perfLog,
+                    "missing diagnostics perfLog is disabled by default"))
+            return 1;
+        if (!Expect(!missing.diagnostics.scanDumpLog,
+                    "missing diagnostics scanDumpLog is disabled by default"))
+            return 1;
+        if (!Expect(missing.diagnostics.scanDumpMaxBytes == kDefaultDiagnosticsScanDumpMaxBytes,
+                    "missing diagnostics scanDumpMaxBytes uses default"))
+            return 1;
+
+        auto configured = Parse(R"json({"diagnostics":{"perfLog":true,"scanDumpLog":true,"scanDumpMaxBytes":2048},"rules":[{"id":"r"}]})json");
+        if (!Expect(configured.hasDiagnostics, "configured diagnostics is marked present"))
+            return 1;
+        if (!Expect(configured.diagnostics.perfLog,
+                    "configured diagnostics perfLog parses"))
+            return 1;
+        if (!Expect(configured.diagnostics.scanDumpLog,
+                    "configured diagnostics scanDumpLog parses"))
+            return 1;
+        if (!Expect(configured.diagnostics.scanDumpMaxBytes == 2048,
+                    "configured diagnostics scanDumpMaxBytes parses"))
+            return 1;
+
+        auto clamped = Parse(R"json({"diagnostics":{"scanDumpMaxBytes":999999},"rules":[{"id":"r"}]})json");
+        if (!Expect(clamped.diagnostics.scanDumpMaxBytes == kMaxDiagnosticsScanDumpMaxBytes,
+                    "large diagnostics scanDumpMaxBytes clamps to maximum"))
+            return 1;
+
+        auto tooSmall = Parse(R"json({"diagnostics":{"scanDumpMaxBytes":0},"rules":[{"id":"r"}]})json");
+        if (!Expect(tooSmall.diagnostics.scanDumpMaxBytes == kMinDiagnosticsScanDumpMaxBytes,
+                    "small diagnostics scanDumpMaxBytes clamps to minimum"))
+            return 1;
+    }
+
+    {
         auto result = Parse(R"json({"globalLibraries":"bGliLXNpbmdsZQ==","rules":[]})json");
         if (!Expect(!result.ok, "bundle without valid rules is reported as failure"))
             return 1;

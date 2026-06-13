@@ -105,6 +105,7 @@ protected:
         bool stopAfterFirstBlock = true;
         ScanRateLimitConfig scanRateLimit;
         ScanContextConfig scanContext;
+        DiagnosticsConfig diagnostics;
         std::string effectiveHash;
     };
 
