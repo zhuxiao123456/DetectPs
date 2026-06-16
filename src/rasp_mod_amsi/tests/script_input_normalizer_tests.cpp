@@ -33,6 +33,57 @@ std::string Repeat(char ch, size_t count)
     return std::string(count, ch);
 }
 
+bool IsValidUtf8(const std::string& value)
+{
+    const auto* bytes = reinterpret_cast<const unsigned char*>(value.data());
+    size_t i = 0;
+    while (i < value.size()) {
+        unsigned char c = bytes[i];
+        if (c <= 0x7F) {
+            ++i;
+            continue;
+        }
+
+        size_t extra = 0;
+        unsigned char minSecond = 0x80;
+        unsigned char maxSecond = 0xBF;
+        if (c >= 0xC2 && c <= 0xDF) {
+            extra = 1;
+        } else if (c == 0xE0) {
+            extra = 2;
+            minSecond = 0xA0;
+        } else if (c >= 0xE1 && c <= 0xEC) {
+            extra = 2;
+        } else if (c == 0xED) {
+            extra = 2;
+            maxSecond = 0x9F;
+        } else if (c >= 0xEE && c <= 0xEF) {
+            extra = 2;
+        } else if (c == 0xF0) {
+            extra = 3;
+            minSecond = 0x90;
+        } else if (c >= 0xF1 && c <= 0xF3) {
+            extra = 3;
+        } else if (c == 0xF4) {
+            extra = 3;
+            maxSecond = 0x8F;
+        } else {
+            return false;
+        }
+
+        if (i + extra >= value.size())
+            return false;
+        if (bytes[i + 1] < minSecond || bytes[i + 1] > maxSecond)
+            return false;
+        for (size_t j = 2; j <= extra; ++j) {
+            if ((bytes[i + j] & 0xC0) != 0x80)
+                return false;
+        }
+        i += extra + 1;
+    }
+    return true;
+}
+
 } // namespace
 
 int main()
@@ -170,6 +221,35 @@ int main()
         auto a = normalizer.Normalize(sample.data(), static_cast<ULONG>(sample.size()));
         auto b = normalizer.Normalize(sample.data(), static_cast<ULONG>(sample.size()));
         if (!Expect(a.sampleHash == b.sampleHash, "sampleHash is stable for same raw input"))
+            return 1;
+    }
+
+    {
+        const char raw[] = {
+            'A', static_cast<char>(0xC0), static_cast<char>(0xAF), ' ',
+            't', 'e', 's', 't', ' ',
+            'a', 'm', 's', 'i', 'u', 't', 'i', 'l', 's', 'z', 'x', 'c',
+            ' ', static_cast<char>(0xE4), static_cast<char>(0xB8)
+        };
+        auto out = normalizer.Normalize(raw, static_cast<ULONG>(sizeof(raw)));
+        if (!Expect(IsValidUtf8(out.normalized), "invalid raw bytes are repaired to valid UTF-8"))
+            return 1;
+        if (!Expect(out.normalized.find("test amsiutilszxc") != std::string::npos,
+                    "ASCII detection text remains visible after UTF-8 repair"))
+            return 1;
+    }
+
+    {
+        const char raw[] = {
+            static_cast<char>(0xE6), static_cast<char>(0xB5), static_cast<char>(0x8B),
+            static_cast<char>(0xE8), static_cast<char>(0xAF), static_cast<char>(0x95),
+            ' ', 'I', 'E', 'X'
+        };
+        auto out = normalizer.Normalize(raw, static_cast<ULONG>(sizeof(raw)));
+        if (!Expect(IsValidUtf8(out.normalized), "valid UTF-8 input remains valid"))
+            return 1;
+        if (!Expect(out.normalized == std::string(raw, sizeof(raw)),
+                    "valid UTF-8 non-ASCII bytes are preserved"))
             return 1;
     }
 

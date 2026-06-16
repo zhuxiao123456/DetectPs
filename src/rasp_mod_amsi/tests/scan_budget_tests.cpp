@@ -307,6 +307,45 @@ int main()
     }
     {
         RaspLuaEngine engine;
+        g_capturedLog.clear();
+        g_capturedSeverity = RaspDiagSeverity::Info;
+        engine.SetLogFn(CaptureLog);
+        engine.SetLeveledLogFn(CaptureLeveledLog);
+
+        ScanExecutionContext exec;
+        exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
+        std::string subject;
+        subject.push_back('A');
+        subject.push_back(static_cast<char>(0xC0));
+        subject.push_back(static_cast<char>(0xAF));
+        subject.append(" test amsiutilszxc");
+
+        std::string matched;
+        bool ok = engine.MatchesAnyRegex({"amsiutilszxc", "test", "A"}, subject, matched, &exec);
+        if (!Expect(!ok, "invalid UTF-8 regex subject does not match"))
+            return 1;
+        if (!Expect(exec.regexInvalidUtf8Subject, "invalid UTF-8 subject is recorded in execution context"))
+            return 1;
+        if (!Expect(exec.regexInvalidUtf8Hits == 1, "invalid UTF-8 subject is recorded once"))
+            return 1;
+        if (!Expect(exec.regexCalls == 1, "invalid UTF-8 subject stops after the first PCRE2 call"))
+            return 1;
+        if (!Expect(g_capturedLog.find("utf8_invalid_subject") != std::string::npos,
+                    "invalid UTF-8 subject is logged with a clear error name"))
+            return 1;
+        if (!Expect(g_capturedLog.find("patternIndex=0") != std::string::npos,
+                    "invalid UTF-8 subject log records the first failing pattern index"))
+            return 1;
+
+        g_capturedLog.clear();
+        ok = engine.MatchesAnyRegex({"amsiutilszxc"}, subject, matched, &exec);
+        if (!Expect(!ok, "execution context suppresses later invalid UTF-8 regex attempts"))
+            return 1;
+        if (!Expect(g_capturedLog.empty(), "later invalid UTF-8 attempts do not repeat logs"))
+            return 1;
+    }
+    {
+        RaspLuaEngine engine;
         engine.SetLogFn(SilentLog);
 
         ScanExecutionContext exec;

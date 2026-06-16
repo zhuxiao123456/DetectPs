@@ -65,12 +65,14 @@ struct ScanExecutionContext
     bool regexRuleLimitHit = false;
     bool currentRuleLimited = false;
     bool regexSubjectTruncated = false;
+    bool regexInvalidUtf8Subject = false;
     bool matchedBeforeTimeout = false;
     uint32_t rulesSkippedByRegexLimit = 0;
     uint32_t regexMatchLimitHits = 0;
     uint32_t regexDepthLimitHits = 0;
     uint32_t regexHeapLimitHits = 0;
     uint32_t regexJitStackLimitHits = 0;
+    uint32_t regexInvalidUtf8Hits = 0;
     std::string timeoutReason;
     std::string regexLimitType;
     std::string currentRuleLimitReason;

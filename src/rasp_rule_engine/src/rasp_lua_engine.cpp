@@ -223,6 +223,10 @@ void RecordRegexLimit(int rc, ScanExecutionContext* exec)
     }
 }
 
+bool IsPcre2UtfSubjectError(int rc)
+{
+    return rc >= PCRE2_ERROR_UTF8_ERR21 && rc <= PCRE2_ERROR_UTF8_ERR1;
+}
 
 const char* RegexErrorName(int rc)
 {
@@ -244,6 +248,8 @@ const char* RegexErrorName(int rc)
     case PCRE2_ERROR_BADMODE:
         return "bad_mode";
     default:
+        if (IsPcre2UtfSubjectError(rc))
+            return "utf8_invalid_subject";
         return "pcre2_error";
     }
 }
@@ -496,6 +502,9 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
 {
     size_t subjectLen = exec ? exec->BoundedRegexSubjectLength(text.size()) : text.size();
     const char* subjectPtr = text.data();
+    if (exec && exec->regexInvalidUtf8Subject)
+        return false;
+
     for (size_t patternIndex = 0; patternIndex < patterns.size(); ++patternIndex)
     {
         const auto &pat = patterns[patternIndex];
@@ -589,6 +598,14 @@ bool RaspLuaEngine::MatchesAnyRegex(const std::vector<std::string> &patterns,
             return true;
         }
         RecordRegexLimit(rc, exec);
+        if (IsPcre2UtfSubjectError(rc)) {
+            if (exec) {
+                exec->regexInvalidUtf8Subject = true;
+                ++exec->regexInvalidUtf8Hits;
+            }
+            LogRegexFailure(this, "MatchesAnyRegex", rc, pat, subjectLen, exec);
+            return false;
+        }
         LogRegexFailure(this, "MatchesAnyRegex", rc, pat, subjectLen, exec);
         if (exec && exec->currentRuleLimited)
             return false;

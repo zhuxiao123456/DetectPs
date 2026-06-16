@@ -139,6 +139,71 @@ std::string NormalizeControls(const char* data, size_t len, bool& hadNullBytes)
     return out;
 }
 
+std::string SanitizeUtf8(const std::string& input)
+{
+    std::string out;
+    out.reserve(input.size());
+    const auto* bytes = reinterpret_cast<const unsigned char*>(input.data());
+
+    size_t i = 0;
+    while (i < input.size()) {
+        unsigned char c = bytes[i];
+        if (c <= 0x7F) {
+            out.push_back(static_cast<char>(c));
+            ++i;
+            continue;
+        }
+
+        size_t extra = 0;
+        unsigned char minSecond = 0x80;
+        unsigned char maxSecond = 0xBF;
+        if (c >= 0xC2 && c <= 0xDF) {
+            extra = 1;
+        } else if (c == 0xE0) {
+            extra = 2;
+            minSecond = 0xA0;
+        } else if (c >= 0xE1 && c <= 0xEC) {
+            extra = 2;
+        } else if (c == 0xED) {
+            extra = 2;
+            maxSecond = 0x9F;
+        } else if (c >= 0xEE && c <= 0xEF) {
+            extra = 2;
+        } else if (c == 0xF0) {
+            extra = 3;
+            minSecond = 0x90;
+        } else if (c >= 0xF1 && c <= 0xF3) {
+            extra = 3;
+        } else if (c == 0xF4) {
+            extra = 3;
+            maxSecond = 0x8F;
+        } else {
+            out.push_back(' ');
+            ++i;
+            continue;
+        }
+
+        bool valid = i + extra < input.size();
+        if (valid && (bytes[i + 1] < minSecond || bytes[i + 1] > maxSecond))
+            valid = false;
+        for (size_t j = 2; valid && j <= extra; ++j) {
+            if ((bytes[i + j] & 0xC0) != 0x80)
+                valid = false;
+        }
+
+        if (!valid) {
+            out.push_back(' ');
+            ++i;
+            continue;
+        }
+
+        out.append(input.data() + i, extra + 1);
+        i += extra + 1;
+    }
+
+    return out;
+}
+
 std::string ToLowerAscii(const std::string& input)
 {
     std::string out = input;
@@ -278,6 +343,7 @@ NormalizedScriptInput ScriptInputNormalizer::Normalize(const char* sample,
         result.normalizationReason = "utf16le";
     } else {
         primary = NormalizeControls(sample, sampleLen, result.hadNullBytes);
+        primary = SanitizeUtf8(primary);
         result.normalizationReason = result.hadNullBytes ? "raw_nulls_replaced" : "raw";
     }
 
@@ -291,6 +357,7 @@ NormalizedScriptInput ScriptInputNormalizer::Normalize(const char* sample,
                 if (!decodedUtf16) {
                     bool ignoredNulls = false;
                     decodedText = NormalizeControls(decodedBytes.data(), decodedBytes.size(), ignoredNulls);
+                    decodedText = SanitizeUtf8(decodedText);
                 }
                 if (!decodedText.empty()) {
                     result.decodedBase64 = true;
@@ -305,7 +372,7 @@ NormalizedScriptInput ScriptInputNormalizer::Normalize(const char* sample,
         }
     }
 
-    result.normalized = ApplyViewLimit(primary, maxNormalizedBodyBytes, result.truncated);
+    result.normalized = SanitizeUtf8(ApplyViewLimit(primary, maxNormalizedBodyBytes, result.truncated));
     result.normalizedLen = result.normalized.size();
     return result;
 }
