@@ -101,6 +101,8 @@ protected:
         RaspGlobalMode globalMode = RaspGlobalMode::Block;
         uint32_t maxScanContentBytes = kDefaultMaxScanContentBytes;
         uint32_t totalScanTimeoutMs = kDefaultTotalScanTimeoutMs;
+        uint32_t maxRulesPerScan = kDefaultMaxRulesPerScan;
+        uint32_t maxRegexCallsPerScan = kDefaultMaxRegexCallsPerScan;
         uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
         bool stopAfterFirstBlock = true;
         ScanRateLimitConfig scanRateLimit;

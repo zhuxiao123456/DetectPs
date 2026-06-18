@@ -78,6 +78,24 @@ uint32_t ClampAuditMaxEventsPerScan(int value)
     return static_cast<uint32_t>(value);
 }
 
+uint32_t ClampMaxRulesPerScan(int value)
+{
+    if (value < static_cast<int>(kMinMaxRulesPerScan))
+        return kMinMaxRulesPerScan;
+    if (value > static_cast<int>(kMaxMaxRulesPerScan))
+        return kMaxMaxRulesPerScan;
+    return static_cast<uint32_t>(value);
+}
+
+uint32_t ClampMaxRegexCallsPerScan(int value)
+{
+    if (value < static_cast<int>(kMinMaxRegexCallsPerScan))
+        return kMinMaxRegexCallsPerScan;
+    if (value > static_cast<int>(kMaxMaxRegexCallsPerScan))
+        return kMaxMaxRegexCallsPerScan;
+    return static_cast<uint32_t>(value);
+}
+
 uint32_t ClampScanRateLimitWindowMs(int value)
 {
     if (value < static_cast<int>(kMinScanRateLimitWindowMs))
@@ -567,6 +585,22 @@ bool ParseBundleObject(RuleJsonParser::Parser& p,
             } else {
                 p.skip_value();
             }
+        } else if (key == "maxRulesPerScan") {
+            int value = 0;
+            if (p.read_int(value)) {
+                result.maxRulesPerScan = ClampMaxRulesPerScan(value);
+                result.hasMaxRulesPerScan = true;
+            } else {
+                p.skip_value();
+            }
+        } else if (key == "maxRegexCallsPerScan") {
+            int value = 0;
+            if (p.read_int(value)) {
+                result.maxRegexCallsPerScan = ClampMaxRegexCallsPerScan(value);
+                result.hasMaxRegexCallsPerScan = true;
+            } else {
+                p.skip_value();
+            }
         } else if (key == "scanOptimization") {
             ParseScanOptimization(p, result);
         } else if (key == "scanRateLimit") {
@@ -883,6 +917,22 @@ RuleParseResult RuleJsonParser::Parse(std::string_view json,
             if (p.read_int(value)) {
                 result.totalScanTimeoutMs = ClampTotalScanTimeoutMs(value);
                 result.hasTotalScanTimeoutMs = true;
+            } else {
+                p.skip_value();
+            }
+        } else if (key == "maxRulesPerScan") {
+            int value = 0;
+            if (p.read_int(value)) {
+                result.maxRulesPerScan = ClampMaxRulesPerScan(value);
+                result.hasMaxRulesPerScan = true;
+            } else {
+                p.skip_value();
+            }
+        } else if (key == "maxRegexCallsPerScan") {
+            int value = 0;
+            if (p.read_int(value)) {
+                result.maxRegexCallsPerScan = ClampMaxRegexCallsPerScan(value);
+                result.hasMaxRegexCallsPerScan = true;
             } else {
                 p.skip_value();
             }

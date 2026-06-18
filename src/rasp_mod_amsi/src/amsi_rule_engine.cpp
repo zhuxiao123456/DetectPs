@@ -551,6 +551,8 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
     bool hasGlobalMode = false;
     uint32_t maxScanContentBytes = kDefaultMaxScanContentBytes;
     uint32_t totalScanTimeoutMs = kDefaultTotalScanTimeoutMs;
+    uint32_t maxRulesPerScan = kDefaultMaxRulesPerScan;
+    uint32_t maxRegexCallsPerScan = kDefaultMaxRegexCallsPerScan;
     uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
     bool stopAfterFirstBlock = true;
     ScanRateLimitConfig scanRateLimit;
@@ -568,7 +570,9 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
                         &auditMaxEventsPerScan,
                         &stopAfterFirstBlock,
                         &totalScanTimeoutMs,
-                         &scanRateLimit,
+                        &maxRulesPerScan,
+                        &maxRegexCallsPerScan,
+                        &scanRateLimit,
                          nullptr,
                          &scanContext,
                          nullptr,
@@ -612,10 +616,12 @@ std::shared_ptr<const AmsiRuleEngine::RuleSnapshot> AmsiRuleEngine::BuildNextSna
                          std::move(trustProcessPaths),
                          std::move(luaEngine),
                           hasGlobalMode,
-                          globalMode,
-                          maxScanContentBytes,
-                          totalScanTimeoutMs,
-                          auditMaxEventsPerScan,
+                           globalMode,
+                           maxScanContentBytes,
+                           totalScanTimeoutMs,
+                           maxRulesPerScan,
+                           maxRegexCallsPerScan,
+                           auditMaxEventsPerScan,
                            stopAfterFirstBlock,
                            scanRateLimit,
                            scanContext,
@@ -902,13 +908,15 @@ static void EmitScanBudgetTelemetry(const ScanExecutionContext& exec)
         ? (exec.regexRuleLimitHit && !exec.timedOut ? "continue" : "none")
         : exec.decisionAfterTimeout.c_str();
 
-    char msg[512];
+    char msg[640];
     snprintf(msg, sizeof(msg),
-             "[RaspAmsi][telemetry] scan_budget reason=%s decision=%s rules=%u regex_calls=%u lua_instr=%u regex_limit=%s regex_rule_limit=%d rules_skipped_by_regex_limit=%u match_limit=%u depth_limit=%u heap_limit=%u jit_stack_limit=%u subject_truncated=%d matched_before_timeout=%d\n",
+             "[RaspAmsi][telemetry] scan_budget reason=%s decision=%s rules=%u max_rules=%u regex_calls=%u max_regex_calls=%u lua_instr=%u regex_limit=%s regex_rule_limit=%d rules_skipped_by_regex_limit=%u match_limit=%u depth_limit=%u heap_limit=%u jit_stack_limit=%u subject_truncated=%d matched_before_timeout=%d\n",
              reason,
              decision,
              exec.rulesEvaluated,
+             exec.budget.maxRules,
              exec.regexCalls,
+             exec.budget.maxRegexCalls,
              exec.luaInstructions,
              exec.regexLimitType.empty() ? "none" : exec.regexLimitType.c_str(),
              exec.regexRuleLimitHit ? 1 : 0,
@@ -1155,9 +1163,11 @@ void AmsiRuleEngine::SwapRules(std::vector <AmsiRaspRuleConfig> &&rules) {
                                   {},
                                   std::make_shared<RaspLuaEngine>(),
                                   false,
-                          RaspGlobalMode::Block,
+                                  RaspGlobalMode::Block,
                                  kDefaultMaxScanContentBytes,
                                  kDefaultTotalScanTimeoutMs,
+                                 kDefaultMaxRulesPerScan,
+                                 kDefaultMaxRegexCallsPerScan,
                                  kDefaultAuditMaxEventsPerScan,
                                   true,
                                   ScanRateLimitConfig{},
@@ -1278,6 +1288,8 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
     if (!snap || !snap->luaEngine)
         return results;
     exec.budget.totalBudgetMs = snap->totalScanTimeoutMs;
+    exec.budget.maxRules = snap->maxRulesPerScan;
+    exec.budget.maxRegexCalls = snap->maxRegexCallsPerScan;
     exec.deadline = ScanDeadline::FromNow(std::chrono::milliseconds(exec.budget.totalBudgetMs));
     RaspLuaEngine& luaEngine = *snap->luaEngine;
 
@@ -1675,11 +1687,13 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
         const uint64_t costMs = GetTickCount64() - ruleEvalStartMs;
         const uint32_t rulesVisited = blockStats.rulesVisited + alertStats.rulesVisited;
         LogWithSeverity(RaspDiagSeverity::Debug,
-                        "[RaspAmsi][perf] rule_eval costMs=%llu rulesVisited=%lu rulesTotal=%zu regexCalls=%u regexPrefixSkips=%u matched=%d block=%d timedOut=%d currentLen=%zu evalLen=%zu appendAllowed=%d appendSkipReason=%s blockRulesVisited=%lu alertRulesVisited=%lu blockRegexCalls=%lu alertRegexCalls=%lu blockMatched=%d alertMatched=%d",
+                        "[RaspAmsi][perf] rule_eval costMs=%llu rulesVisited=%lu rulesTotal=%zu maxRules=%u regexCalls=%u maxRegexCalls=%u regexPrefixSkips=%u matched=%d block=%d timedOut=%d currentLen=%zu evalLen=%zu appendAllowed=%d appendSkipReason=%s blockRulesVisited=%lu alertRulesVisited=%lu blockRegexCalls=%lu alertRegexCalls=%lu blockMatched=%d alertMatched=%d",
                         static_cast<unsigned long long>(costMs),
                         static_cast<unsigned long>(rulesVisited),
                         snap->rules.size(),
+                        exec.budget.maxRules,
                         exec.regexCalls,
+                        exec.budget.maxRegexCalls,
                         exec.regexPrefixSkips,
                         results.empty() ? 0 : 1,
                         hasBlock ? 1 : 0,

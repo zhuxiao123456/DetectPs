@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "rasp_rule_base.h"
+#include "rasp_scan_budget.h"
 
 constexpr uint32_t kDefaultMaxScanContentBytes = 8192;
 constexpr uint32_t kMinMaxScanContentBytes = 1024;
@@ -80,6 +81,10 @@ struct RuleParseResult {
     uint32_t maxScanContentBytes = kDefaultMaxScanContentBytes;
     bool hasTotalScanTimeoutMs = false;
     uint32_t totalScanTimeoutMs = kDefaultTotalScanTimeoutMs;
+    bool hasMaxRulesPerScan = false;
+    uint32_t maxRulesPerScan = kDefaultMaxRulesPerScan;
+    bool hasMaxRegexCallsPerScan = false;
+    uint32_t maxRegexCallsPerScan = kDefaultMaxRegexCallsPerScan;
     bool hasScanOptimization = false;
     uint32_t auditMaxEventsPerScan = kDefaultAuditMaxEventsPerScan;
     bool stopAfterFirstBlock = true;

@@ -5,12 +5,19 @@
 #include <cstdint>
 #include <string>
 
+constexpr uint32_t kDefaultMaxRulesPerScan = 128;
+constexpr uint32_t kMinMaxRulesPerScan = 1;
+constexpr uint32_t kMaxMaxRulesPerScan = 2048;
+constexpr uint32_t kDefaultMaxRegexCallsPerScan = 512;
+constexpr uint32_t kMinMaxRegexCallsPerScan = 1;
+constexpr uint32_t kMaxMaxRegexCallsPerScan = 8192;
+
 struct ScanBudget
 {
     uint32_t totalBudgetMs = 1000;
     uint32_t luaBudgetMs = 300;
-    uint32_t maxRules = 128;
-    uint32_t maxRegexCalls = 512;
+    uint32_t maxRules = kDefaultMaxRulesPerScan;
+    uint32_t maxRegexCalls = kDefaultMaxRegexCallsPerScan;
     uint32_t maxRegexSubjectBytes = 64 * 1024;
     uint32_t maxLuaInstructionCount = 100000;
     uint32_t pcre2MatchLimit = 100000;

@@ -151,6 +151,8 @@ protected:
         uint32_t*                                    auditMaxEventsPerScanOut = nullptr,
         bool*                                        stopAfterFirstBlockOut = nullptr,
         uint32_t*                                    totalScanTimeoutMsOut = nullptr,
+        uint32_t*                                    maxRulesPerScanOut = nullptr,
+        uint32_t*                                    maxRegexCallsPerScanOut = nullptr,
         ScanRateLimitConfig*                         scanRateLimitOut = nullptr,
         bool*                                        hasScanRateLimitOut = nullptr,
         ScanContextConfig*                           scanContextOut = nullptr,

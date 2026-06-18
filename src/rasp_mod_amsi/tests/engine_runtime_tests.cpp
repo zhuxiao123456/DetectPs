@@ -144,6 +144,15 @@ public:
         return snapshot ? snapshot->totalScanTimeoutMs : 0;
     }
 
+    std::pair<uint32_t, uint32_t> BuildSnapshotScanBudgets(const std::string& json)
+    {
+        std::string effectiveLib;
+        auto snapshot = BuildNextSnapshot(json, "", effectiveLib);
+        if (!snapshot)
+            return {};
+        return {snapshot->maxRulesPerScan, snapshot->maxRegexCallsPerScan};
+    }
+
     ScanRateLimitConfig BuildSnapshotScanRateLimit(const std::string& json)
     {
         std::string effectiveLib;
@@ -1226,6 +1235,53 @@ static bool RunEngineRuntimeTestGroup4()
             "\"description\":\"timeout_cfg\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
         if (!Expect(engine.BuildSnapshotTotalScanTimeoutMs(timeoutJson) == 750,
                     "totalScanTimeoutMs is published into the rule snapshot"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const std::string budgetJson =
+            "{\"globalMode\":\"block\",\"maxRulesPerScan\":2,\"maxRegexCallsPerScan\":3,"
+            "\"rules\":[{\"id\":\"budget_cfg\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
+            "\"description\":\"budget_cfg\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
+        auto budget = engine.BuildSnapshotScanBudgets(budgetJson);
+        if (!Expect(budget.first == 2,
+                    "maxRulesPerScan is published into the rule snapshot"))
+            return false;
+        if (!Expect(budget.second == 3,
+                    "maxRegexCallsPerScan is published into the rule snapshot"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const std::string budgetJson =
+            "{\"globalMode\":\"block\",\"maxRulesPerScan\":1,\"rules\":["
+            "{\"id\":\"first_no_match\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"alert\","
+            "\"description\":\"budget_cfg\",\"config\":{\"regexPatterns\":[\"nevermatch\"]}},"
+            "{\"id\":\"second_match\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"alert\","
+            "\"description\":\"budget_cfg\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}}]}";
+        if (!Expect(engine.ParseAndSwap(budgetJson, ""),
+                    "maxRulesPerScan runtime snapshot publishes"))
+            return false;
+        AmsiEvalResult limited = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsiutils", 9);
+        if (!Expect(!limited.ruleMatched,
+                    "maxRulesPerScan stops evaluation before later matching rule"))
+            return false;
+    }
+
+    {
+        TestAmsiRuleEngine engine;
+        const std::string budgetJson =
+            "{\"globalMode\":\"block\",\"maxRegexCallsPerScan\":1,\"rules\":["
+            "{\"id\":\"regex_budget\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"alert\","
+            "\"description\":\"budget_cfg\",\"config\":{\"regexPatterns\":[\"(?!)\",\"amsiutils\"]}}]}";
+        if (!Expect(engine.ParseAndSwap(budgetJson, ""),
+                    "maxRegexCallsPerScan runtime snapshot publishes"))
+            return false;
+        AmsiEvalResult limited = engine.Evaluate(L"demo.ps1", L"powershell.exe", "amsiutils", 9);
+        if (!Expect(!limited.ruleMatched,
+                    "maxRegexCallsPerScan stops evaluation before later matching regex"))
             return false;
     }
 

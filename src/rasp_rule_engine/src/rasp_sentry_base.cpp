@@ -749,6 +749,8 @@ bool RaspSentryBase::ParseRulesJson(
     uint32_t*                                   auditMaxEventsPerScanOut,
     bool*                                       stopAfterFirstBlockOut,
     uint32_t*                                   totalScanTimeoutMsOut,
+    uint32_t*                                   maxRulesPerScanOut,
+    uint32_t*                                   maxRegexCallsPerScanOut,
     ScanRateLimitConfig*                        scanRateLimitOut,
     bool*                                       hasScanRateLimitOut,
     ScanContextConfig*                          scanContextOut,
@@ -800,6 +802,10 @@ bool RaspSentryBase::ParseRulesJson(
         *stopAfterFirstBlockOut = result.stopAfterFirstBlock;
     if (totalScanTimeoutMsOut)
         *totalScanTimeoutMsOut = result.totalScanTimeoutMs;
+    if (maxRulesPerScanOut)
+        *maxRulesPerScanOut = result.maxRulesPerScan;
+    if (maxRegexCallsPerScanOut)
+        *maxRegexCallsPerScanOut = result.maxRegexCallsPerScan;
     if (scanRateLimitOut)
         *scanRateLimitOut = result.scanRateLimit;
     if (hasScanRateLimitOut)

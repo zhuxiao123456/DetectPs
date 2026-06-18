@@ -303,6 +303,52 @@ int main()
 
     {
         auto missing = Parse(R"json({"rules":[{"id":"r"}]})json");
+        if (!Expect(missing.maxRulesPerScan == kDefaultMaxRulesPerScan,
+                    "missing maxRulesPerScan uses default"))
+            return 1;
+        if (!Expect(missing.maxRegexCallsPerScan == kDefaultMaxRegexCallsPerScan,
+                    "missing maxRegexCallsPerScan uses default"))
+            return 1;
+
+        auto configured = Parse(R"json({"maxRulesPerScan":256,"maxRegexCallsPerScan":1024,"rules":[{"id":"r"}]})json");
+        if (!Expect(configured.hasMaxRulesPerScan, "configured maxRulesPerScan is marked present"))
+            return 1;
+        if (!Expect(configured.hasMaxRegexCallsPerScan, "configured maxRegexCallsPerScan is marked present"))
+            return 1;
+        if (!Expect(configured.maxRulesPerScan == 256,
+                    "configured maxRulesPerScan parses"))
+            return 1;
+        if (!Expect(configured.maxRegexCallsPerScan == 1024,
+                    "configured maxRegexCallsPerScan parses"))
+            return 1;
+
+        auto tooSmall = Parse(R"json({"maxRulesPerScan":0,"maxRegexCallsPerScan":0,"rules":[{"id":"r"}]})json");
+        if (!Expect(tooSmall.maxRulesPerScan == kMinMaxRulesPerScan,
+                    "small maxRulesPerScan clamps to minimum"))
+            return 1;
+        if (!Expect(tooSmall.maxRegexCallsPerScan == kMinMaxRegexCallsPerScan,
+                    "small maxRegexCallsPerScan clamps to minimum"))
+            return 1;
+
+        auto tooLarge = Parse(R"json({"maxRulesPerScan":999999,"maxRegexCallsPerScan":999999,"rules":[{"id":"r"}]})json");
+        if (!Expect(tooLarge.maxRulesPerScan == kMaxMaxRulesPerScan,
+                    "large maxRulesPerScan clamps to maximum"))
+            return 1;
+        if (!Expect(tooLarge.maxRegexCallsPerScan == kMaxMaxRegexCallsPerScan,
+                    "large maxRegexCallsPerScan clamps to maximum"))
+            return 1;
+
+        auto invalid = Parse(R"json({"maxRulesPerScan":"128","maxRegexCallsPerScan":"512","rules":[{"id":"r"}]})json");
+        if (!Expect(invalid.maxRulesPerScan == kDefaultMaxRulesPerScan,
+                    "invalid maxRulesPerScan uses default"))
+            return 1;
+        if (!Expect(invalid.maxRegexCallsPerScan == kDefaultMaxRegexCallsPerScan,
+                    "invalid maxRegexCallsPerScan uses default"))
+            return 1;
+    }
+
+    {
+        auto missing = Parse(R"json({"rules":[{"id":"r"}]})json");
         if (!Expect(!missing.scanRateLimit.enabled,
                     "missing scanRateLimit is disabled by default"))
             return 1;
