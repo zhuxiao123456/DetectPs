@@ -1435,7 +1435,7 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
         bool blockMatched = false;
     };
 
-    uint32_t emittedEvents = 0;
+    uint32_t nonBlockEventsEmitted = 0;
     const bool globalAuditMode = snap->hasGlobalMode && snap->globalMode == RaspGlobalMode::Audit;
     RuleGroupStats blockStats;
     RuleGroupStats alertStats;
@@ -1642,15 +1642,16 @@ std::vector <RaspEvalResult> AmsiRuleEngine::EvaluateWithScanContext(
             if (shouldBlock)
                 stats.blockMatched = true;
             results.push_back(std::move(r));
-            ++emittedEvents;
             if (shouldBlock && snap->stopAfterFirstBlock) {
                 stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
                 return true;
             }
-            if (globalAuditMode && snap->auditMaxEventsPerScan > 0 &&
-                emittedEvents >= snap->auditMaxEventsPerScan) {
+            if (!shouldBlock)
+                ++nonBlockEventsEmitted;
+            if (!shouldBlock && snap->auditMaxEventsPerScan > 0 &&
+                nonBlockEventsEmitted >= snap->auditMaxEventsPerScan) {
                 LogWithSeverity(RaspDiagSeverity::Debug,
-                                "scanOptimization: auditMaxEventsPerScan reached, stop evaluating remaining rules");
+                                "scanOptimization: auditMaxEventsPerScan reached for non-block events, stop evaluating remaining rules");
                 stats.regexCalls += exec.regexCalls - regexCallsBeforeGroup;
                 return true;
             }

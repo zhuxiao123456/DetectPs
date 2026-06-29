@@ -1204,6 +1204,8 @@ static bool RunEngineRuntimeTestGroup3()
             "\"rules\":["
             "{\"id\":\"alert_only_match\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"alert\","
             "\"description\":\"scan_opt\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}},"
+            "{\"id\":\"second_alert_limited\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"alert\","
+            "\"description\":\"scan_opt\",\"config\":{\"regexPatterns\":[\"amsiutils\"]}},"
             "{\"id\":\"block_no_match\",\"sensor\":\"AmsiProvider\",\"enabled\":true,\"mode\":\"block\","
             "\"description\":\"scan_opt\",\"config\":{\"regexPatterns\":[\"nevermatch\"]}}"
             "]}";
@@ -1215,7 +1217,7 @@ static bool RunEngineRuntimeTestGroup3()
         ctx.fields.push_back({"body", "amsiutils", true});
         auto results = engine.Evaluate("AmsiProvider", ctx);
         if (!Expect(results.size() == 1 && results[0].ruleId == "alert_only_match",
-                    "block mode evaluates alert group when block group has no match"))
+                    "block mode limits non-block events with auditMaxEventsPerScan"))
             return false;
         if (!Expect(!results[0].block,
                     "alert group never returns block in block global mode"))
