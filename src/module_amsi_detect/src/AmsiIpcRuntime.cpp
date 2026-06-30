@@ -37,6 +37,11 @@ namespace Engine {
         const wchar_t *kControlStatusPipeName = L"\\\\.\\pipe\\amsi_detect_control_status";
         constexpr DWORD kRulePipeOutBufferBytes = 512 * 1024;
         constexpr DWORD kRulePipeInBufferBytes = 256;
+        void RuleChannelLogCallback(const char* message, void*) {
+            if (message != nullptr) {
+                ErrorLogf1(AmsiDetect::GetLoggerPtr(), "Amsi rule channel: %s.", message);
+            }
+        }
 
         /**
          * Runtime rule provider backed by the in-memory AmsiRuleSnapshot.
@@ -826,6 +831,7 @@ namespace Engine {
         }));
 
         m_impl->ruleChannel.reset(new amsi_ipc::AmsiRuleChannel(*m_impl->ruleProvider));
+        m_impl->ruleChannel->SetLogCallback(RuleChannelLogCallback, nullptr);
         m_impl->eventChannel.reset(new amsi_ipc::AmsiEventChannel(*m_impl->eventSink));
         m_impl->logChannel.reset(new amsi_ipc::AmsiEventChannel(*m_impl->logSink));
         m_impl->statusChannel.reset(new amsi_ipc::AmsiControlStatusChannel(*m_impl->statusSink));

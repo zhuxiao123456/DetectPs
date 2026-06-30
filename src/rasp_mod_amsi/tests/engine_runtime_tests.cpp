@@ -4,6 +4,8 @@
 #include "../include/scan_context.h"
 #include "../include/event_submit_client.h"
 
+#include <windows.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -19,6 +21,11 @@ extern "C" {
 #include "lua.h"
 #include "lauxlib.h"
 }
+
+bool RaspSentryReadRulePipeMessageForTesting(HANDLE pipe,
+                                             std::string& response,
+                                             bool& tooLarge,
+                                             size_t& totalBytesRead);
 
 namespace {
 
@@ -204,6 +211,82 @@ std::string CompileLuaBytecode(const char* source, const char* chunkName)
 
     lua_close(L);
     return writer.bytes;
+}
+
+bool DllRulePipeReaderRejectsOverLimitResponse()
+{
+    const std::wstring pipeName =
+        std::wstring(LR"(\\.\pipe\rasp_rule_reader_too_large_test_)") +
+        std::to_wstring(GetCurrentProcessId());
+
+    HANDLE server = CreateNamedPipeW(pipeName.c_str(),
+                                     PIPE_ACCESS_DUPLEX,
+                                     PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+                                     1,
+                                     64 * 1024,
+                                     64 * 1024,
+                                     0,
+                                     nullptr);
+    if (server == INVALID_HANDLE_VALUE) {
+        std::cerr << "reader tooLarge diag create server GLE=" << GetLastError() << "\n";
+        return false;
+    }
+
+    std::atomic<bool> serverDone{false};
+    std::thread writer([&]() {
+        const BOOL connected = ConnectNamedPipe(server, nullptr);
+        if (connected || GetLastError() == ERROR_PIPE_CONNECTED) {
+            const std::string payload((2 * 1024 * 1024) + 1, 'R');
+            DWORD written = 0;
+            WriteFile(server, payload.data(), static_cast<DWORD>(payload.size()), &written, nullptr);
+        }
+        DisconnectNamedPipe(server);
+        CloseHandle(server);
+        serverDone.store(true, std::memory_order_release);
+    });
+
+    HANDLE client = CreateFileW(pipeName.c_str(),
+                                GENERIC_READ | GENERIC_WRITE,
+                                0,
+                                nullptr,
+                                OPEN_EXISTING,
+                                FILE_FLAG_OVERLAPPED,
+                                nullptr);
+    if (client == INVALID_HANDLE_VALUE) {
+        std::cerr << "reader tooLarge diag create client GLE=" << GetLastError() << "\n";
+        writer.join();
+        return false;
+    }
+
+    DWORD mode = PIPE_READMODE_MESSAGE;
+    if (!SetNamedPipeHandleState(client, &mode, nullptr, nullptr)) {
+        std::cerr << "reader tooLarge diag set pipe mode GLE=" << GetLastError() << "\n";
+        CloseHandle(client);
+        writer.join();
+        return false;
+    }
+
+    std::string response;
+    bool tooLarge = false;
+    size_t totalBytesRead = 0;
+    const bool ok = RaspSentryReadRulePipeMessageForTesting(client, response, tooLarge, totalBytesRead);
+    CloseHandle(client);
+    writer.join();
+
+    const bool passed = !ok &&
+                        tooLarge &&
+                        response.empty() &&
+                        totalBytesRead > (2 * 1024 * 1024) &&
+                        serverDone.load(std::memory_order_acquire);
+    if (!passed) {
+        std::cerr << "reader tooLarge diag ok=" << ok
+                  << " tooLarge=" << tooLarge
+                  << " responseLen=" << response.size()
+                  << " totalBytesRead=" << totalBytesRead
+                  << " serverDone=" << serverDone.load(std::memory_order_acquire)
+                  << "\n";
+    }
+    return passed;
 }
 
 std::string Base64Encode(const std::string& input)
@@ -416,6 +499,10 @@ std::string OneEncodedLuaRuleJson(const char* id,
 
 static bool RunEngineRuntimeTestGroup1()
 {
+    if (!Expect(DllRulePipeReaderRejectsOverLimitResponse(),
+                "rule response reader rejects wire payload larger than 2MB"))
+        return false;
+
     {
         auto runtime = MakeRuntime();
         if (!Expect(runtime->GetState() == EngineState::Uninitialized,

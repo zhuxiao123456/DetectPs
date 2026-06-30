@@ -7,6 +7,13 @@ namespace {
 constexpr DWORD kRulePipeOutBufferBytes = 512 * 1024;
 constexpr DWORD kRulePipeInBufferBytes = 256;
 
+void RuleChannelLogCallback(const char* message, void*)
+{
+    if (message) {
+        SentryLog_Error("RuleServer", "%s", message);
+    }
+}
+
 } // namespace
 
 RuleServer::RuleServer(std::string rulesPath)
@@ -25,6 +32,7 @@ RuleServer::RuleServer(std::string rulesPath, std::wstring pipeName, int threadC
                      kRulePipeOutBufferBytes,
                      kRulePipeInBufferBytes)
 {
+    m_ruleChannel.SetLogCallback(RuleChannelLogCallback, nullptr);
 }
 
 RuleServer::RuleServer(amsi_ipc::IAmsiRuleProvider& provider)
@@ -42,6 +50,7 @@ RuleServer::RuleServer(amsi_ipc::IAmsiRuleProvider& provider, std::wstring pipeN
                      kRulePipeOutBufferBytes,
                      kRulePipeInBufferBytes)
 {
+    m_ruleChannel.SetLogCallback(RuleChannelLogCallback, nullptr);
 }
 
 RuleServer::~RuleServer()

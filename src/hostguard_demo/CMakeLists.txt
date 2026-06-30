@@ -90,12 +90,25 @@ add_executable(hostguard_amsi_ipc_adapter_runtime_smoke_tests
     ${HOSTGUARD_IPC_SOURCES}
 )
 
+add_executable(rule_pipe_large_message_spike_tests
+    tests/rule_pipe_large_message_spike_tests.cpp
+)
+
+add_executable(amsi_rule_channel_tests
+    "${AMSI_IPC_HOST_DIR}/tests/amsi_rule_channel_tests.cpp"
+    "${AMSI_IPC_HOST_DIR}/src/amsi_rule_channel.cpp"
+)
+
 add_executable(hostguard_demo_pipe_client
     src/hostguard_demo_pipe_client.cpp
     src/hostguard_pipe_client.cpp
 )
 
-foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_tests hostguard_amsi_ipc_adapter_tests hostguard_amsi_ipc_module_tests hostguard_amsi_ipc_adapter_runtime_smoke_tests hostguard_demo_pipe_client)
+add_executable(amsi_powershell_fanout_launcher
+    src/amsi_powershell_fanout_launcher.cpp
+)
+
+foreach(target hostguard_demo hostguard_demo_smoke_tests hostguard_demo_options_tests hostguard_amsi_ipc_adapter_tests hostguard_amsi_ipc_module_tests hostguard_amsi_ipc_adapter_runtime_smoke_tests rule_pipe_large_message_spike_tests amsi_rule_channel_tests hostguard_demo_pipe_client amsi_powershell_fanout_launcher)
     target_include_directories(${target} PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${RASP_SENTRY_NATIVE_DIR}/include"

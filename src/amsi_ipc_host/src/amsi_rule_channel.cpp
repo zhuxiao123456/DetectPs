@@ -1,11 +1,14 @@
 #include "amsi_rule_channel.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <string>
 
 namespace amsi_ipc {
 
 namespace {
+
+constexpr size_t kMaxRuleWireBytes = 2 * 1024 * 1024; // wire bytes, includes trailing '\n'
 
 void TrimCommand(std::string& command)
 {
@@ -20,6 +23,19 @@ void TrimCommand(std::string& command)
 AmsiRuleChannel::AmsiRuleChannel(IAmsiRuleProvider& provider)
     : provider_(provider)
 {
+}
+
+void AmsiRuleChannel::SetLogCallback(AmsiRuleChannelLogCallback callback, void* context)
+{
+    logCallback_ = callback;
+    logContext_ = context;
+}
+
+void AmsiRuleChannel::EmitLog(const char* message) const
+{
+    if (logCallback_ && message) {
+        logCallback_(message, logContext_);
+    }
 }
 
 void AmsiRuleChannel::HandleClient(HANDLE pipe)
@@ -45,6 +61,17 @@ void AmsiRuleChannel::HandleClient(HANDLE pipe)
     }
 
     std::string wire = response.json + "\n";
+    if (wire.size() > kMaxRuleWireBytes) {
+        char msg[160] = {};
+        std::snprintf(msg,
+                      sizeof(msg),
+                      "rule response too large wireBytes=%zu limit=%zu",
+                      wire.size(),
+                      kMaxRuleWireBytes);
+        EmitLog(msg);
+        return;
+    }
+
     DWORD written = 0;
     const DWORD expected = static_cast<DWORD>(wire.size());
     const BOOL ok = WriteFile(pipe, wire.c_str(), expected, &written, nullptr);

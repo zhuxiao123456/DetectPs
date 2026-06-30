@@ -96,6 +96,9 @@ namespace {
 
 constexpr DWORD kSentryPipeWriteTimeoutMs = 1000;
 constexpr DWORD kSentryPipeReadTimeoutMs = 5000;
+constexpr size_t kMaxRuleWireBytes = 2 * 1024 * 1024; // wire bytes, includes trailing '\n'
+constexpr DWORD kRuleResponseReadChunkBytes = 64 * 1024;
+constexpr DWORD kRuleResponseTotalReadTimeoutMs = 10000;
 
 struct HostStateEnvelope {
     bool present = false;
@@ -292,6 +295,180 @@ bool ReadPipeWithTimeout(HANDLE pipe, char* data, DWORD len, DWORD timeoutMs, DW
     return ok == TRUE;
 }
 
+
+struct ReadOneChunkResult {
+    bool complete = false;
+    DWORD error = ERROR_SUCCESS;
+    DWORD bytesThisRead = 0;
+};
+
+struct PipeMessageReadStats {
+    DWORD chunks = 0;
+    DWORD lastError = ERROR_SUCCESS;
+    size_t totalBytesRead = 0;
+    bool tooLarge = false;
+    bool totalTimeout = false;
+    bool perReadTimeout = false;
+    bool sawMoreData = false;
+};
+
+ReadOneChunkResult ReadOnePipeChunk(HANDLE pipe, char* buffer, DWORD bufferBytes, DWORD timeoutMs)
+{
+    ReadOneChunkResult result;
+    if (pipe == INVALID_HANDLE_VALUE || buffer == nullptr || bufferBytes == 0) {
+        result.error = ERROR_INVALID_PARAMETER;
+        return result;
+    }
+
+    OVERLAPPED ov = {};
+    ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ov.hEvent) {
+        result.error = GetLastError();
+        return result;
+    }
+
+    DWORD bytesThisRead = 0;
+    const BOOL readOk = ReadFile(pipe, buffer, bufferBytes, &bytesThisRead, &ov);
+    if (readOk) {
+        CloseHandle(ov.hEvent);
+        result.complete = true;
+        result.error = ERROR_SUCCESS;
+        result.bytesThisRead = bytesThisRead;
+        return result;
+    }
+
+    const DWORD err = GetLastError();
+    if (err == ERROR_MORE_DATA) {
+        DWORD transferred = 0;
+        if (bytesThisRead == 0) {
+            GetOverlappedResult(pipe, &ov, &transferred, FALSE);
+        }
+        CloseHandle(ov.hEvent);
+        result.complete = false;
+        result.error = ERROR_MORE_DATA;
+        result.bytesThisRead = bytesThisRead != 0 ? bytesThisRead : transferred;
+        return result;
+    }
+
+    if (err == ERROR_IO_PENDING) {
+        const DWORD waitRc = WaitForSingleObject(ov.hEvent, timeoutMs);
+        if (waitRc == WAIT_OBJECT_0) {
+            DWORD transferred = 0;
+            const BOOL overlappedOk = GetOverlappedResult(pipe, &ov, &transferred, FALSE);
+            if (overlappedOk) {
+                CloseHandle(ov.hEvent);
+                result.complete = true;
+                result.error = ERROR_SUCCESS;
+                result.bytesThisRead = transferred;
+                return result;
+            }
+
+            const DWORD completionErr = GetLastError();
+            CloseHandle(ov.hEvent);
+            result.complete = false;
+            result.error = completionErr;
+            result.bytesThisRead = transferred;
+            return result;
+        }
+
+        if (waitRc == WAIT_TIMEOUT) {
+            CancelIo(pipe);
+            DWORD ignored = 0;
+            GetOverlappedResult(pipe, &ov, &ignored, TRUE);
+            CloseHandle(ov.hEvent);
+            result.complete = false;
+            result.error = WAIT_TIMEOUT;
+            result.bytesThisRead = 0;
+            return result;
+        }
+
+        const DWORD waitErr = GetLastError();
+        CancelIo(pipe);
+        DWORD ignored = 0;
+        GetOverlappedResult(pipe, &ov, &ignored, TRUE);
+        CloseHandle(ov.hEvent);
+        result.complete = false;
+        result.error = waitErr;
+        result.bytesThisRead = 0;
+        return result;
+    }
+
+    CloseHandle(ov.hEvent);
+    result.complete = false;
+    result.error = err;
+    result.bytesThisRead = bytesThisRead;
+    return result;
+}
+
+bool ReadMessagePipeWithLimit(HANDLE pipe,
+                              std::string& response,
+                              size_t maxBytes,
+                              DWORD chunkBytes,
+                              DWORD perReadTimeoutMs,
+                              DWORD totalTimeoutMs,
+                              PipeMessageReadStats& stats)
+{
+    response.clear();
+    stats = PipeMessageReadStats{};
+    if (chunkBytes == 0 || maxBytes == 0 || totalTimeoutMs == 0) {
+        stats.lastError = ERROR_INVALID_PARAMETER;
+        return false;
+    }
+
+    const ULONGLONG deadline = GetTickCount64() + totalTimeoutMs;
+    std::vector<char> chunk(chunkBytes);
+
+    for (;;) {
+        const ULONGLONG now = GetTickCount64();
+        if (now >= deadline) {
+            stats.totalTimeout = true;
+            stats.lastError = WAIT_TIMEOUT;
+            response.clear();
+            return false;
+        }
+
+        const DWORD remainingTimeout =
+            static_cast<DWORD>((std::min<ULONGLONG>)(perReadTimeoutMs, deadline - now));
+        const ReadOneChunkResult one = ReadOnePipeChunk(pipe,
+                                                        chunk.data(),
+                                                        static_cast<DWORD>(chunk.size()),
+                                                        remainingTimeout);
+        ++stats.chunks;
+        stats.lastError = one.error;
+
+        if (one.bytesThisRead > 0) {
+            if (response.size() + one.bytesThisRead > maxBytes) {
+                stats.tooLarge = true;
+                stats.totalBytesRead = response.size() + one.bytesThisRead;
+                response.clear();
+                return false;
+            }
+            response.append(chunk.data(), one.bytesThisRead);
+            stats.totalBytesRead = response.size();
+        }
+
+        if (one.complete) {
+            return !response.empty();
+        }
+
+        if (one.error == ERROR_MORE_DATA) {
+            stats.sawMoreData = true;
+            continue;
+        }
+
+        if (one.error == WAIT_TIMEOUT) {
+            if (GetTickCount64() >= deadline) {
+                stats.totalTimeout = true;
+            } else {
+                stats.perReadTimeout = true;
+            }
+        }
+
+        response.clear();
+        return false;
+    }
+}
+
 bool TryParseHostStateEnvelope(const std::string& response, HostStateEnvelope& envelope)
 {
     envelope = HostStateEnvelope{};
@@ -347,6 +524,24 @@ bool TryParseHostStateEnvelope(const std::string& response, HostStateEnvelope& e
 
 } // namespace
 
+// Test-only hook for rule pipe read-limit coverage; intentionally not declared in public headers.
+bool RaspSentryReadRulePipeMessageForTesting(HANDLE pipe,
+                                             std::string& response,
+                                             bool& tooLarge,
+                                             size_t& totalBytesRead)
+{
+    PipeMessageReadStats stats;
+    const bool ok = ReadMessagePipeWithLimit(pipe,
+                                             response,
+                                             kMaxRuleWireBytes,
+                                             kRuleResponseReadChunkBytes,
+                                             kSentryPipeReadTimeoutMs,
+                                             kRuleResponseTotalReadTimeoutMs,
+                                             stats);
+    tooLarge = stats.tooLarge;
+    totalBytesRead = stats.totalBytesRead;
+    return ok;
+}
 bool RaspSentryBase::AnyHostLivenessThreadRunning()
 {
     return s_hostLivenessThreads.load(std::memory_order_acquire) > 0;
@@ -628,23 +823,49 @@ bool RaspSentryBase::ConnectSentry(std::string& jsonOut,
         return false;
     }
     std::string response;
-    response.resize(524288); // 512 KB
-    DWORD bytesRead = 0;
-    DWORD readErr = 0;
-    BOOL ok = ReadPipeWithTimeout(hPipe,
-                                  &response[0],
-                                  (DWORD)response.size(),
-                                  kSentryPipeReadTimeoutMs,
-                                  bytesRead,
-                                  readErr) ? TRUE : FALSE;
+    PipeMessageReadStats readStats;
+    const bool ok = ReadMessagePipeWithLimit(hPipe,
+                                             response,
+                                             kMaxRuleWireBytes,
+                                             kRuleResponseReadChunkBytes,
+                                             kSentryPipeReadTimeoutMs,
+                                             kRuleResponseTotalReadTimeoutMs,
+                                             readStats);
     CloseHandle(hPipe);
-    if (!ok || bytesRead == 0)
+    if (!ok)
     {
-        LogWithSeverity(RaspDiagSeverity::Error, "ConnectSentry: ReadFile failed GLE=%lu bytes=%lu", readErr, bytesRead);
+        if (readStats.tooLarge) {
+            LogWithSeverity(RaspDiagSeverity::Error,
+                            "ConnectSentry: rule response too large bytes=%zu limit=%zu chunks=%lu lastError=%lu sawMoreData=%d",
+                            readStats.totalBytesRead,
+                            kMaxRuleWireBytes,
+                            readStats.chunks,
+                            readStats.lastError,
+                            readStats.sawMoreData ? 1 : 0);
+        } else if (readStats.totalTimeout) {
+            LogWithSeverity(RaspDiagSeverity::Error,
+                            "ConnectSentry: rule response read total timeout timeoutMs=%lu chunks=%lu responseBytes=%zu sawMoreData=%d",
+                            kRuleResponseTotalReadTimeoutMs,
+                            readStats.chunks,
+                            readStats.totalBytesRead,
+                            readStats.sawMoreData ? 1 : 0);
+        } else if (readStats.perReadTimeout) {
+            LogWithSeverity(RaspDiagSeverity::Error,
+                            "ConnectSentry: rule response read per-read timeout timeoutMs=%lu chunks=%lu responseBytes=%zu sawMoreData=%d",
+                            kSentryPipeReadTimeoutMs,
+                            readStats.chunks,
+                            readStats.totalBytesRead,
+                            readStats.sawMoreData ? 1 : 0);
+        } else {
+            LogWithSeverity(RaspDiagSeverity::Error,
+                            "ConnectSentry: ReadFile failed GLE=%lu chunks=%lu responseBytes=%zu sawMoreData=%d",
+                            readStats.lastError,
+                            readStats.chunks,
+                            readStats.totalBytesRead,
+                            readStats.sawMoreData ? 1 : 0);
+        }
         return false;
     }
-    response.resize(bytesRead);
-
     RuleBundleMetadata envelopeMetadata;
     HostStateEnvelope envelope;
     if (TryParseHostStateEnvelope(response, envelope)) {
